@@ -1,0 +1,20 @@
+# permissions for end users to view databaseclaims.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: databaseclaim-viewer-role
+rules:
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - databaseclaims
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - databaseclaims/status
+  verbs:
+  - get

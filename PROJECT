@@ -1,0 +1,7 @@
+domain: atlas.infoblox.com
+repo: github.com/Infoblox-CTO/atlas-architecture-pocs/db-controller
+resources:
+- group: persistance
+  kind: DatabaseClaim
+  version: v1
+version: "2"

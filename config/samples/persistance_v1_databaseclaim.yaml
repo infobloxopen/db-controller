@@ -1,0 +1,7 @@
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DatabaseClaim
+metadata:
+  name: databaseclaim-sample
+spec:
+  # Add fields here
+  foo: bar
