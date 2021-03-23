@@ -36,9 +36,30 @@ spec:
                 description: Specifies an indentifier for the application using the database.
                 minLength: 1
                 type: string
-              db_type:
+              database_name:
+                description: The name of the database instance.
+                type: string
+              db_name_override:
+                description: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
+                type: string
+              host:
+                description: The optional host name where the database instance is located. If the value is omitted, then the host value from the matching InstanceLabel will be used.
+                type: string
+              instance_label:
+                description: The matching fragment key name of the database instance that will host the database.
+                type: string
+              port:
+                description: The optional port to use for connecting to the host. If the value is omitted, then the host value from the matching InstanceLabel will be used.
+                type: string
+              secret_name:
+                description: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
+                type: string
+              type:
                 description: Specifies the type of database to provision. Only postgres is supported.
                 minLength: 0
+                type: string
+              user_name:
+                description: The username that the application will use for accessing the database.
                 type: string
             type: object
           status:
@@ -57,9 +78,22 @@ spec:
                   username:
                     type: string
                 type: object
-              state:
+              connectionUpdatedAt:
+                description: Time the connection info was updated/created.
+                format: date-time
+                type: string
+              dbCreateAt:
+                description: Time the database was created
+                format: date-time
+                type: string
+              error:
+                description: Any errors related to provisioning this claim.
+                type: string
+              match_label:
+                description: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
                 type: string
               userCreateTime:
+                description: left for compatibility with the current implementation. Should be removed in the future
                 format: date-time
                 type: string
             required:

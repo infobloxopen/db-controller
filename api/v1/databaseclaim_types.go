@@ -29,19 +29,54 @@ type DatabaseClaimSpec struct {
 
 	// Specifies an indentifier for the application using the database.
 	AppID string `json:"app_id,omitempty"`
-
 	// +kubebuilder:validation:MinLength=0
 
 	// Specifies the type of database to provision. Only postgres is supported.
 	// +optional
-	DBType string `json:"db_type,omitempty"`
+	Type string `json:"type,omitempty"`
+
+	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
+	DBNameOverride string `json:"db_name_override,omitempty"`
+
+	// The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
+	SecretName string `json:"secret_name,omitempty"`
+
+	// The matching fragment key name of the database instance that will host the database.
+	InstanceLabel string `json:"instance_label,omitempty"`
+
+	// The username that the application will use for accessing the database.
+	Username string `json:"user_name,omitempty"`
+
+	// The optional host name where the database instance is located.
+	// If the value is omitted, then the host value from the matching InstanceLabel will be used.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// The optional port to use for connecting to the host.
+	// If the value is omitted, then the host value from the matching InstanceLabel will be used.
+	// +optional
+	Port string `json:"port,omitempty"`
+
+	// The name of the database instance.
+	DatabaseName string `json:"database_name,omitempty"`
 }
 
 // DatabaseClaimStatus defines the observed state of DatabaseClaim
 type DatabaseClaimStatus struct {
-	State          string                       `json:"state,omitempty"`
+	// Any errors related to provisioning this claim.
+	Error string `json:"error,omitempty"`
+
+	// Time the database was created
+	DbCreatedAt *metav1.Time `json:"dbCreateAt,omitempty"`
+
+	// The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+	MatchedLabel string `json:"match_label,omitempty"`
+
+	// left for compatibility with the current implementation. Should be removed in the future
 	UserCreateTime *metav1.Time                 `json:"userCreateTime,omitempty"`
 	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo"`
+	// Time the connection info was updated/created.
+	ConnectionInfoUpdatedAt *metav1.Time `json:"connectionUpdatedAt,omitempty"`
 }
 
 type DatabaseClaimConnectionInfo struct {
