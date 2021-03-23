@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	persistancev1 "github.com/Infoblox-CTO/atlas-architecture-pocs/db-controller/api/v1"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 

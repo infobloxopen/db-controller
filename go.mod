@@ -1,4 +1,4 @@
-module github.com/Infoblox-CTO/atlas-architecture-pocs/db-controller
+module github.com/infobloxopen/db-controller
 
 go 1.15
 

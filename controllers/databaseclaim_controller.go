@@ -33,7 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	persistancev1 "github.com/Infoblox-CTO/atlas-architecture-pocs/db-controller/api/v1"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
