@@ -1,0 +1,24 @@
+# permissions for end users to edit databaseclaims.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: databaseclaim-editor-role
+rules:
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - databaseclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - databaseclaims/status
+  verbs:
+  - get
