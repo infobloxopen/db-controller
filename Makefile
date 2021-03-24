@@ -1,6 +1,11 @@
-
+# Docker hub repo
+REGISTRY ?= infoblox
+# image name
+IMAGE_NAME ?= db-controller
+# image tag
+TAG ?= latest
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= ${REGISTRY}/${IMAGE_NAME}:${TAG}
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -16,8 +21,12 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+test: generate fmt vet manifests docker-test
+docker-test:
+	docker build \
+		--build-arg REPO="${REPO}" \
+		-f build/Dockerfile.test.env \
+		. -t test-image
 
 # Build manager binary
 manager: generate fmt vet
@@ -57,7 +66,7 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build: test
+docker-build:
 	docker build \
 		--build-arg CMD="${CMD}" \
 		-f build/Dockerfile \
