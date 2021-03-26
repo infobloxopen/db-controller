@@ -11,6 +11,7 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 
 CMD := "cmd/manager"
 
+DBCTL_NAMESPACE ?= db-controller-namespace
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -95,19 +96,29 @@ CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
 create-namespace:
-	kubectl create namespace db-controller-namespace
+	kubectl create namespace ${DBCTL_NAMESPACE}
 
 delete-namespace:
-	kubectl delete namespace db-controller-namespace
+	kubectl delete namespace ${DBCTL_NAMESPACE}
 
 install-crds:
-	helm template db-controller-crd helm/db-controller-crds/ --namespace=db-controller-namespace |kubectl -n db-controller-namespace apply -f -
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl apply -f -
 
 uninstall-crds:
-	helm template db-controller-crd helm/db-controller-crds/ --namespace=db-controller-namespace |kubectl -n db-controller-namespace delete -f -
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl delete -f -
 
-deploy-chart:
-	helm template db-controller ./helm/db-controller/ --namespace=db-controller-namespace -f helm/db-controller/minikube.yaml | kubectl -n db-controller-namespace apply -f -
+deploy-controller:
+	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl apply -f -
 
-uninstall-chart:
-	helm template db-controller ./helm/db-controller/ --namespace=db-controller-namespace -f helm/db-controller/minikube.yaml | kubectl -n db-controller-namespace delete -f -
+uninstall-controller:
+	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl delete -f -
+
+deploy-samples:
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl apply -f -
+
+uninstall-samples:
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl delete -f -
+
+deploy-all: create-namespace install-crds deploy-controller
+
+uninstall-all: uninstall-controller uninstall-crds delete-namespace
