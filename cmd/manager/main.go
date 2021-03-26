@@ -51,7 +51,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&dbConnectionString, "db-connection-string", "host=localhost user=postgres password=postgres sslmode=disable",
+	flag.StringVar(&dbConnectionString, "db-connection-string", "host=db-controller-postgresql user=postgres password=postgres sslmode=disable",
 		"Database connection string to with root credentials.")
 	flag.Parse()
 

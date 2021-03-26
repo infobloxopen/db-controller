@@ -1,0 +1,11 @@
+image:
+  repository: infoblox/db-controller
+  pullPolicy: Never
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+
+postgresql:
+  enabled: true
+  postgresqlUsername: postgres
+  postgresqlPassword: postgres
+  debug: true
