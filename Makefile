@@ -93,3 +93,21 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+create-namespace:
+	kubectl create namespace db-controller-namespace
+
+delete-namespace:
+	kubectl delete namespace db-controller-namespace
+
+install-crds:
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=db-controller-namespace |kubectl -n db-controller-namespace apply -f -
+
+uninstall-crds:
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=db-controller-namespace |kubectl -n db-controller-namespace delete -f -
+
+deploy-chart:
+	helm template db-controller ./helm/db-controller/ --namespace=db-controller-namespace -f helm/db-controller/minikube.yaml | kubectl -n db-controller-namespace apply -f -
+
+uninstall-chart:
+	helm template db-controller ./helm/db-controller/ --namespace=db-controller-namespace -f helm/db-controller/minikube.yaml | kubectl -n db-controller-namespace delete -f -

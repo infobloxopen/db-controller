@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-replicaCount: 2
+replicaCount: 1
 
 image:
   repository: infoblox/db-controller
@@ -63,6 +63,11 @@ affinity: {}
 
 terminationGracePeriodSeconds: 10
 
+# enable pod disruption budget in case replicaCount > 1
 pdb:
-  enabled: true
+  enabled: false
   maxUnavailable: 25%
+
+# deploying postgres pod, useful in case deploy in minikube
+postgresql:
+  enabled: false
