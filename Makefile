@@ -11,6 +11,7 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 
 CMD := "cmd/manager"
 
+DBCTL_NAMESPACE ?= db-controller-namespace
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -93,3 +94,31 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+create-namespace:
+	kubectl create namespace ${DBCTL_NAMESPACE}
+
+delete-namespace:
+	kubectl delete namespace ${DBCTL_NAMESPACE}
+
+install-crds:
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl apply -f -
+
+uninstall-crds:
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl delete -f -
+
+deploy-controller:
+	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl apply -f -
+
+uninstall-controller:
+	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl delete -f -
+
+deploy-samples:
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl apply -f -
+
+uninstall-samples:
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl delete -f -
+
+deploy-all: create-namespace install-crds deploy-controller
+
+uninstall-all: uninstall-controller uninstall-crds delete-namespace

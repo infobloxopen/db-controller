@@ -69,6 +69,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	}
 	defer db.Close()
 
+	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 	log.Info(fmt.Sprintf("db name: %v", dbClaim.Spec.AppID))
 
 	var exists bool
@@ -79,7 +80,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	}
 	if !exists {
 		// create the database
-		if _, err := db.Exec("create database " + dbClaim.Spec.AppID); err != nil {
+		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbClaim.Spec.AppID)); err != nil {
 			log.Error(err, "could not create databse")
 			return ctrl.Result{}, err
 		}
@@ -98,14 +99,14 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		usernamePrefix := fmt.Sprintf("dbctl_%s_", dbClaim.Spec.AppID)
 		username := usernamePrefix + tStr
 		oldUsername := usernamePrefix + tStrOld
-		_, err = db.Exec("create user " + username + " with encrypted password '" + password + "'")
+		_, err = db.Exec("create user " + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
 		if err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				log.Error(err, "could not create user "+username)
 				return ctrl.Result{}, err
 			}
 		}
-		if _, err := db.Exec("grant all privileges on database " + dbClaim.Spec.AppID + " to " + username); err != nil {
+		if _, err := db.Exec("grant all privileges on database " + fmt.Sprintf("%q", dbClaim.Spec.AppID) + " to " + fmt.Sprintf("%q", username)); err != nil {
 			log.Error(err, "could not set permissions to user "+username)
 			return ctrl.Result{}, err
 		}

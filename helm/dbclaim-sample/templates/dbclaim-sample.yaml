@@ -1,0 +1,13 @@
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DatabaseClaim
+metadata:
+  name: databaseclaim-sample
+  namespace: {{ .Release.Namespace }}
+spec:
+  app_id: sample_app
+  secret_name: sample-secret
+  type: postgres
+  user_name: sample_user
+  host: db-controller-postgresql
+  port: "5432"
+  database_name: sample-database
