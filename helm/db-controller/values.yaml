@@ -73,19 +73,20 @@ postgresql:
   enabled: false
 
 controllerConfig:
-  passwordComplexity: enabled
-  minPasswordLength: "15"
-  passwordRotationPeriod: "60"
-  # Master database connections
-  #sample.connection: |
-  #  username=root
-  #  host=some.service
-  #  port=5432
-  #  useSSL=false
-  #  passwordSecretRef=sample-master-password
-  #another.connection: |
-  #  username=root
-  #  host=some.other.service
-  #  port=5412
-  #  useSSL=false
-  #  passwordSecretRef=another-connection-password
+  config.yaml: |
+    passwordConfig:
+      passwordComplexity: enabled
+      minPasswordLength: "15"
+      passwordRotationPeriod: "60"
+    #sample-connection:
+    #  username: root
+    #  host: some.service
+    #  port: 5432
+    #  useSSL: false
+    #  passwordSecretRef: sample-master-secret
+    #another.connection:
+    #  username: root
+    #  host: some.other.service
+    #  port: 5412
+    #  useSSL: false
+    #  passwordSecretRef: another-connection-secret

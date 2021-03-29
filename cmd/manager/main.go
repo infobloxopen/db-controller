@@ -28,6 +28,7 @@ import (
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
+	"github.com/infobloxopen/db-controller/pkg/config"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -46,16 +47,17 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
-	var dbConnectionString string
+	var configFile string
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&dbConnectionString, "db-connection-string", "host=db-controller-postgresql user=postgres password=postgres sslmode=disable",
+	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
 		"Database connection string to with root credentials.")
 	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	logger := zap.New(zap.UseDevMode(true))
+	config := config.NewConfig(logger, configFile)
+	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -70,10 +72,10 @@ func main() {
 	}
 
 	if err = (&controllers.DatabaseClaimReconciler{
-		Client:             mgr.GetClient(),
-		Log:                ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
-		Scheme:             mgr.GetScheme(),
-		DbConnectionString: dbConnectionString,
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
+		Scheme: mgr.GetScheme(),
+		Config: config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)

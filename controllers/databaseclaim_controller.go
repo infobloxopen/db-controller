@@ -23,11 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
-	_ "github.com/lib/pq"
-
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
+	_ "github.com/lib/pq"
+	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,9 +38,9 @@ import (
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
-	Log                logr.Logger
-	Scheme             *runtime.Scheme
-	DbConnectionString string
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+	Config *viper.Viper
 }
 
 // +kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=get;list;watch;create;update;patch;delete
@@ -62,8 +61,10 @@ func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	log := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-	log.Info("opening database: " + r.DbConnectionString)
-	db, err := sql.Open("postgres", r.DbConnectionString)
+	DbConnectionString := "host=db-controller-postgresql user=postgres password=postgres sslmode=disable"
+	log.Info("Current config", "Config", r.Config.AllSettings())
+	log.Info("opening database: ")
+	db, err := sql.Open("postgres", DbConnectionString)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
