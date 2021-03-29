@@ -67,7 +67,7 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build:
+docker-build: generate fmt vet manifests
 	docker build \
 		--build-arg CMD="${CMD}" \
 		-f build/Dockerfile \

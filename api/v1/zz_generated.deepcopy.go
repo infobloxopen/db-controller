@@ -124,6 +124,10 @@ func (in *DatabaseClaimStatus) DeepCopyInto(out *DatabaseClaimStatus) {
 		in, out := &in.DbCreatedAt, &out.DbCreatedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.UserCreateTime != nil {
+		in, out := &in.UserCreateTime, &out.UserCreateTime
+		*out = (*in).DeepCopy()
+	}
 	if in.ConnectionInfo != nil {
 		in, out := &in.ConnectionInfo, &out.ConnectionInfo
 		*out = new(DatabaseClaimConnectionInfo)
