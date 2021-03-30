@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	_ "github.com/lib/pq"
+	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +33,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+)
+
+const (
+	defaultPassLen = 32
+	defaultNumDig  = 10
+	defaultNumSimb = 10
 )
 
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
@@ -61,9 +67,14 @@ func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	log := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-	DbConnectionString := "host=db-controller-postgresql user=postgres password=postgres sslmode=disable"
+
+	DbConnectionString := r.dbConnectionString(dbClaim.Spec.InstanceLabel)
+	// "host=db-controller-postgresql user=postgres password=postgres sslmode=disable"
+
 	log.Info("Current config", "Config", r.Config.AllSettings())
 	log.Info("opening database: ")
+	log.Info(DbConnectionString)
+
 	db, err := sql.Open("postgres", DbConnectionString)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -95,7 +106,10 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		to := t.Add(-time.Minute * 2)
 		tStrOld := fmt.Sprintf("%d%02d%02d%02d%02d", to.Year(), to.Month(), to.Day(), to.Hour(), to.Minute())
 
-		password := uuid.New().String()
+		password, err := r.generatePassword() //uuid.New().String()
+		if err != nil || password == "" {
+			return ctrl.Result{Requeue: true}, err
+		}
 
 		usernamePrefix := fmt.Sprintf("dbctl_%s_", dbClaim.Spec.AppID)
 		username := usernamePrefix + tStr
@@ -158,6 +172,45 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	}
 
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
+}
+
+func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
+	var pass string
+	var err error
+
+	complEnabled := r.Config.GetString("passwordconfig::passwordComplexity")
+	if complEnabled == "enabled" {
+		passLen := r.Config.GetInt("passwordconfig::minPasswordLength")
+		count := passLen / 3
+		pass, err = gopassword.Generate(passLen, count, count, false, false)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		pass, err = gopassword.Generate(defaultPassLen, defaultNumDig, defaultNumSimb, false, false)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return pass, nil
+}
+
+func (r *DatabaseClaimReconciler) dbConnectionString(instanceLabel string) string {
+	var sslmode string
+	h := r.Config.GetString(fmt.Sprintf("%s::host", instanceLabel))
+	u := r.Config.GetString(fmt.Sprintf("%s::username", instanceLabel))
+	p := "postgres"
+
+	useSSL := r.Config.GetBool(fmt.Sprintf("%s::usessl", instanceLabel))
+	if useSSL {
+		sslmode = "enable"
+	} else {
+		sslmode = "disable"
+	}
+	dbStr := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s", h, u, p, sslmode)
+
+	return dbStr
 }
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {

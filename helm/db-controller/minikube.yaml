@@ -17,8 +17,8 @@ controllerConfig:
       minPasswordLength: "15"
       passwordRotationPeriod: "60"
     sample-connection:
-      username: root
-      host: some.service
+      username: postgres
+      host: db-controller-postgresql
       port: 5432
       useSSL: false
       passwordSecretRef: sample-master-secret

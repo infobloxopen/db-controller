@@ -75,6 +75,9 @@ spec:
                     type: string
                   port:
                     type: string
+                  userUpdatedAt:
+                    format: date-time
+                    type: string
                   username:
                     type: string
                 type: object
