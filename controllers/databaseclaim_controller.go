@@ -69,11 +69,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	log := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 
 	DbConnectionString := r.dbConnectionString(dbClaim.Spec.InstanceLabel)
-	// "host=db-controller-postgresql user=postgres password=postgres sslmode=disable"
 
 	log.Info("Current config", "Config", r.Config.AllSettings())
 	log.Info("opening database: ")
-	log.Info(DbConnectionString)
 
 	db, err := sql.Open("postgres", DbConnectionString)
 	if err != nil {
@@ -106,7 +104,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		to := t.Add(-time.Minute * 2)
 		tStrOld := fmt.Sprintf("%d%02d%02d%02d%02d", to.Year(), to.Month(), to.Day(), to.Hour(), to.Minute())
 
-		password, err := r.generatePassword() //uuid.New().String()
+		password, err := r.generatePassword()
 		if err != nil || password == "" {
 			return ctrl.Result{Requeue: true}, err
 		}
