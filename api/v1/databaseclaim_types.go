@@ -80,11 +80,12 @@ type DatabaseClaimStatus struct {
 }
 
 type DatabaseClaimConnectionInfo struct {
-	Hostname string `json:"hostname,omitempty"`
-	Port     string `json:"port,omitempty"`
-	Name     string `json:"db_name,omitempty"`
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
+	Hostname      string       `json:"hostname,omitempty"`
+	Port          string       `json:"port,omitempty"`
+	Name          string       `json:"db_name,omitempty"`
+	Username      string       `json:"username,omitempty"`
+	Password      string       `json:"password,omitempty"`
+	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
 }
 
 // +kubebuilder:object:root=true
