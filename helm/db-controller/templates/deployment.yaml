@@ -48,6 +48,7 @@ spec:
           args:
             - --metrics-addr=127.0.0.1:8080
             - --enable-leader-election
+            - --config-file=/etc/config/config.yaml
           command:
             - /manager
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -56,6 +57,13 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ include "db-controller.name" . }}-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

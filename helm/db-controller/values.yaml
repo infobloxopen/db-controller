@@ -71,3 +71,22 @@ pdb:
 # deploying postgres pod, useful in case deploy in minikube
 postgresql:
   enabled: false
+
+controllerConfig:
+  config.yaml: |
+    passwordConfig:
+      passwordComplexity: enabled
+      minPasswordLength: "15"
+      passwordRotationPeriod: "60"
+    #sample-connection:
+    #  username: root
+    #  host: some.service
+    #  port: 5432
+    #  useSSL: false
+    #  passwordSecretRef: sample-master-secret
+    #another.connection:
+    #  username: root
+    #  host: some.other.service
+    #  port: 5412
+    #  useSSL: false
+    #  passwordSecretRef: another-connection-secret
