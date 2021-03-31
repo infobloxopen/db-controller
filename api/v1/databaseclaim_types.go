@@ -80,9 +80,9 @@ type DatabaseClaimStatus struct {
 }
 
 type DatabaseClaimConnectionInfo struct {
-	Hostname      string       `json:"hostname,omitempty"`
+	Host          string       `json:"hostname,omitempty"`
 	Port          string       `json:"port,omitempty"`
-	Name          string       `json:"db_name,omitempty"`
+	DatabaseName  string       `json:"database_name,omitempty"`
 	Username      string       `json:"username,omitempty"`
 	Password      string       `json:"password,omitempty"`
 	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
