@@ -67,7 +67,7 @@ spec:
             properties:
               connectionInfo:
                 properties:
-                  db_name:
+                  database_name:
                     type: string
                   hostname:
                     type: string
