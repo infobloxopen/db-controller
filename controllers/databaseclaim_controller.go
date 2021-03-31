@@ -27,6 +27,8 @@ import (
 	_ "github.com/lib/pq"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -125,16 +127,24 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		}
 
 		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{
-			Username: username,
-			Hostname: "localhost",
-			Port:     "5432",
-			Password: password,
+			Username:     dbClaim.Spec.Username,
+			Host:         r.getHost(dbClaim.Spec.InstanceLabel),
+			Port:         r.getPort(dbClaim.Spec.InstanceLabel),
+			DatabaseName: dbClaim.Spec.DatabaseName,
+			Password:     password,
 		}
 		now := metav1.Now()
+		// TODO remove UserCreateTime with ConnectionInfo.UserUpdatedAt
 		dbClaim.Status.UserCreateTime = &now
+		dbClaim.Status.ConnectionInfo.UserUpdatedAt = &now
+		dbClaim.Status.ConnectionInfoUpdatedAt = &now
 		if err := r.Status().Update(ctx, dbClaim); err != nil {
 			log.Error(err, "could not update db claim")
 			return ctrl.Result{}, err
+		}
+		// create connection info secret
+		if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
+			return ctrl.Result{Requeue: true}, err
 		}
 		// clean up older users
 		log.Info("cleaning up old users")
@@ -195,18 +205,12 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 }
 
 func (r *DatabaseClaimReconciler) dbConnectionString(instanceLabel string) string {
-	var sslmode string
-	h := r.Config.GetString(fmt.Sprintf("%s::host", instanceLabel))
-	u := r.Config.GetString(fmt.Sprintf("%s::username", instanceLabel))
+	h := r.getHost(instanceLabel)
+	u := r.getUser(instanceLabel)
+	// TODO fetch master password from secrets
 	p := "postgres"
 
-	useSSL := r.Config.GetBool(fmt.Sprintf("%s::usessl", instanceLabel))
-	if useSSL {
-		sslmode = "enable"
-	} else {
-		sslmode = "disable"
-	}
-	dbStr := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s", h, u, p, sslmode)
+	dbStr := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s", h, u, p, r.getSSLMode(instanceLabel))
 
 	return dbStr
 }
@@ -215,4 +219,91 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DatabaseClaim{}).
 		Complete(r)
+}
+
+func (r *DatabaseClaimReconciler) getHost(instanceLabel string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::host", instanceLabel))
+}
+
+func (r *DatabaseClaimReconciler) getUser(instanceLabel string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::username", instanceLabel))
+}
+
+func (r *DatabaseClaimReconciler) getPort(instanceLabel string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::port", instanceLabel))
+}
+
+func (r *DatabaseClaimReconciler) getSSLMode(instanceLabel string) string {
+	var sslmode string
+
+	useSSL := r.Config.GetBool(fmt.Sprintf("%s::usessl", instanceLabel))
+	if useSSL {
+		sslmode = "enable"
+	} else {
+		sslmode = "disable"
+	}
+
+	return sslmode
+}
+
+func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: dbClaim.Namespace,
+			Name:      dbClaim.Name,
+		},
+		Data: map[string][]byte{
+			"Username":      []byte(dbClaim.Spec.Username),
+			"Host":          []byte(dbClaim.Status.ConnectionInfo.Host),
+			"Port":          []byte(dbClaim.Status.ConnectionInfo.Port),
+			"DatabaseName":  []byte(dbClaim.Status.ConnectionInfo.DatabaseName),
+			"UserUpdatedAt": []byte(dbClaim.Status.ConnectionInfo.UserUpdatedAt.String()),
+			"Password":      []byte(dbClaim.Status.ConnectionInfo.Password),
+		},
+	}
+	r.Log.Info("creating connection info secret", "secret", dbClaim.Name, "namespace", dbClaim.Namespace)
+	if err := r.Client.Create(ctx, secret); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, exSecret *corev1.Secret) error {
+	exSecret.Data["Username"] = []byte(dbClaim.Spec.Username)
+	exSecret.Data["Host"] = []byte(dbClaim.Status.ConnectionInfo.Host)
+	exSecret.Data["Port"] = []byte(dbClaim.Status.ConnectionInfo.Port)
+	exSecret.Data["DatabaseName"] = []byte(dbClaim.Status.ConnectionInfo.DatabaseName)
+	exSecret.Data["UserUpdatedAt"] = []byte(dbClaim.Status.ConnectionInfo.UserUpdatedAt.String())
+	exSecret.Data["Password"] = []byte(dbClaim.Status.ConnectionInfo.Password)
+
+	r.Log.Info("updating connection info secret", "secret", dbClaim.Name, "namespace", dbClaim.Namespace)
+	if err := r.Client.Update(ctx, exSecret); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	gs := &corev1.Secret{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: dbClaim.Namespace,
+		Name:      dbClaim.Name,
+	}, gs)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		if err := r.createSecret(ctx, dbClaim); err != nil {
+			return err
+		}
+	} else {
+		if err := r.updateSecret(ctx, dbClaim, gs); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

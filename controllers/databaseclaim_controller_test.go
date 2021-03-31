@@ -25,7 +25,7 @@ var complexityDisabled = []byte(`
 `)
 
 func TestDatabaseClaimReconciler_generatePassword(t *testing.T) {
-	type fields struct {
+	type reconciler struct {
 		Client client.Client
 		Log    logr.Logger
 		Scheme *runtime.Scheme
@@ -33,13 +33,13 @@ func TestDatabaseClaimReconciler_generatePassword(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		fields  fields
+		rec     reconciler
 		want    int
 		wantErr bool
 	}{
 		{
 			"Generate passwordComplexity enabled",
-			fields{
+			reconciler{
 				Config: NewConfig(complexityEnabled),
 			},
 			15,
@@ -47,7 +47,7 @@ func TestDatabaseClaimReconciler_generatePassword(t *testing.T) {
 		},
 		{
 			"Generate passwordComplexity disabled",
-			fields{
+			reconciler{
 				Config: NewConfig(complexityDisabled),
 			},
 			defaultPassLen,
@@ -57,10 +57,10 @@ func TestDatabaseClaimReconciler_generatePassword(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Client: tt.fields.Client,
-				Log:    tt.fields.Log,
-				Scheme: tt.fields.Scheme,
-				Config: tt.fields.Config,
+				Client: tt.rec.Client,
+				Log:    tt.rec.Log,
+				Scheme: tt.rec.Scheme,
+				Config: tt.rec.Config,
 			}
 			got, err := r.generatePassword()
 			if (err != nil) != tt.wantErr {
