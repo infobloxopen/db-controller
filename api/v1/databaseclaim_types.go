@@ -72,20 +72,21 @@ type DatabaseClaimStatus struct {
 	// The name of the label that was successfully matched against the fragment key names in the db-controller configMap
 	MatchedLabel string `json:"match_label,omitempty"`
 
-	// left for compatibility with the current implementation. Should be removed in the future
-	UserCreateTime *metav1.Time                 `json:"userCreateTime,omitempty"`
 	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo"`
+
 	// Time the connection info was updated/created.
 	ConnectionInfoUpdatedAt *metav1.Time `json:"connectionUpdatedAt,omitempty"`
+
+	// Time the user/password was updated/created
+	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
 }
 
 type DatabaseClaimConnectionInfo struct {
-	Host          string       `json:"hostname,omitempty"`
-	Port          string       `json:"port,omitempty"`
-	DatabaseName  string       `json:"database_name,omitempty"`
-	Username      string       `json:"username,omitempty"`
-	Password      string       `json:"password,omitempty"`
-	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
+	Host         string `json:"hostname,omitempty"`
+	Port         string `json:"port,omitempty"`
+	DatabaseName string `json:"database_name,omitempty"`
+	Username     string `json:"username,omitempty"`
+	Password     string `json:"password,omitempty"`
 }
 
 // +kubebuilder:object:root=true
