@@ -28,3 +28,7 @@ controllerConfig:
       port: 5412
       useSSL: false
       passwordSecretRef: another-connection-secret
+
+passwordSecretRefs:
+  sample-master-secret:
+    password: "{{ .Values.postgresql.postgresqlPassword }}"

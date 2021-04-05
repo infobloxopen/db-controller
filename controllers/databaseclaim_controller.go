@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armon/go-radix"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
 	gopassword "github.com/sethvargo/go-password/password"
@@ -47,12 +48,28 @@ const (
 	defaultRotationTime = minRotationTime
 )
 
+const (
+	postgresType = "postgres"
+)
+
+var dbTypesMap = map[string]bool{
+	postgresType: true,
+}
+
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 	Config *viper.Viper
+}
+
+type instanceConfig struct {
+	username          string
+	host              string
+	port              string
+	sslMod            string
+	passwordSecretRef string
 }
 
 // +kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=get;list;watch;create;update;patch;delete
@@ -73,16 +90,21 @@ func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	log := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-	DbConnectionString := r.dbConnectionString(dbClaim.Spec.InstanceLabel)
 
 	if dbClaim.Status.ConnectionInfo == nil {
 		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{}
 	}
 
-	log.Info("current config", "config", r.Config.AllSettings())
-	log.Info("opening database: ")
+	fragmentKey, err := r.matchInstanceLabel(dbClaim)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
-	db, err := sql.Open("postgres", DbConnectionString)
+	curInstanceConfig := r.newInstanceConfig(fragmentKey)
+	dbConnectionString := r.dbConnectionString(ctx, curInstanceConfig, dbClaim)
+
+	log.Info("opening database: ")
+	db, err := sql.Open(getDBType(dbClaim.Spec.Type), dbConnectionString)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -94,21 +116,22 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		return ctrl.Result{}, err
 	}
 
-	if err := r.createUser(db, dbClaim); err != nil {
-		return ctrl.Result{}, err
+	if r.isUserChanged(dbClaim) {
+		if err := r.updateUser(db, dbClaim); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else {
+		if err := r.createUser(db, dbClaim); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
-	rotationTime := r.getPasswordRotationTime()
-
-	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime {
+	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > r.getPasswordRotationTime() {
 		err := r.updatePassword(db, dbClaim)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-
-	dbClaim.Status.ConnectionInfo.Host = r.getHost(dbClaim.Spec.InstanceLabel)
-	dbClaim.Status.ConnectionInfo.Port = r.getPort(dbClaim.Spec.InstanceLabel)
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
 		log.Error(err, "could not update db claim")
@@ -125,12 +148,12 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	var pass string
 	var err error
+	minPasswordLength := r.getMinPasswordLength()
+	complEnabled := r.isPasswordComplexity()
 
-	complEnabled := r.Config.GetString("passwordconfig::passwordComplexity")
-	if complEnabled == "enabled" {
-		passLen := r.Config.GetInt("passwordconfig::minPasswordLength")
-		count := passLen / 3
-		pass, err = gopassword.Generate(passLen, count, count, false, false)
+	if complEnabled {
+		count := minPasswordLength / 4
+		pass, err = gopassword.Generate(minPasswordLength, count, count, false, false)
 		if err != nil {
 			return "", err
 		}
@@ -144,13 +167,28 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
-func (r *DatabaseClaimReconciler) dbConnectionString(instanceLabel string) string {
-	h := r.getHost(instanceLabel)
-	u := r.getUser(instanceLabel)
-	// TODO fetch master password from secrets
-	p := "postgres"
+func (r *DatabaseClaimReconciler) dbConnectionString(ctx context.Context, ic instanceConfig, dbClaim *persistancev1.DatabaseClaim) string {
+	var h, p string
+	pass, err := r.readMasterPassword(ctx, ic.passwordSecretRef, dbClaim.Namespace)
+	if err != nil {
+		r.Log.Error(err, "error during getting master password")
+	}
+	// If config host is overridden by db claims host
+	if dbClaim.Spec.Host != "" {
+		h = dbClaim.Spec.Host
+	} else {
+		h = ic.host
+	}
 
-	dbStr := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s", h, u, p, r.getSSLMode(instanceLabel))
+	if dbClaim.Spec.Port != "" {
+		p = dbClaim.Spec.Port
+	} else {
+		p = ic.port
+	}
+
+	dbStr := fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=%s", h, p, ic.username, pass, ic.sslMod)
+	dbClaim.Status.ConnectionInfo.Host = ic.host
+	dbClaim.Status.ConnectionInfo.Host = ic.port
 
 	return dbStr
 }
@@ -161,22 +199,22 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *DatabaseClaimReconciler) getHost(instanceLabel string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::host", instanceLabel))
+func (r *DatabaseClaimReconciler) getMasterHost(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::host", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getUser(instanceLabel string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::username", instanceLabel))
+func (r *DatabaseClaimReconciler) getMasterUser(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::username", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getPort(instanceLabel string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::port", instanceLabel))
+func (r *DatabaseClaimReconciler) getMasterPort(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::port", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getSSLMode(instanceLabel string) string {
+func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
 	var sslmode string
 
-	useSSL := r.Config.GetBool(fmt.Sprintf("%s::usessl", instanceLabel))
+	useSSL := r.Config.GetBool(fmt.Sprintf("%s::usessl", fragmentKey))
 	if useSSL {
 		sslmode = "enable"
 	} else {
@@ -194,6 +232,23 @@ func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 	}
 
 	return time.Duration(prt) * time.Minute
+}
+
+func (r *DatabaseClaimReconciler) isPasswordComplexity() bool {
+	complEnabled := r.Config.GetString("passwordconfig::passwordComplexity")
+	if complEnabled == "enabled" {
+		return true
+	}
+
+	return false
+}
+
+func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
+	return r.Config.GetInt("passwordconfig::minPasswordLength")
+}
+
+func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::passwordSecretRef", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
@@ -280,7 +335,7 @@ func (r *DatabaseClaimReconciler) createUser(db *sql.DB, dbClaim *persistancev1.
 			}
 		}
 
-		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbClaim.Spec.AppID) + " TO " + fmt.Sprintf("%q", username)); err != nil {
+		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", getDBName(dbClaim)) + " TO " + fmt.Sprintf("%q", username)); err != nil {
 			r.Log.Error(err, "could not set permissions to user "+username)
 			return err
 		}
@@ -292,6 +347,37 @@ func (r *DatabaseClaimReconciler) createUser(db *sql.DB, dbClaim *persistancev1.
 		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
 
 		r.Log.Info("user has been created", "user", username)
+	}
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) updateUser(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
+	var exists bool
+	username := dbClaim.Status.ConnectionInfo.Username
+	newUsername := dbClaim.Spec.Username
+
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
+	if err != nil {
+		r.Log.Error(err, "could not query for user name")
+		return err
+	}
+
+	if exists {
+		r.Log.Info(fmt.Sprintf("renaming user %s to %s", username, newUsername))
+
+		_, err = db.Exec("ALTER USER" + fmt.Sprintf("%q", username) + " RENAME TO  " + fmt.Sprintf("%q", newUsername))
+		if err != nil {
+			r.Log.Error(err, "could not rename user "+username)
+			return err
+		}
+
+		timeNow := metav1.Now()
+		dbClaim.Status.UserUpdatedAt = &timeNow
+		dbClaim.Status.ConnectionInfo.Username = newUsername
+		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+
+		r.Log.Info("user has been updated", "user", newUsername)
 	}
 
 	return nil
@@ -311,7 +397,7 @@ func (r *DatabaseClaimReconciler) updatePassword(db *sql.DB, dbClaim *persistanc
 	_, err = db.Exec("ALTER ROLE" + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
-			r.Log.Error(err, "could not create user "+username)
+			r.Log.Error(err, "could not alter user "+username)
 			return err
 		}
 	}
@@ -325,27 +411,102 @@ func (r *DatabaseClaimReconciler) updatePassword(db *sql.DB, dbClaim *persistanc
 
 func (r *DatabaseClaimReconciler) createDataBase(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
 	var exists bool
-
-	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbClaim.Spec.AppID).Scan(&exists)
+	dbName := getDBName(dbClaim)
+	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbName).Scan(&exists)
 	if err != nil {
 		r.Log.Error(err, "could not query for database name")
 		return err
 	}
 	if !exists {
-		r.Log.Info("creating db:", "database name", dbClaim.Spec.AppID)
+		r.Log.Info("creating db:", "database name", dbName)
 		// create the database
-		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbClaim.Spec.AppID)); err != nil {
+		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbName)); err != nil {
 			r.Log.Error(err, "could not create database")
 			return err
 		}
 
 		timeNow := metav1.Now()
 		dbClaim.Status.DbCreatedAt = &timeNow
-		dbClaim.Status.ConnectionInfo.DatabaseName = dbClaim.Spec.AppID
+		dbClaim.Status.ConnectionInfo.DatabaseName = dbName
 		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
 
-		r.Log.Info("database has been created", "DB", dbClaim.Spec.AppID)
+		r.Log.Info("database has been created", "DB", dbName)
 	}
 
 	return nil
+}
+
+func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, namespace string) (string, error) {
+	gs := &corev1.Secret{}
+	secretName := fragmentKey
+
+	if secretName == "" {
+		return "", fmt.Errorf("an empty password secret reference")
+	}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+
+	return string(gs.Data["password"]), nil
+}
+
+func getDBName(dbClaim *persistancev1.DatabaseClaim) string {
+	if dbClaim.Spec.DBNameOverride != "" {
+		return dbClaim.Spec.DBNameOverride
+	}
+
+	return dbClaim.Spec.DatabaseName
+}
+
+func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.DatabaseClaim) (string, error) {
+	settingsMap := r.Config.AllSettings()
+
+	rTree := radix.New()
+	for k, _ := range settingsMap {
+		if k != "passwordconfig" {
+			rTree.Insert(k, true)
+		}
+	}
+	// Find the longest prefix match
+	m, _, ok := rTree.LongestPrefix(dbClaim.Spec.InstanceLabel)
+	if !ok {
+		return "", fmt.Errorf("can't find any instance label matching fragment keys")
+	}
+
+	dbClaim.Status.MatchedLabel = m
+
+	return m, nil
+}
+
+func (r *DatabaseClaimReconciler) newInstanceConfig(fragmentKey string) instanceConfig {
+	return instanceConfig{
+		username:          r.getMasterUser(fragmentKey),
+		host:              r.getMasterHost(fragmentKey),
+		port:              r.getMasterPort(fragmentKey),
+		sslMod:            r.getSSLMode(fragmentKey),
+		passwordSecretRef: r.getSecretRef(fragmentKey),
+	}
+}
+
+func (r *DatabaseClaimReconciler) isUserChanged(dbClaim *persistancev1.DatabaseClaim) bool {
+	if dbClaim.Spec.Username != dbClaim.Status.ConnectionInfo.Username && dbClaim.Status.ConnectionInfo.Username != "" {
+		return true
+	}
+
+	return false
+}
+
+func getDBType(dbType string) string {
+
+	_, found := dbTypesMap[strings.ToLower(dbType)]
+	if found {
+		return strings.ToLower(dbType)
+	}
+
+	return postgresType
 }
