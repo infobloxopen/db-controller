@@ -4,11 +4,9 @@ metadata:
   name: databaseclaim-sample
   namespace: {{ .Release.Namespace }}
 spec:
-  app_id: sample_app
+  app_id: sample-app
   secret_name: sample-secret
   type: postgres
   instance_label: sample-connection
   user_name: sample_user
-  host: db-controller-postgresql
-  port: "5432"
-  database_name: sample-database
+  database_name: sample_app
