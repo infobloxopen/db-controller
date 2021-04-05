@@ -75,9 +75,6 @@ spec:
                     type: string
                   port:
                     type: string
-                  userUpdatedAt:
-                    format: date-time
-                    type: string
                   username:
                     type: string
                 type: object
@@ -95,8 +92,8 @@ spec:
               match_label:
                 description: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
                 type: string
-              userCreateTime:
-                description: left for compatibility with the current implementation. Should be removed in the future
+              userUpdatedAt:
+                description: Time the user/password was updated/created
                 format: date-time
                 type: string
             required:

@@ -41,6 +41,10 @@ const (
 	defaultPassLen = 32
 	defaultNumDig  = 10
 	defaultNumSimb = 10
+	// rotation time in minutes
+	minRotationTime     = 60
+	maxRotationTime     = 1440
+	defaultRotationTime = minRotationTime
 )
 
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
@@ -69,10 +73,13 @@ func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	log := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-
 	DbConnectionString := r.dbConnectionString(dbClaim.Spec.InstanceLabel)
 
-	log.Info("Current config", "Config", r.Config.AllSettings())
+	if dbClaim.Status.ConnectionInfo == nil {
+		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{}
+	}
+
+	log.Info("current config", "config", r.Config.AllSettings())
 	log.Info("opening database: ")
 
 	db, err := sql.Open("postgres", DbConnectionString)
@@ -82,101 +89,34 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	defer db.Close()
 
 	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
-	log.Info(fmt.Sprintf("db name: %v", dbClaim.Spec.AppID))
 
-	var exists bool
-	err = db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbClaim.Spec.AppID).Scan(&exists)
-	if err != nil {
-		log.Error(err, "could not query for database name")
+	if err := r.createDataBase(db, dbClaim); err != nil {
 		return ctrl.Result{}, err
 	}
-	if !exists {
-		// create the database
-		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbClaim.Spec.AppID)); err != nil {
-			log.Error(err, "could not create databse")
+
+	if err := r.createUser(db, dbClaim); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	rotationTime := r.getPasswordRotationTime()
+
+	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime {
+		err := r.updatePassword(db, dbClaim)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	if dbClaim.Status.UserCreateTime == nil || time.Since(dbClaim.Status.UserCreateTime.Time) > time.Minute {
-		log.Info("time to create a user")
+	dbClaim.Status.ConnectionInfo.Host = r.getHost(dbClaim.Spec.InstanceLabel)
+	dbClaim.Status.ConnectionInfo.Port = r.getPort(dbClaim.Spec.InstanceLabel)
 
-		t := time.Now().Truncate(time.Minute)
-		tStr := fmt.Sprintf("%d%02d%02d%02d%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
-		to := t.Add(-time.Minute * 2)
-		tStrOld := fmt.Sprintf("%d%02d%02d%02d%02d", to.Year(), to.Month(), to.Day(), to.Hour(), to.Minute())
-
-		password, err := r.generatePassword()
-		if err != nil || password == "" {
-			return ctrl.Result{Requeue: true}, err
-		}
-
-		usernamePrefix := fmt.Sprintf("dbctl_%s_", dbClaim.Spec.AppID)
-		username := usernamePrefix + tStr
-		oldUsername := usernamePrefix + tStrOld
-		_, err = db.Exec("create user " + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
-		if err != nil {
-			if !strings.Contains(err.Error(), "already exists") {
-				log.Error(err, "could not create user "+username)
-				return ctrl.Result{}, err
-			}
-		}
-		if _, err := db.Exec("grant all privileges on database " + fmt.Sprintf("%q", dbClaim.Spec.AppID) + " to " + fmt.Sprintf("%q", username)); err != nil {
-			log.Error(err, "could not set permissions to user "+username)
-			return ctrl.Result{}, err
-		}
-
-		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{
-			Username:     dbClaim.Spec.Username,
-			Host:         r.getHost(dbClaim.Spec.InstanceLabel),
-			Port:         r.getPort(dbClaim.Spec.InstanceLabel),
-			DatabaseName: dbClaim.Spec.DatabaseName,
-			Password:     password,
-		}
-		now := metav1.Now()
-		// TODO remove UserCreateTime with ConnectionInfo.UserUpdatedAt
-		dbClaim.Status.UserCreateTime = &now
-		dbClaim.Status.ConnectionInfo.UserUpdatedAt = &now
-		dbClaim.Status.ConnectionInfoUpdatedAt = &now
-		if err := r.Status().Update(ctx, dbClaim); err != nil {
-			log.Error(err, "could not update db claim")
-			return ctrl.Result{}, err
-		}
-		// create connection info secret
-		if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
-		// clean up older users
-		log.Info("cleaning up old users")
-		rows, err := db.Query("select usename FROM pg_catalog.pg_user WHERE usename like '"+usernamePrefix+"%' AND usename < $1", oldUsername)
-		if err != nil {
-			log.Error(err, "could not select old usernames")
-			return ctrl.Result{}, err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var thisUsername string
-			err = rows.Scan(&thisUsername)
-			log.Info("dropping user " + thisUsername)
-			if err != nil {
-				log.Error(err, "could not scan usernames")
-				return ctrl.Result{}, err
-			}
-			if _, err := db.Exec("REASSIGN OWNED BY " + thisUsername + " TO " + username); err != nil {
-				log.Error(err, "could not reassign owned by "+thisUsername)
-				return ctrl.Result{}, err
-			}
-			if _, err := db.Exec("REVOKE ALL ON " + dbClaim.Spec.AppID + " FROM " + thisUsername); err != nil {
-				log.Error(err, "could not reassign owned by "+thisUsername)
-				return ctrl.Result{}, err
-			}
-			if _, err := db.Exec("DROP USER " + username); err != nil {
-				log.Error(err, "could not drop user: "+username)
-				return ctrl.Result{}, err
-			}
-
-			log.Info("dropped user: " + username)
-		}
+	if err := r.Status().Update(ctx, dbClaim); err != nil {
+		log.Error(err, "could not update db claim")
+		return ctrl.Result{}, err
+	}
+	// create connection info secret
+	if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
@@ -246,6 +186,16 @@ func (r *DatabaseClaimReconciler) getSSLMode(instanceLabel string) string {
 	return sslmode
 }
 
+func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
+	prt := r.Config.GetInt("passwordconfig::passwordRotationPeriod")
+	if prt < minRotationTime || prt > maxRotationTime {
+		r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
+		return time.Duration(defaultRotationTime) * time.Minute
+	}
+
+	return time.Duration(prt) * time.Minute
+}
+
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -253,12 +203,11 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 			Name:      dbClaim.Name,
 		},
 		Data: map[string][]byte{
-			"Username":      []byte(dbClaim.Spec.Username),
-			"Host":          []byte(dbClaim.Status.ConnectionInfo.Host),
-			"Port":          []byte(dbClaim.Status.ConnectionInfo.Port),
-			"DatabaseName":  []byte(dbClaim.Status.ConnectionInfo.DatabaseName),
-			"UserUpdatedAt": []byte(dbClaim.Status.ConnectionInfo.UserUpdatedAt.String()),
-			"Password":      []byte(dbClaim.Status.ConnectionInfo.Password),
+			"Username":     []byte(dbClaim.Spec.Username),
+			"Host":         []byte(dbClaim.Status.ConnectionInfo.Host),
+			"Port":         []byte(dbClaim.Status.ConnectionInfo.Port),
+			"DatabaseName": []byte(dbClaim.Status.ConnectionInfo.DatabaseName),
+			"Password":     []byte(dbClaim.Status.ConnectionInfo.Password),
 		},
 	}
 	r.Log.Info("creating connection info secret", "secret", dbClaim.Name, "namespace", dbClaim.Namespace)
@@ -270,11 +219,10 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 }
 
 func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, exSecret *corev1.Secret) error {
-	exSecret.Data["Username"] = []byte(dbClaim.Spec.Username)
+	exSecret.Data["Username"] = []byte(dbClaim.Status.ConnectionInfo.Username)
 	exSecret.Data["Host"] = []byte(dbClaim.Status.ConnectionInfo.Host)
 	exSecret.Data["Port"] = []byte(dbClaim.Status.ConnectionInfo.Port)
 	exSecret.Data["DatabaseName"] = []byte(dbClaim.Status.ConnectionInfo.DatabaseName)
-	exSecret.Data["UserUpdatedAt"] = []byte(dbClaim.Status.ConnectionInfo.UserUpdatedAt.String())
 	exSecret.Data["Password"] = []byte(dbClaim.Status.ConnectionInfo.Password)
 
 	r.Log.Info("updating connection info secret", "secret", dbClaim.Name, "namespace", dbClaim.Namespace)
@@ -303,6 +251,100 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		if err := r.updateSecret(ctx, dbClaim, gs); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) createUser(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
+	var exists bool
+	username := dbClaim.Spec.Username
+
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
+	if err != nil {
+		r.Log.Error(err, "could not query for user name")
+		return err
+	}
+
+	if !exists {
+		r.Log.Info("creating a user", "user", username)
+		password, err := r.generatePassword()
+		if err != nil || password == "" {
+			return err
+		}
+		_, err = db.Exec("CREATE USER" + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
+		if err != nil {
+			if !strings.Contains(err.Error(), "already exists") {
+				r.Log.Error(err, "could not create user "+username)
+				return err
+			}
+		}
+
+		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbClaim.Spec.AppID) + " TO " + fmt.Sprintf("%q", username)); err != nil {
+			r.Log.Error(err, "could not set permissions to user "+username)
+			return err
+		}
+
+		timeNow := metav1.Now()
+		dbClaim.Status.UserUpdatedAt = &timeNow
+		dbClaim.Status.ConnectionInfo.Username = username
+		dbClaim.Status.ConnectionInfo.Password = password
+		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+
+		r.Log.Info("user has been created", "user", username)
+	}
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) updatePassword(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
+	password, err := r.generatePassword()
+	if err != nil || password == "" {
+		r.Log.Error(err, "error occurred during password generating")
+		return err
+	}
+
+	r.Log.Info("update user password")
+
+	username := dbClaim.Spec.Username
+
+	_, err = db.Exec("ALTER ROLE" + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
+	if err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			r.Log.Error(err, "could not create user "+username)
+			return err
+		}
+	}
+	timeNow := metav1.Now()
+	dbClaim.Status.UserUpdatedAt = &timeNow
+	dbClaim.Status.ConnectionInfo.Password = password
+	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) createDataBase(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
+	var exists bool
+
+	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbClaim.Spec.AppID).Scan(&exists)
+	if err != nil {
+		r.Log.Error(err, "could not query for database name")
+		return err
+	}
+	if !exists {
+		r.Log.Info("creating db:", "database name", dbClaim.Spec.AppID)
+		// create the database
+		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbClaim.Spec.AppID)); err != nil {
+			r.Log.Error(err, "could not create database")
+			return err
+		}
+
+		timeNow := metav1.Now()
+		dbClaim.Status.DbCreatedAt = &timeNow
+		dbClaim.Status.ConnectionInfo.DatabaseName = dbClaim.Spec.AppID
+		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+
+		r.Log.Info("database has been created", "DB", dbClaim.Spec.AppID)
 	}
 
 	return nil
