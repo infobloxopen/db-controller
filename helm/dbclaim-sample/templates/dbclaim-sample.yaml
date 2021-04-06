@@ -4,9 +4,8 @@ metadata:
   name: databaseclaim-sample
   namespace: {{ .Release.Namespace }}
 spec:
-  app_id: sample-app
-  secret_name: sample-secret
-  type: postgres
-  instance_label: sample-connection
-  user_name: sample_user
-  database_name: sample_app
+  appId: sample-app
+  secretName: sample-secret
+  instanceLabel: sample-connection
+  userName: sample_user
+  databaseName: sample_app
