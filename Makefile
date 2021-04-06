@@ -11,6 +11,40 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 
 CMD := "cmd/manager"
 
+#configuration for helm
+CWD=$(shell pwd)
+KUBECONFIG ?= ${HOME}/.kube/config
+HELM_IMAGE := infoblox/helm:3.2.4-5b243a2
+CHART_VERSION ?= $(TAG)
+DB_CONTROLLER_CHART := helm/${IMAGE_NAME}
+CRDS_CHART := helm/${IMAGE_NAME}-crds
+CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
+CHART_FILE_CRD := $(IMAGE_NAME)-crd-$(CHART_VERSION).tgz
+HELM ?= docker run \
+	--rm \
+	--net host \
+	-w /pkg \
+	-v ${CWD}:/pkg \
+	-v ${KUBECONFIG}:/root/.kube/config \
+	-e AWS_REGION \
+	-e AWS_ACCESS_KEY_ID \
+	-e AWS_SECRET_ACCESS_KEY \
+	-e AWS_SESSION_TOKEN \
+	 ${HELM_IMAGE}
+
+HELM_ENTRYPOINT ?= docker run \
+	--rm \
+	--entrypoint "" \
+	--net host \
+	-w /pkg \
+	-v ${CWD}:/pkg \
+	-v ${KUBECONFIG}:/root/.kube/config \
+	-e AWS_REGION \
+	-e AWS_ACCESS_KEY_ID \
+	-e AWS_SECRET_ACCESS_KEY \
+	-e AWS_SESSION_TOKEN \
+	 ${HELM_IMAGE} sh -c
+
 DBCTL_NAMESPACE ?= db-controller-namespace
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -122,3 +156,25 @@ uninstall-samples:
 deploy-all: create-namespace install-crds deploy-controller
 
 uninstall-all: uninstall-controller uninstall-crds delete-namespace
+
+build-properties:
+	@sed 's/{CHART_FILE}/$(CHART_FILE)/g' build.properties.in > build.properties
+
+build-properties-crd:
+	@sed 's/{CHART_FILE}/$(CHART_FILE_CRD)/g' build.properties.in > crd.build.properties
+
+build-chart:
+	${HELM_ENTRYPOINT} "helm package ${DB_CONTROLLER_CHART} --version ${CHART_VERSION}"
+
+build-chart-crd:
+	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
+
+push-chart:
+	${HELM} s3 push ${CHART_FILE} infobloxcto
+
+push-chart-crd:
+	${HELM} s3 push ${CHART_FILE_CRD} infobloxcto
+
+clean:
+	@rm -f *build.properties || true
+	@rm -f *.tgz || true

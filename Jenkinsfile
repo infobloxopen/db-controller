@@ -49,6 +49,32 @@ pipeline {
         }
       }
     }
+    stage('Push charts') {
+      when {
+        anyOf {
+          branch 'main'
+          branch 'release*'
+          buildingTag()
+        }
+      }
+      steps {
+        dir ("${WORKSPACE}/${DIRECTORY}") {
+          withDockerRegistry([credentialsId: "dockerhub-bloxcicd", url: ""]) {
+            withAWS(region:'us-east-1', credentials:'CICD_HELM') {
+              sh "make clean"
+              sh "make build-chart"
+              sh "make push-chart"
+              sh "make build-properties"
+              sh "make build-chart-crd"
+              sh "make push-chart-crd"
+              sh "make build-properties-crd"
+              archiveArtifacts artifacts: '*.tgz'
+              archiveArtifacts artifacts: '*build.properties'
+            }
+          }
+        }
+      }
+    }
   }
   post {
     success {
