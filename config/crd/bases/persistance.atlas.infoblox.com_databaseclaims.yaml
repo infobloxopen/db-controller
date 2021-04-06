@@ -32,33 +32,33 @@ spec:
           spec:
             description: DatabaseClaimSpec defines the desired state of DatabaseClaim
             properties:
-              app_id:
+              appId:
                 description: Specifies an indentifier for the application using the database.
                 minLength: 1
                 type: string
-              database_name:
+              databaseName:
                 description: The name of the database instance.
                 type: string
-              db_name_override:
+              dbNameOverride:
                 description: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
                 type: string
               host:
                 description: The optional host name where the database instance is located. If the value is omitted, then the host value from the matching InstanceLabel will be used.
                 type: string
-              instance_label:
+              instanceLabel:
                 description: The matching fragment key name of the database instance that will host the database.
                 type: string
               port:
                 description: The optional port to use for connecting to the host. If the value is omitted, then the host value from the matching InstanceLabel will be used.
                 type: string
-              secret_name:
+              secretName:
                 description: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
                 type: string
               type:
                 description: Specifies the type of database to provision. Only postgres is supported.
                 minLength: 0
                 type: string
-              user_name:
+              userName:
                 description: The username that the application will use for accessing the database.
                 type: string
             type: object
@@ -67,15 +67,15 @@ spec:
             properties:
               connectionInfo:
                 properties:
-                  database_name:
+                  databaseName:
                     type: string
-                  hostname:
+                  hostName:
                     type: string
                   password:
                     type: string
                   port:
                     type: string
-                  username:
+                  userName:
                     type: string
                 type: object
               connectionUpdatedAt:
@@ -89,7 +89,7 @@ spec:
               error:
                 description: Any errors related to provisioning this claim.
                 type: string
-              match_label:
+              matchLabel:
                 description: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
                 type: string
               userUpdatedAt:
