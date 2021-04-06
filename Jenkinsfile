@@ -61,7 +61,6 @@ pipeline {
         dir ("${WORKSPACE}/${DIRECTORY}") {
           withDockerRegistry([credentialsId: "dockerhub-bloxcicd", url: ""]) {
             withAWS(region:'us-east-1', credentials:'CICD_HELM') {
-              sh "make clean"
               sh "make build-chart"
               sh "make push-chart"
               sh "make build-properties"

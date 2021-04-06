@@ -19,7 +19,7 @@ CHART_VERSION ?= $(TAG)
 DB_CONTROLLER_CHART := helm/${IMAGE_NAME}
 CRDS_CHART := helm/${IMAGE_NAME}-crds
 CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
-CHART_FILE_CRD := $(IMAGE_NAME)-crd-$(CHART_VERSION).tgz
+CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
 HELM ?= docker run \
 	--rm \
 	--net host \

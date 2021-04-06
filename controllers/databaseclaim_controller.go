@@ -465,16 +465,14 @@ func getDBName(dbClaim *persistancev1.DatabaseClaim) string {
 
 func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.DatabaseClaim) (string, error) {
 	settingsMap := r.Config.AllSettings()
-	r.Log.Info("instance label", "label", settingsMap)
+
 	rTree := radix.New()
 	for k, _ := range settingsMap {
 		if k != "passwordconfig" {
 			rTree.Insert(k, true)
-			r.Log.Info("fragment key", "key", k)
 		}
 	}
 	// Find the longest prefix match
-	r.Log.Info("instance label", "label", dbClaim.Spec.InstanceLabel)
 	m, _, ok := rTree.LongestPrefix(dbClaim.Spec.InstanceLabel)
 	if !ok {
 		return "", fmt.Errorf("can't find any instance label matching fragment keys")
