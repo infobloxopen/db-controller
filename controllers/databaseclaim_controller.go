@@ -97,52 +97,55 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 	fragmentKey, err := r.matchInstanceLabel(dbClaim)
 	if err != nil {
-		return ctrl.Result{}, err
+		return r.manageError(ctx, dbClaim, err)
 	}
 
 	curInstanceConfig := r.newInstanceConfig(fragmentKey)
-	dbConnectionString := r.dbConnectionString(ctx, curInstanceConfig, dbClaim)
+	dbConnectionString, err := r.dbConnectionString(ctx, curInstanceConfig, dbClaim)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
 
 	log.Info("opening database: ")
 	db, err := sql.Open(getDBType(dbClaim.Spec.Type), dbConnectionString)
 	if err != nil {
-		return ctrl.Result{}, err
+		return r.manageError(ctx, dbClaim, err)
 	}
 	defer db.Close()
 
 	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	if err := r.createDataBase(db, dbClaim); err != nil {
-		return ctrl.Result{}, err
+		return r.manageError(ctx, dbClaim, err)
 	}
 
 	if r.isUserChanged(dbClaim) {
 		if err := r.updateUser(db, dbClaim); err != nil {
-			return ctrl.Result{}, err
+			return r.manageError(ctx, dbClaim, err)
 		}
 	} else {
 		if err := r.createUser(db, dbClaim); err != nil {
-			return ctrl.Result{}, err
+			return r.manageError(ctx, dbClaim, err)
 		}
 	}
 
 	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > r.getPasswordRotationTime() {
 		err := r.updatePassword(db, dbClaim)
 		if err != nil {
-			return ctrl.Result{}, err
+			return r.manageError(ctx, dbClaim, err)
 		}
 	}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
 		log.Error(err, "could not update db claim")
-		return ctrl.Result{}, err
+		return r.manageError(ctx, dbClaim, err)
 	}
 	// create connection info secret
 	if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
-		return ctrl.Result{Requeue: true}, err
+		return r.manageError(ctx, dbClaim, err)
 	}
 
-	return ctrl.Result{RequeueAfter: time.Minute}, nil
+	return r.manageSuccess(ctx, dbClaim)
 }
 
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
@@ -167,11 +170,12 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
-func (r *DatabaseClaimReconciler) dbConnectionString(ctx context.Context, ic instanceConfig, dbClaim *persistancev1.DatabaseClaim) string {
+func (r *DatabaseClaimReconciler) dbConnectionString(ctx context.Context, ic instanceConfig, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 	var h, p string
 	pass, err := r.readMasterPassword(ctx, ic.passwordSecretRef, dbClaim.Namespace)
 	if err != nil {
 		r.Log.Error(err, "error during getting master password")
+		return "", err
 	}
 	// If config host is overridden by db claims host
 	if dbClaim.Spec.Host != "" {
@@ -188,9 +192,9 @@ func (r *DatabaseClaimReconciler) dbConnectionString(ctx context.Context, ic ins
 
 	dbStr := fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=%s", h, p, ic.username, pass, ic.sslMod)
 	dbClaim.Status.ConnectionInfo.Host = ic.host
-	dbClaim.Status.ConnectionInfo.Host = ic.port
+	dbClaim.Status.ConnectionInfo.Port = ic.port
 
-	return dbStr
+	return dbStr, err
 }
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -252,10 +256,22 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	claimName := dbClaim.Name
+	truePtr := true
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
-			Name:      dbClaim.Name,
+			Name:      claimName,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "databaseclaims.persistance.atlas.infoblox.com/v1",
+					Kind:               "CustomResourceDefinition",
+					Name:               claimName,
+					UID:                dbClaim.UID,
+					Controller:         &truePtr,
+					BlockOwnerDeletion: &truePtr,
+				},
+			},
 		},
 		Data: map[string][]byte{
 			"Username":     []byte(dbClaim.Spec.Username),
@@ -509,4 +525,34 @@ func getDBType(dbType string) string {
 	}
 
 	return postgresType
+}
+
+func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, inErr error) (ctrl.Result, error) {
+	dbClaim.Status.Error = inErr.Error()
+
+	err := r.Client.Status().Update(ctx, dbClaim)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(err) {
+			err = nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, inErr
+}
+
+func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
+	dbClaim.Status.Error = ""
+
+	err := r.Client.Status().Update(ctx, dbClaim)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(err) {
+			err = nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{RequeueAfter: time.Minute}, nil
 }
