@@ -10,7 +10,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -98,7 +97,7 @@ type mockClient struct {
 
 func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
 	_ = ctx
-	if key.Namespace == "testNamespace" && key.Name == "testName" {
+	if key.Namespace == "testNamespace" && key.Name == "sample-master-secret" {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")
@@ -135,9 +134,10 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			"Get master password ok",
 			mockReconciler{
 				Client: &mockClient{},
+				Config: NewConfig(secretRef),
 			},
 			args{
-				fragmentKey: "testName",
+				fragmentKey: "sample-connection",
 				namespace:   "testNamespace",
 			},
 			"masterpassword",
@@ -147,6 +147,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			"Get master password no secret name",
 			mockReconciler{
 				Client: &mockClient{},
+				Config: NewConfig(secretRef),
 			},
 			args{
 				fragmentKey: "",
@@ -159,6 +160,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			"Get master password secret not found",
 			mockReconciler{
 				Client: &mockClient{},
+				Config: NewConfig(secretRef),
 			},
 			args{
 				fragmentKey: "secretNameNotExists",
@@ -188,156 +190,9 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 	}
 }
 
-func TestDatabaseClaimReconcileDBConnectionString(t *testing.T) {
-	type mockReconciler struct {
-		Client client.Client
-		Log    logr.Logger
-		Scheme *runtime.Scheme
-		Config *viper.Viper
-	}
-	type args struct {
-		ctx     context.Context
-		ic      instanceConfig
-		dbClaim *persistancev1.DatabaseClaim
-	}
-	tests := []struct {
-		name       string
-		reconciler mockReconciler
-		args       args
-		want       string
-		wantErr    bool
-	}{
-		{
-			"Get DB connection string from config",
-			mockReconciler{
-				Client: &mockClient{},
-			},
-			args{
-				ic: instanceConfig{
-					username:          "masteruser",
-					host:              "test-host",
-					port:              "123",
-					sslMod:            "disable",
-					passwordSecretRef: "testName",
-				},
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "testNamespace",
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
-					},
-				},
-			},
-			"host=test-host port=123 user=masteruser password=masterpassword sslmode=disable",
-			false,
-		},
-		{
-			"Get DB connection string port overridden by claim",
-			mockReconciler{
-				Client: &mockClient{},
-			},
-			args{
-				ic: instanceConfig{
-					username:          "masteruser",
-					host:              "test-host",
-					port:              "123",
-					sslMod:            "disable",
-					passwordSecretRef: "testName",
-				},
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "testNamespace",
-					},
-					Spec: persistancev1.DatabaseClaimSpec{
-						Port: "456",
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
-					},
-				},
-			},
-			"host=test-host port=456 user=masteruser password=masterpassword sslmode=disable",
-			false,
-		},
-		{
-			"Get DB connection string host overridden by claim",
-			mockReconciler{
-				Client: &mockClient{},
-			},
-			args{
-				ic: instanceConfig{
-					username:          "masteruser",
-					host:              "test-host",
-					port:              "123",
-					sslMod:            "disable",
-					passwordSecretRef: "testName",
-				},
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "testNamespace",
-					},
-					Spec: persistancev1.DatabaseClaimSpec{
-						Host: "overridden-host",
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
-					},
-				},
-			},
-			"host=overridden-host port=123 user=masteruser password=masterpassword sslmode=disable",
-			false,
-		},
-		{
-			"Get DB connection master secret doesn't exist",
-			mockReconciler{
-				Client: &mockClient{},
-				Log:    zap.New(zap.UseDevMode(true)),
-			},
-			args{
-				ic: instanceConfig{
-					username:          "masteruser",
-					host:              "test-host",
-					port:              "123",
-					sslMod:            "disable",
-					passwordSecretRef: "testNameNotExist",
-				},
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "testNamespace",
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
-					},
-				},
-			},
-			"",
-			true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &DatabaseClaimReconciler{
-				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
-			}
-			got, err := r.dbConnectionString(tt.args.ctx, tt.args.ic, tt.args.dbClaim)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("dbConnectionString() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("dbConnectionString() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 var secretRef = []byte(`
     sample-connection:
-      passwordSecretRef: sample-master-secret
+      PasswordSecretRef: sample-master-secret
 `)
 
 func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
@@ -390,11 +245,11 @@ func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
 
 var config = []byte(`
     sample-connection:
-      username: postgres
-      host: db-controller-postgresql
-      port: 5432
+      Username: postgres
+      Host: db-controller-postgresql
+      Port: 5432
       useSSL: false
-      passwordSecretRef: sample-master-secret
+      PasswordSecretRef: sample-master-secret
 `)
 
 func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
@@ -406,22 +261,61 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 	}
 	type args struct {
 		fragmentKey string
+		dbClaim     *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name       string
 		reconciler mockReconciler
-		args       args
+		args       []args
 		want       []string
 	}{
 		{
-			"Get master connection params host port username",
+			"Get master connection params Host Port Username",
 			mockReconciler{
 				Config: NewConfig(config),
 			},
-			args{fragmentKey: "sample-connection"},
+			[]args{
+				{
+					fragmentKey: "sample-connection",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{
+							Host: "",
+						},
+					},
+				},
+				{
+					fragmentKey: "sample-connection",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{
+							Host: "overridden-host",
+						},
+					},
+				},
+				{
+					fragmentKey: "sample-connection",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{
+							Port: "",
+						},
+					},
+				},
+				{
+					fragmentKey: "sample-connection",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{
+							Port: "1234",
+						},
+					},
+				},
+				{
+					fragmentKey: "sample-connection",
+				},
+			},
 			[]string{
 				"db-controller-postgresql",
+				"overridden-host",
 				"5432",
+				"1234",
 				"postgres",
 			},
 		},
@@ -434,18 +328,32 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
 			}
-			if got := r.getMasterHost(tt.args.fragmentKey); got != tt.want[0] {
+			t.Log("getMasterHost() Host from config")
+			if got := r.getMasterHost(tt.args[0].fragmentKey, tt.args[0].dbClaim); got != tt.want[0] {
 				t.Errorf("getMasterHost() = %v, want %v", got, tt.want[0])
 			}
-			t.Log("getMasterHost() PASS")
+			t.Log("getMasterHost() Host from config PASS")
 
-			if got := r.getMasterPort(tt.args.fragmentKey); got != tt.want[1] {
+			t.Log("getMasterHost() Host overridden by DB claim")
+			if got := r.getMasterHost(tt.args[1].fragmentKey, tt.args[1].dbClaim); got != tt.want[1] {
 				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[1])
 			}
-			t.Log("getMasterPort() PASS")
+			t.Log("getMasterPort() Host overridden by DB claim PASS")
 
-			if got := r.getMasterUser(tt.args.fragmentKey); got != tt.want[2] {
-				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[2])
+			t.Log("getMasterHost() Port from config")
+			if got := r.getMasterPort(tt.args[2].fragmentKey, tt.args[2].dbClaim); got != tt.want[2] {
+				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[2])
+			}
+			t.Log("getMasterPort() Port from config PASS")
+
+			t.Log("getMasterHost() Port overridden by DB claim")
+			if got := r.getMasterPort(tt.args[3].fragmentKey, tt.args[3].dbClaim); got != tt.want[3] {
+				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[3])
+			}
+			t.Log("getMasterPort() Port overridden by DB claim PASS")
+
+			if got := r.getMasterUser(tt.args[4].fragmentKey); got != tt.want[4] {
+				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[4])
 			}
 			t.Log("getMasterUser() PASS")
 		})
@@ -487,7 +395,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 			"disable",
 		},
 		{
-			"Get master connection params host, port, user name",
+			"Get master connection params Host, Port, user name",
 			mockReconciler{
 				Config: NewConfig(sslModeEnabled),
 			},
@@ -513,11 +421,11 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 
 var multiConfig = []byte(`
     sample:
-      host: sample.host
+      Host: sample.Host
     sample.connection:
-      host: test.host
+      Host: test.Host
     another.connection:
-      host: another.host
+      Host: another.Host
 `)
 
 func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {

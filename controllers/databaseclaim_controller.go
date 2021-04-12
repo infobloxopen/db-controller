@@ -18,9 +18,7 @@ package controllers
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/armon/go-radix"
@@ -36,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/dbclient"
 )
 
 const (
@@ -48,14 +47,6 @@ const (
 	defaultRotationTime = minRotationTime
 )
 
-const (
-	postgresType = "postgres"
-)
-
-var dbTypesMap = map[string]bool{
-	postgresType: true,
-}
-
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
@@ -63,17 +54,6 @@ type DatabaseClaimReconciler struct {
 	Scheme *runtime.Scheme
 	Config *viper.Viper
 }
-
-type instanceConfig struct {
-	username          string
-	host              string
-	port              string
-	sslMod            string
-	passwordSecretRef string
-}
-
-// +kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims/status,verbs=get;update;patch
 
 func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
@@ -100,40 +80,59 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		return r.manageError(ctx, dbClaim, err)
 	}
 
-	curInstanceConfig := r.newInstanceConfig(fragmentKey)
-	dbConnectionString, err := r.dbConnectionString(ctx, curInstanceConfig, dbClaim)
+	log.Info("creating database client")
+	dbClient, err := r.getClient(ctx, log, fragmentKey, dbClaim)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
 	}
 
-	log.Info("opening database: ")
-	db, err := sql.Open(getDBType(dbClaim.Spec.Type), dbConnectionString)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
-	}
-	defer db.Close()
+	defer dbClient.Close()
 
 	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
-	if err := r.createDataBase(db, dbClaim); err != nil {
+	dbName := GetDBName(dbClaim)
+	dbCreated, err := dbClient.CreateDataBase(dbName)
+	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
+	} else if dbCreated {
+		updateDBStatus(dbClaim, dbName)
 	}
 
+	username := dbClaim.Spec.Username
 	if r.isUserChanged(dbClaim) {
-		if err := r.updateUser(db, dbClaim); err != nil {
+		oldUsername := dbClaim.Status.ConnectionInfo.Username
+		if err := dbClient.UpdateUser(oldUsername, username); err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
+		timeNow := metav1.Now()
+		dbClaim.Status.UserUpdatedAt = &timeNow
+		dbClaim.Status.ConnectionInfo.Username = username
+		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
 	} else {
-		if err := r.createUser(db, dbClaim); err != nil {
+		userPassword, err := r.generatePassword()
+		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
+		}
+
+		created, err := dbClient.CreateUser(dbName, username, userPassword)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		} else if created {
+			updateUserStatus(dbClaim, username, userPassword)
 		}
 	}
 
 	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > r.getPasswordRotationTime() {
-		err := r.updatePassword(db, dbClaim)
+		userPassword, err := r.generatePassword()
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
+
+		if err := dbClient.UpdatePassword(username, userPassword); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+
+		updateUserStatus(dbClaim, username, userPassword)
 	}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
@@ -170,49 +169,32 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
-func (r *DatabaseClaimReconciler) dbConnectionString(ctx context.Context, ic instanceConfig, dbClaim *persistancev1.DatabaseClaim) (string, error) {
-	var h, p string
-	pass, err := r.readMasterPassword(ctx, ic.passwordSecretRef, dbClaim.Namespace)
-	if err != nil {
-		r.Log.Error(err, "error during getting master password")
-		return "", err
-	}
-	// If config host is overridden by db claims host
-	if dbClaim.Spec.Host != "" {
-		h = dbClaim.Spec.Host
-	} else {
-		h = ic.host
-	}
-
-	if dbClaim.Spec.Port != "" {
-		p = dbClaim.Spec.Port
-	} else {
-		p = ic.port
-	}
-
-	dbStr := fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=%s", h, p, ic.username, pass, ic.sslMod)
-	dbClaim.Status.ConnectionInfo.Host = ic.host
-	dbClaim.Status.ConnectionInfo.Port = ic.port
-
-	return dbStr, err
-}
-
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DatabaseClaim{}).
 		Complete(r)
 }
 
-func (r *DatabaseClaimReconciler) getMasterHost(fragmentKey string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::host", fragmentKey))
+func (r *DatabaseClaimReconciler) getMasterHost(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	// If config host is overridden by db claims host
+	if dbClaim.Spec.Host != "" {
+		return dbClaim.Spec.Host
+	}
+
+	return r.Config.GetString(fmt.Sprintf("%s::Host", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) getMasterUser(fragmentKey string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::username", fragmentKey))
+	return r.Config.GetString(fmt.Sprintf("%s::Username", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getMasterPort(fragmentKey string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::port", fragmentKey))
+func (r *DatabaseClaimReconciler) getMasterPort(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	// If config port is overridden by db claims port
+	if dbClaim.Spec.Port != "" {
+		return dbClaim.Spec.Port
+	}
+
+	return r.Config.GetString(fmt.Sprintf("%s::Port", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
@@ -252,7 +234,7 @@ func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
 }
 
 func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::passwordSecretRef", fragmentKey))
+	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
@@ -327,134 +309,9 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) createUser(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
-	var exists bool
-	username := dbClaim.Spec.Username
-
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
-	if err != nil {
-		r.Log.Error(err, "could not query for user name")
-		return err
-	}
-
-	if !exists {
-		r.Log.Info("creating a user", "user", username)
-		password, err := r.generatePassword()
-		if err != nil || password == "" {
-			return err
-		}
-		_, err = db.Exec("CREATE USER" + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
-		if err != nil {
-			if !strings.Contains(err.Error(), "already exists") {
-				r.Log.Error(err, "could not create user "+username)
-				return err
-			}
-		}
-
-		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", getDBName(dbClaim)) + " TO " + fmt.Sprintf("%q", username)); err != nil {
-			r.Log.Error(err, "could not set permissions to user "+username)
-			return err
-		}
-
-		timeNow := metav1.Now()
-		dbClaim.Status.UserUpdatedAt = &timeNow
-		dbClaim.Status.ConnectionInfo.Username = username
-		dbClaim.Status.ConnectionInfo.Password = password
-		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
-
-		r.Log.Info("user has been created", "user", username)
-	}
-
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) updateUser(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
-	var exists bool
-	username := dbClaim.Status.ConnectionInfo.Username
-	newUsername := dbClaim.Spec.Username
-
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
-	if err != nil {
-		r.Log.Error(err, "could not query for user name")
-		return err
-	}
-
-	if exists {
-		r.Log.Info(fmt.Sprintf("renaming user %s to %s", username, newUsername))
-
-		_, err = db.Exec("ALTER USER" + fmt.Sprintf("%q", username) + " RENAME TO  " + fmt.Sprintf("%q", newUsername))
-		if err != nil {
-			r.Log.Error(err, "could not rename user "+username)
-			return err
-		}
-
-		timeNow := metav1.Now()
-		dbClaim.Status.UserUpdatedAt = &timeNow
-		dbClaim.Status.ConnectionInfo.Username = newUsername
-		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
-
-		r.Log.Info("user has been updated", "user", newUsername)
-	}
-
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) updatePassword(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
-	password, err := r.generatePassword()
-	if err != nil || password == "" {
-		r.Log.Error(err, "error occurred during password generating")
-		return err
-	}
-
-	r.Log.Info("update user password")
-
-	username := dbClaim.Spec.Username
-
-	_, err = db.Exec("ALTER ROLE" + fmt.Sprintf("%q", username) + " with encrypted password '" + password + "'")
-	if err != nil {
-		if !strings.Contains(err.Error(), "already exists") {
-			r.Log.Error(err, "could not alter user "+username)
-			return err
-		}
-	}
-	timeNow := metav1.Now()
-	dbClaim.Status.UserUpdatedAt = &timeNow
-	dbClaim.Status.ConnectionInfo.Password = password
-	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
-
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) createDataBase(db *sql.DB, dbClaim *persistancev1.DatabaseClaim) error {
-	var exists bool
-	dbName := getDBName(dbClaim)
-	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbName).Scan(&exists)
-	if err != nil {
-		r.Log.Error(err, "could not query for database name")
-		return err
-	}
-	if !exists {
-		r.Log.Info("creating db:", "database name", dbName)
-		// create the database
-		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbName)); err != nil {
-			r.Log.Error(err, "could not create database")
-			return err
-		}
-
-		timeNow := metav1.Now()
-		dbClaim.Status.DbCreatedAt = &timeNow
-		dbClaim.Status.ConnectionInfo.DatabaseName = dbName
-		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
-
-		r.Log.Info("database has been created", "DB", dbName)
-	}
-
-	return nil
-}
-
 func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, namespace string) (string, error) {
 	gs := &corev1.Secret{}
-	secretName := fragmentKey
+	secretName := r.getSecretRef(fragmentKey)
 
 	if secretName == "" {
 		return "", fmt.Errorf("an empty password secret reference")
@@ -469,14 +326,6 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragme
 	}
 
 	return string(gs.Data["password"]), nil
-}
-
-func getDBName(dbClaim *persistancev1.DatabaseClaim) string {
-	if dbClaim.Spec.DBNameOverride != "" {
-		return dbClaim.Spec.DBNameOverride
-	}
-
-	return dbClaim.Spec.DatabaseName
 }
 
 func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.DatabaseClaim) (string, error) {
@@ -499,32 +348,12 @@ func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.Data
 	return m, nil
 }
 
-func (r *DatabaseClaimReconciler) newInstanceConfig(fragmentKey string) instanceConfig {
-	return instanceConfig{
-		username:          r.getMasterUser(fragmentKey),
-		host:              r.getMasterHost(fragmentKey),
-		port:              r.getMasterPort(fragmentKey),
-		sslMod:            r.getSSLMode(fragmentKey),
-		passwordSecretRef: r.getSecretRef(fragmentKey),
-	}
-}
-
 func (r *DatabaseClaimReconciler) isUserChanged(dbClaim *persistancev1.DatabaseClaim) bool {
 	if dbClaim.Spec.Username != dbClaim.Status.ConnectionInfo.Username && dbClaim.Status.ConnectionInfo.Username != "" {
 		return true
 	}
 
 	return false
-}
-
-func getDBType(dbType string) string {
-
-	_, found := dbTypesMap[strings.ToLower(dbType)]
-	if found {
-		return strings.ToLower(dbType)
-	}
-
-	return postgresType
 }
 
 func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, inErr error) (ctrl.Result, error) {
@@ -555,4 +384,71 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 	}
 
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
+}
+
+func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (dbclient.DBClient, error) {
+	dbType := dbClaim.Spec.Type
+
+	host := r.getMasterHost(fragmentKey, dbClaim)
+	if host == "" {
+		return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
+	}
+
+	port := r.getMasterPort(fragmentKey, dbClaim)
+	if port == "" {
+		return nil, fmt.Errorf("cannot get master port for fragment key %s", fragmentKey)
+	}
+
+	user := r.getMasterUser(fragmentKey)
+	if user == "" {
+		return nil, fmt.Errorf("invalid credentials (username)")
+	}
+
+	password, err := r.readMasterPassword(ctx, fragmentKey, dbClaim.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	if password == "" {
+		return nil, fmt.Errorf("invalid credentials (password)")
+	}
+
+	sslMode := r.getSSLMode(fragmentKey)
+	if sslMode == "" {
+		return nil, fmt.Errorf("invalid sslMode")
+	}
+
+	updateHostPortStatus(dbClaim, host, port)
+
+	return dbclient.DBClientFactory(log, dbType, host, port, user, password, sslMode)
+}
+
+func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
+	if dbClaim.Spec.DBNameOverride != "" {
+		return dbClaim.Spec.DBNameOverride
+	}
+
+	return dbClaim.Spec.DatabaseName
+}
+
+func updateUserStatus(dbClaim *persistancev1.DatabaseClaim, userName, userPassword string) {
+	timeNow := metav1.Now()
+	dbClaim.Status.UserUpdatedAt = &timeNow
+	dbClaim.Status.ConnectionInfo.Username = userName
+	dbClaim.Status.ConnectionInfo.Password = userPassword
+	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+}
+
+func updateDBStatus(dbClaim *persistancev1.DatabaseClaim, dbName string) {
+	timeNow := metav1.Now()
+	dbClaim.Status.DbCreatedAt = &timeNow
+	dbClaim.Status.ConnectionInfo.DatabaseName = dbName
+	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+}
+
+func updateHostPortStatus(dbClaim *persistancev1.DatabaseClaim, host, port string) {
+	timeNow := metav1.Now()
+	dbClaim.Status.ConnectionInfo.Host = host
+	dbClaim.Status.ConnectionInfo.Port = port
+	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
 }
