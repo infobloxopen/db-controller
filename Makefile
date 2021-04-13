@@ -198,3 +198,4 @@ push-chart-crd:
 clean:
 	@rm -f *build.properties || true
 	@rm -f *.tgz || true
+	@rm -rf /usr/local/kubebuilder

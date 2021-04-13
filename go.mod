@@ -12,6 +12,7 @@ require (
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/ory/dockertest/v3 v3.6.3
+	github.com/prometheus/client_golang v1.0.0
 	github.com/sethvargo/go-password v0.2.0
 	github.com/spf13/viper v1.7.1
 	k8s.io/api v0.17.2

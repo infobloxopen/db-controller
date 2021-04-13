@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,13 +43,16 @@ func init() {
 
 	_ = persistancev1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+
 }
 
 func main() {
 	var metricsAddr string
+	var metricsPort int
 	var enableLeaderElection bool
 	var configFile string
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
+	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -61,7 +65,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
+		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsAddr, metricsPort),
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "32151587.atlas.infoblox.com",
