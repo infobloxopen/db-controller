@@ -56,8 +56,10 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests docker-test
-docker-test:
+test: kubebuilder generate fmt vet manifests
+	go test -cover -v ./...
+# Run test in docker db test can't because separate postgres pod should be installed
+docker-test: generate fmt vet manifests
 	docker build \
 		--build-arg REPO="${REPO}" \
 		-f build/Dockerfile.test.env \
@@ -127,6 +129,24 @@ ifeq (, $(shell which controller-gen))
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+# find or download kubebuilder
+# download kubebuilder if necessary
+kubebuilder:
+ifeq (, $(shell which kubebuilder))
+	@{ \
+	set -e ;\
+	os=$(shell go env GOOS) ;\
+	arch=$(shell go env GOARCH) ;\
+	echo $$arhch ;\
+	curl -L https://go.kubebuilder.io/dl/2.3.1/$${os}/$${arch} | tar -xz -C /tmp/ ;\
+	(sudo mv /tmp/kubebuilder_2.3.1_$${os}_$${arch}/ /usr/local/kubebuilder) ;\
+	export PATH=$$PATH:/usr/local/kubebuilder/bin ;\
+	}
+KUBEBUILDER_ASSETS=$(GOBIN)/kubebuilder
+else
+KUBEBUILDER_ASSETS=$(shell which kubebuilder)
 endif
 
 create-namespace:

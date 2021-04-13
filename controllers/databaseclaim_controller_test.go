@@ -697,3 +697,46 @@ func TestDatabaseClaimReconcilerIsUserChanged(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDBName(t *testing.T) {
+	type args struct {
+		dbClaim *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			"DB is not overridden",
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						DBNameOverride: "",
+						DatabaseName:   "db_name",
+					},
+				},
+			},
+			"db_name",
+		},
+		{
+			"DB is overridden",
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						DBNameOverride: "overridden_db_name",
+						DatabaseName:   "db_name",
+					},
+				},
+			},
+			"overridden_db_name",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetDBName(tt.args.dbClaim); got != tt.want {
+				t.Errorf("GetDBName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
