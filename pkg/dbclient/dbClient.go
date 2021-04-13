@@ -4,9 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
+
+	"github.com/infobloxopen/db-controller/pkg/metrics"
 )
 
 const (
@@ -58,6 +61,8 @@ func ConnectionString(host, port, user, password, sslmode string) string {
 }
 
 func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {
+	start := time.Now()
+
 	var exists bool
 	db := pc.DB
 	created := false
@@ -65,6 +70,7 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
+		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
 		return created, err
 	}
 
@@ -75,22 +81,29 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 		if err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				pc.log.Error(err, "could not create user "+username)
+				metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
 				return created, err
 			}
 		}
 
 		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " TO " + fmt.Sprintf("%q", username)); err != nil {
 			pc.log.Error(err, "could not set permissions to user "+username)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 			return created, err
 		}
 		created = true
 		pc.log.Info("user has been created", "user", username)
+		metrics.UsersCreated.Inc()
 	}
+
+	duration := time.Since(start)
+	metrics.UsersCreateTime.Observe(duration.Seconds())
 
 	return created, nil
 }
 
 func (pc *PostgresClient) UpdateUser(oldUsername string, newUsername string) error {
+	start := time.Now()
 	var exists bool
 	db := pc.DB
 
@@ -98,6 +111,7 @@ func (pc *PostgresClient) UpdateUser(oldUsername string, newUsername string) err
 
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
+		metrics.UsersUpdatedErrors.WithLabelValues("read error").Inc()
 		return err
 	}
 
@@ -107,20 +121,26 @@ func (pc *PostgresClient) UpdateUser(oldUsername string, newUsername string) err
 		_, err = db.Exec("ALTER USER" + fmt.Sprintf("%q", oldUsername) + " RENAME TO  " + fmt.Sprintf("%q", newUsername))
 		if err != nil {
 			pc.log.Error(err, "could not rename user "+oldUsername)
+			metrics.UsersUpdatedErrors.WithLabelValues("alter error").Inc()
 			return err
 		}
 
 		pc.log.Info("user has been updated", "user", newUsername)
+		metrics.UsersUpdated.Inc()
 	}
+	duration := time.Since(start)
+	metrics.UsersUpdateTime.Observe(duration.Seconds())
 
 	return nil
 }
 
 func (pc *PostgresClient) UpdatePassword(username string, userPassword string) error {
+	start := time.Now()
 	db := pc.DB
 	if userPassword == "" {
 		err := fmt.Errorf("an empty password")
 		pc.log.Error(err, "error occurred")
+		metrics.PasswordRotatedErrors.WithLabelValues("empty password").Inc()
 		return err
 	}
 
@@ -129,9 +149,13 @@ func (pc *PostgresClient) UpdatePassword(username string, userPassword string) e
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			pc.log.Error(err, "could not alter user "+username)
+			metrics.PasswordRotatedErrors.WithLabelValues("alter error").Inc()
 			return err
 		}
 	}
+	metrics.PasswordRotated.Inc()
+	duration := time.Since(start)
+	metrics.PasswordRotateTime.Observe(duration.Seconds())
 
 	return nil
 }
@@ -144,6 +168,7 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 
 	if err != nil {
 		pc.log.Error(err, "could not query for database name")
+		metrics.DBProvisioningErrors.WithLabelValues("read error")
 		return created, err
 	}
 	if !exists {
@@ -151,10 +176,12 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 		// create the database
 		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbName)); err != nil {
 			pc.log.Error(err, "could not create database")
+			metrics.DBProvisioningErrors.WithLabelValues("create error")
 			return created, err
 		}
 		created = true
 		pc.log.Info("database has been created", "DB", dbName)
+		metrics.DBCreated.Inc()
 	}
 
 	return created, nil
