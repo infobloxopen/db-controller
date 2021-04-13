@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	_ "github.com/lib/pq"
 )
 
 const (
