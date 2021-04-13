@@ -16,7 +16,7 @@ spec:
     metadata:
       {{- with .Values.podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
+        {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
       labels:
         {{- include "db-controller.selectorLabels" . | nindent 8 }}
@@ -46,7 +46,8 @@ spec:
           - containerPort: 8443
             name: https
           args:
-            - --metrics-addr=127.0.0.1:8080
+            - --metrics-addr={{ .Values.metrics.address }}
+            - --metrics-port={{ .Values.metrics.port }}
             - --enable-leader-election
             - --config-file=/etc/config/config.yaml
           command:
