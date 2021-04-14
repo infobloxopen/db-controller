@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -736,6 +737,33 @@ func TestGetDBName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := GetDBName(tt.args.dbClaim); got != tt.want {
 				t.Errorf("GetDBName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_getServiceNamespace(t *testing.T) {
+	os.Setenv(serviceNamespaceEnvVar, "service-namespace")
+	tests := []struct {
+		name    string
+		want    string
+		wantErr bool
+	}{
+		{
+			"service namespace exists",
+			"service-namespace",
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getServiceNamespace()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getServiceNamespace() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("getServiceNamespace() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
