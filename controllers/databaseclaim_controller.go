@@ -93,11 +93,12 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	dbName := GetDBName(dbClaim)
-	_, err = dbClient.CreateDataBase(dbName)
+	created, err := dbClient.CreateDataBase(dbName)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
+	} else if created || dbClaim.Status.ConnectionInfo.DatabaseName == "" {
+		updateDBStatus(dbClaim, dbName)
 	}
-	updateDBStatus(dbClaim, dbName)
 
 	username := dbClaim.Spec.Username
 	if r.isUserChanged(dbClaim) {
@@ -118,7 +119,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		created, err := dbClient.CreateUser(dbName, username, userPassword)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
-		} else if created {
+		} else if created || dbClaim.Status.ConnectionInfo.Username == "" {
 			updateUserStatus(dbClaim, username, userPassword)
 		}
 	}

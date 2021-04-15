@@ -4,6 +4,9 @@
 
 replicaCount: 1
 
+space:
+  enabled: false
+
 image:
   repository: infoblox/db-controller
   pullPolicy: Always
