@@ -1,3 +1,6 @@
+space:
+  enabled: false
+
 image:
   repository: infoblox/db-controller
   pullPolicy: Never
@@ -32,3 +35,9 @@ controllerConfig:
 passwordSecretRefs:
   sample-master-secret:
     password: "{{ .Values.postgresql.postgresqlPassword }}"
+  # create space example
+  #sample-master-space:
+  #  path: /path/to/secret
+  #  secrets:
+  #    password: VAULT
+  #  type: Opaque
