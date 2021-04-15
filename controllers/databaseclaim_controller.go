@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/armon/go-radix"
@@ -42,9 +43,10 @@ const (
 	defaultNumDig  = 10
 	defaultNumSimb = 10
 	// rotation time in minutes
-	minRotationTime     = 60
-	maxRotationTime     = 1440
-	defaultRotationTime = minRotationTime
+	minRotationTime        = 60
+	maxRotationTime        = 1440
+	defaultRotationTime    = minRotationTime
+	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
 )
 
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
@@ -91,12 +93,11 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	dbName := GetDBName(dbClaim)
-	dbCreated, err := dbClient.CreateDataBase(dbName)
+	_, err = dbClient.CreateDataBase(dbName)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
-	} else if dbCreated {
-		updateDBStatus(dbClaim, dbName)
 	}
+	updateDBStatus(dbClaim, dbName)
 
 	username := dbClaim.Spec.Username
 	if r.isUserChanged(dbClaim) {
@@ -404,7 +405,12 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 		return nil, fmt.Errorf("invalid credentials (username)")
 	}
 
-	password, err := r.readMasterPassword(ctx, fragmentKey, dbClaim.Namespace)
+	serviceNS, err := getServiceNamespace()
+	if err != nil {
+		return nil, err
+	}
+
+	password, err := r.readMasterPassword(ctx, fragmentKey, serviceNS)
 	if err != nil {
 		return nil, err
 	}
@@ -451,4 +457,12 @@ func updateHostPortStatus(dbClaim *persistancev1.DatabaseClaim, host, port strin
 	dbClaim.Status.ConnectionInfo.Host = host
 	dbClaim.Status.ConnectionInfo.Port = port
 	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
+}
+
+func getServiceNamespace() (string, error) {
+	ns, found := os.LookupEnv(serviceNamespaceEnvVar)
+	if !found {
+		return "", fmt.Errorf("service namespcae env %s must be set", serviceNamespaceEnvVar)
+	}
+	return ns, nil
 }
