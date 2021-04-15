@@ -45,6 +45,11 @@ spec:
           ports:
           - containerPort: 8443
             name: https
+          env:
+            - name: SERVICE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           args:
             - --metrics-addr={{ .Values.metrics.address }}
             - --metrics-port={{ .Values.metrics.port }}

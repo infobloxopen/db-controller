@@ -94,10 +94,9 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 		created = true
 		pc.log.Info("user has been created", "user", username)
 		metrics.UsersCreated.Inc()
+		duration := time.Since(start)
+		metrics.UsersCreateTime.Observe(duration.Seconds())
 	}
-
-	duration := time.Since(start)
-	metrics.UsersCreateTime.Observe(duration.Seconds())
 
 	return created, nil
 }
@@ -127,9 +126,9 @@ func (pc *PostgresClient) UpdateUser(oldUsername string, newUsername string) err
 
 		pc.log.Info("user has been updated", "user", newUsername)
 		metrics.UsersUpdated.Inc()
+		duration := time.Since(start)
+		metrics.UsersUpdateTime.Observe(duration.Seconds())
 	}
-	duration := time.Since(start)
-	metrics.UsersUpdateTime.Observe(duration.Seconds())
 
 	return nil
 }
