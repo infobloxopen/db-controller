@@ -244,8 +244,8 @@ func TestConnectionString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ConnectionString(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.sslmode); got != tt.want {
-				t.Errorf("ConnectionString() = %v, want %v", got, tt.want)
+			if got := PostgresConnectionString(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.sslmode); got != tt.want {
+				t.Errorf("PostgresConnectionString() = %v, want %v", got, tt.want)
 			}
 		})
 	}

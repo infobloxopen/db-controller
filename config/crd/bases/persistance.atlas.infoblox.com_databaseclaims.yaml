@@ -42,6 +42,9 @@ spec:
               dbNameOverride:
                 description: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
                 type: string
+              dsnName:
+                description: DSN key name.
+                type: string
               host:
                 description: The optional host name where the database instance is located. If the value is omitted, then the host value from the matching InstanceLabel will be used.
                 type: string
@@ -74,6 +77,8 @@ spec:
                   password:
                     type: string
                   port:
+                    type: string
+                  sslMode:
                     type: string
                   userName:
                     type: string

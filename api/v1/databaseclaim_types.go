@@ -59,6 +59,9 @@ type DatabaseClaimSpec struct {
 
 	// The name of the database instance.
 	DatabaseName string `json:"databaseName,omitempty"`
+
+	// DSN key name.
+	DSNName string `json:"dsnName,omitempty"`
 }
 
 // DatabaseClaimStatus defines the observed state of DatabaseClaim
@@ -87,6 +90,7 @@ type DatabaseClaimConnectionInfo struct {
 	DatabaseName string `json:"databaseName,omitempty"`
 	Username     string `json:"userName,omitempty"`
 	Password     string `json:"password,omitempty"`
+	SSLMode      string `json:"sslMode,omitempty"`
 }
 
 // +kubebuilder:object:root=true
