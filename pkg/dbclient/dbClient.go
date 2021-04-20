@@ -57,7 +57,7 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 }
 
 func PostgresConnectionString(host, port, user, password, sslmode string) string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=%s", host, port, user, password, sslmode)
+	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' sslmode='%s'", host, port, user, password, sslmode)
 }
 
 func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {

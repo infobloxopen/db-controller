@@ -239,7 +239,7 @@ func TestConnectionString(t *testing.T) {
 				password: "test-password",
 				sslmode:  "disable",
 			},
-			"host=test-host port=test-port user=test-user password=test-password sslmode=disable",
+			"host='test-host' port='test-port' user='test-user' password='test-password' sslmode='disable'",
 		},
 	}
 	for _, tt := range tests {
