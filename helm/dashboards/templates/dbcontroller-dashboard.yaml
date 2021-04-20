@@ -1,0 +1,13 @@
+{{- if .Values.dashboard.enabled -}}
+apiVersion: integreatly.org/v1alpha1
+kind: GrafanaDashboard
+metadata:
+  name: {{ .Release.Namespace }}-dbcontroller-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: grafana
+    integreatly.org/operator: appinfra-grafana
+spec:
+  json: |-
+    {{- .Files.Get "files/database-controller.json" | nindent 4  }}
+{{- end -}}
