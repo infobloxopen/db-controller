@@ -64,6 +64,10 @@ spec:
               userName:
                 description: The username that the application will use for accessing the database.
                 type: string
+            required:
+            - appId
+            - dsnName
+            - userName
             type: object
           status:
             description: DatabaseClaimStatus defines the observed state of DatabaseClaim

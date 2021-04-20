@@ -57,7 +57,8 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 }
 
 func PostgresConnectionString(host, port, user, password, sslmode string) string {
-	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' sslmode='%s'", host, port, user, password, sslmode)
+	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' sslmode='%s'", host,
+		port, user, escapeValue(password), sslmode)
 }
 
 func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {
@@ -192,4 +193,14 @@ func (pc *PostgresClient) Close() error {
 	}
 
 	return fmt.Errorf("can't close nil DB")
+}
+
+func escapeValue(in string) string {
+	// if we surround values to single quotes we must escape a single quote sign and backslash
+	toEscape := []string{`\`, `'`}
+	for _, e := range toEscape {
+		in = strings.ReplaceAll(in, e, "\\"+e)
+	}
+
+	return in
 }

@@ -236,12 +236,13 @@ func TestConnectionString(t *testing.T) {
 				host:     "test-host",
 				port:     "test-port",
 				user:     "test-user",
-				password: "test-password",
+				password: `test-pas\sword'`,
 				sslmode:  "disable",
 			},
-			"host='test-host' port='test-port' user='test-user' password='test-password' sslmode='disable'",
+			`host='test-host' port='test-port' user='test-user' password='test-pas\\sword\'' sslmode='disable'`,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := PostgresConnectionString(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.sslmode); got != tt.want {
