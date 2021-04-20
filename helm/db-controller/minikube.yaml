@@ -41,3 +41,7 @@ passwordSecretRefs:
   #  secrets:
   #    password: VAULT
   #  type: Opaque
+
+dashboards:
+  dashboard:
+    enabled: false
