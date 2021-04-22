@@ -239,9 +239,10 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn string) error {
 	claimName := dbClaim.Name
 	truePtr := true
+	dsnName := dbClaim.Spec.DSNName
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
@@ -258,14 +259,10 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 			},
 		},
 		Data: map[string][]byte{
-			"Username":     []byte(dbClaim.Spec.Username),
-			"Host":         []byte(dbClaim.Status.ConnectionInfo.Host),
-			"Port":         []byte(dbClaim.Status.ConnectionInfo.Port),
-			"DatabaseName": []byte(dbClaim.Status.ConnectionInfo.DatabaseName),
-			"Password":     []byte(dbClaim.Status.ConnectionInfo.Password),
+			dsnName: []byte(dsn),
 		},
 	}
-	r.Log.Info("creating connection info secret", "secret", dbClaim.Name, "namespace", dbClaim.Namespace)
+	r.Log.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
 	if err := r.Client.Create(ctx, secret); err != nil {
 		return err
 	}
@@ -273,14 +270,9 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, exSecret *corev1.Secret) error {
-	exSecret.Data["Username"] = []byte(dbClaim.Status.ConnectionInfo.Username)
-	exSecret.Data["Host"] = []byte(dbClaim.Status.ConnectionInfo.Host)
-	exSecret.Data["Port"] = []byte(dbClaim.Status.ConnectionInfo.Port)
-	exSecret.Data["DatabaseName"] = []byte(dbClaim.Status.ConnectionInfo.DatabaseName)
-	exSecret.Data["Password"] = []byte(dbClaim.Status.ConnectionInfo.Password)
-
-	r.Log.Info("updating connection info secret", "secret", dbClaim.Name, "namespace", dbClaim.Namespace)
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn string, exSecret *corev1.Secret) error {
+	exSecret.Data[dsnName] = []byte(dsn)
+	r.Log.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
 	if err := r.Client.Update(ctx, exSecret); err != nil {
 		return err
 	}
@@ -290,6 +282,16 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dbClaim *per
 
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
 	gs := &corev1.Secret{}
+	dbType := dbClaim.Spec.Type
+	connInfo := dbClaim.Status.ConnectionInfo.DeepCopy()
+	var dsn string
+
+	switch dbType {
+	case dbclient.PostgresType:
+		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.SSLMode)
+	default:
+		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.SSLMode)
+	}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: dbClaim.Namespace,
@@ -299,11 +301,11 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		if !errors.IsNotFound(err) {
 			return err
 		}
-		if err := r.createSecret(ctx, dbClaim); err != nil {
+		if err := r.createSecret(ctx, dbClaim, dsn); err != nil {
 			return err
 		}
 	} else {
-		if err := r.updateSecret(ctx, dbClaim, gs); err != nil {
+		if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, gs); err != nil {
 			return err
 		}
 	}
@@ -425,7 +427,7 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 		return nil, fmt.Errorf("invalid sslMode")
 	}
 
-	updateHostPortStatus(dbClaim, host, port)
+	updateHostPortStatus(dbClaim, host, port, sslMode)
 
 	return dbclient.DBClientFactory(log, dbType, host, port, user, password, sslMode)
 }
@@ -453,10 +455,11 @@ func updateDBStatus(dbClaim *persistancev1.DatabaseClaim, dbName string) {
 	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-func updateHostPortStatus(dbClaim *persistancev1.DatabaseClaim, host, port string) {
+func updateHostPortStatus(dbClaim *persistancev1.DatabaseClaim, host, port, sslMode string) {
 	timeNow := metav1.Now()
 	dbClaim.Status.ConnectionInfo.Host = host
 	dbClaim.Status.ConnectionInfo.Port = port
+	dbClaim.Status.ConnectionInfo.SSLMode = sslMode
 	dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
 }
 

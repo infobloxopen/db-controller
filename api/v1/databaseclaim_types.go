@@ -28,12 +28,12 @@ type DatabaseClaimSpec struct {
 	// +kubebuilder:validation:MinLength=1
 
 	// Specifies an indentifier for the application using the database.
-	AppID string `json:"appId,omitempty"`
+	AppID string `json:"appId"`
 	// +kubebuilder:validation:MinLength=0
 
 	// Specifies the type of database to provision. Only postgres is supported.
 	// +optional
-	Type string `json:"type,omitempty"`
+	Type string `json:"type"`
 
 	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
 	DBNameOverride string `json:"dbNameOverride,omitempty"`
@@ -45,7 +45,7 @@ type DatabaseClaimSpec struct {
 	InstanceLabel string `json:"instanceLabel,omitempty"`
 
 	// The username that the application will use for accessing the database.
-	Username string `json:"userName,omitempty"`
+	Username string `json:"userName"`
 
 	// The optional host name where the database instance is located.
 	// If the value is omitted, then the host value from the matching InstanceLabel will be used.
@@ -59,6 +59,9 @@ type DatabaseClaimSpec struct {
 
 	// The name of the database instance.
 	DatabaseName string `json:"databaseName,omitempty"`
+
+	// DSN key name.
+	DSNName string `json:"dsnName"`
 }
 
 // DatabaseClaimStatus defines the observed state of DatabaseClaim
@@ -87,6 +90,7 @@ type DatabaseClaimConnectionInfo struct {
 	DatabaseName string `json:"databaseName,omitempty"`
 	Username     string `json:"userName,omitempty"`
 	Password     string `json:"password,omitempty"`
+	SSLMode      string `json:"sslMode,omitempty"`
 }
 
 // +kubebuilder:object:root=true
