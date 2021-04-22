@@ -247,6 +247,7 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
 			Name:      claimName,
+			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         "databaseclaims.persistance.atlas.infoblox.com/v1",
@@ -288,9 +289,11 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 
 	switch dbType {
 	case dbclient.PostgresType:
-		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.SSLMode)
+		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
 	default:
-		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.SSLMode)
+		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
 	}
 
 	err := r.Client.Get(ctx, client.ObjectKey{

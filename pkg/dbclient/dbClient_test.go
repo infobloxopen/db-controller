@@ -223,6 +223,7 @@ func TestConnectionString(t *testing.T) {
 		port     string
 		user     string
 		password string
+		dbName   string
 		sslmode  string
 	}
 	tests := []struct {
@@ -237,15 +238,16 @@ func TestConnectionString(t *testing.T) {
 				port:     "test-port",
 				user:     "test-user",
 				password: `test-pas\sword'`,
+				dbName:   "test_db",
 				sslmode:  "disable",
 			},
-			`host='test-host' port='test-port' user='test-user' password='test-pas\\sword\'' sslmode='disable'`,
+			`host='test-host' port='test-port' user='test-user' password='test-pas\\sword\'' dbname='test_db' sslmode='disable'`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := PostgresConnectionString(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.sslmode); got != tt.want {
+			if got := PostgresConnectionString(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.dbName, tt.args.sslmode); got != tt.want {
 				t.Errorf("PostgresConnectionString() = %v, want %v", got, tt.want)
 			}
 		})
