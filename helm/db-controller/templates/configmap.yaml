@@ -3,6 +3,10 @@ kind: ConfigMap
 metadata:
   name: {{ include "db-controller.name" . }}-config
   namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "db-controller.labels" . | indent 4 }}
+  annotations:
+    strategy.spinnaker.io/versioned: "false"
 data:
   {{- with .Values.controllerConfig }}
   {{- tpl (toYaml . | trim | nindent 2 ) $ }}
