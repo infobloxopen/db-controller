@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	postgresType = "postgres"
+	PostgresType = "postgres"
 )
 
 type DBClient interface {
@@ -36,7 +36,7 @@ type PostgresClient struct {
 
 func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmode string) (DBClient, error) {
 	switch dbType {
-	case postgresType:
+	case PostgresType:
 		return NewPostgresClient(log, dbType, host, port, user, password, sslmode)
 	default:
 		return NewPostgresClient(log, dbType, host, port, user, password, sslmode)
@@ -45,7 +45,7 @@ func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmod
 
 // creates postgres client
 func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslmode string) (*PostgresClient, error) {
-	db, err := sql.Open(postgresType, ConnectionString(host, port, user, password, sslmode))
+	db, err := sql.Open(PostgresType, PostgresConnectionString(host, port, user, password, sslmode))
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +56,9 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 	}, nil
 }
 
-func ConnectionString(host, port, user, password, sslmode string) string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=%s", host, port, user, password, sslmode)
+func PostgresConnectionString(host, port, user, password, sslmode string) string {
+	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' sslmode='%s'", host,
+		port, user, escapeValue(password), sslmode)
 }
 
 func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {
@@ -192,4 +193,14 @@ func (pc *PostgresClient) Close() error {
 	}
 
 	return fmt.Errorf("can't close nil DB")
+}
+
+func escapeValue(in string) string {
+	// if we surround values to single quotes we must escape a single quote sign and backslash
+	toEscape := []string{`\`, `'`}
+	for _, e := range toEscape {
+		in = strings.ReplaceAll(in, e, "\\"+e)
+	}
+
+	return in
 }

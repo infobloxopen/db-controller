@@ -9,3 +9,4 @@ spec:
   instanceLabel: sample-connection
   userName: sample_user
   databaseName: sample_app
+  dsnName: sample-postgres-dsn
