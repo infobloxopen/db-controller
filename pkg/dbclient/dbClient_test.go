@@ -235,13 +235,13 @@ func TestConnectionString(t *testing.T) {
 			"Test Connection string",
 			args{
 				host:     "test-host",
-				port:     "test-port",
-				user:     "test-user",
+				port:     "1234",
+				user:     "test_user",
 				password: `test-pas\sword'`,
 				dbName:   "test_db",
 				sslmode:  "disable",
 			},
-			`host='test-host' port='test-port' user='test-user' password='test-pas\\sword\'' dbname='test_db' sslmode='disable'`,
+			`host='test-host' port='1234' user='test_user' password='test-pas\\sword\'' dbname='test_db' sslmode='disable'`,
 		},
 	}
 
@@ -249,6 +249,42 @@ func TestConnectionString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := PostgresConnectionString(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.dbName, tt.args.sslmode); got != tt.want {
 				t.Errorf("PostgresConnectionString() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostgresURI(t *testing.T) {
+	type args struct {
+		host     string
+		port     string
+		user     string
+		password string
+		dbname   string
+		sslmode  string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "create db URI test",
+			args: args{
+				host:     "test-host",
+				port:     "1234",
+				user:     "test_user",
+				password: `pas\s)'d`,
+				dbname:   "test_db",
+				sslmode:  "disable",
+			},
+			want: `postgres://test_user:pas%5Cs%29%27d@test-host:1234/test_db?sslmode=disable`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := PostgresURI(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
+				t.Errorf("PostgresURI() = %v, want %v", got, tt.want)
 			}
 		})
 	}

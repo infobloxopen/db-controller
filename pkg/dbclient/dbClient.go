@@ -3,6 +3,7 @@ package dbclient
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -59,6 +60,18 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 func PostgresConnectionString(host, port, user, password, dbname, sslmode string) string {
 	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
 		port, user, escapeValue(password), dbname, sslmode)
+}
+
+func PostgresURI(host, port, user, password, dbname, sslmode string) string {
+	connURL := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(user, password),
+		Host:     fmt.Sprintf("%s:%s", host, port),
+		Path:     fmt.Sprintf("/%s", dbname),
+		RawQuery: fmt.Sprintf("sslmode=%s", sslmode),
+	}
+
+	return connURL.String()
 }
 
 func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {
