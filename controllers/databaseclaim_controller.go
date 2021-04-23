@@ -239,7 +239,7 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn string) error {
+func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
 	claimName := dbClaim.Name
 	truePtr := true
 	dsnName := dbClaim.Spec.DSNName
@@ -260,7 +260,8 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 			},
 		},
 		Data: map[string][]byte{
-			dsnName: []byte(dsn),
+			dsnName:          []byte(dsn),
+			"uri_" + dsnName: []byte(dbURI),
 		},
 	}
 	r.Log.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
@@ -271,8 +272,9 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn string, exSecret *corev1.Secret) error {
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, exSecret *corev1.Secret) error {
 	exSecret.Data[dsnName] = []byte(dsn)
+	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
 	r.Log.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
 	if err := r.Client.Update(ctx, exSecret); err != nil {
 		return err
@@ -285,14 +287,18 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	gs := &corev1.Secret{}
 	dbType := dbClaim.Spec.Type
 	connInfo := dbClaim.Status.ConnectionInfo.DeepCopy()
-	var dsn string
+	var dsn, dbURI string
 
 	switch dbType {
 	case dbclient.PostgresType:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
+		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
 	default:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
+		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 	}
 
@@ -300,15 +306,16 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Namespace: dbClaim.Namespace,
 		Name:      dbClaim.Name,
 	}, gs)
+
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
-		if err := r.createSecret(ctx, dbClaim, dsn); err != nil {
+		if err := r.createSecret(ctx, dbClaim, dsn, dbURI); err != nil {
 			return err
 		}
 	} else {
-		if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, gs); err != nil {
+		if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, gs); err != nil {
 			return err
 		}
 	}
