@@ -34,10 +34,14 @@ podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "{{ .Values.metrics.port }}"
 
-podSecurityContext: {}
+podSecurityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  readOnlyRootFilesystem: true
   # capabilities:
   #   drop:
   #   - ALL
