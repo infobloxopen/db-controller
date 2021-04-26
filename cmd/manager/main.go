@@ -60,7 +60,7 @@ func main() {
 		"Database connection string to with root credentials.")
 	flag.Parse()
 	logger := zap.New(zap.UseDevMode(true))
-	config := config.NewConfig(logger, configFile)
+	ctlConfig := config.NewConfig(logger, configFile)
 	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -76,10 +76,11 @@ func main() {
 	}
 
 	if err = (&controllers.DatabaseClaimReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
-		Scheme: mgr.GetScheme(),
-		Config: config,
+		Client:     mgr.GetClient(),
+		Log:        ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
+		Scheme:     mgr.GetScheme(),
+		Config:     ctlConfig,
+		MasterAuth: config.NewMasterAuth(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)

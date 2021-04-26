@@ -87,10 +87,14 @@ postgresql:
 
 controllerConfig:
   config.yaml: |
-    passwordConfig:
-      passwordComplexity: enabled
-      minPasswordLength: "15"
-      passwordRotationPeriod: "60"
+    # master credentials source can be 'aws' or 'secret'
+    #authSource: "aws"
+    # if aws authorization is used iam role must be provided
+    #iamRole: "rds-role"
+    #passwordConfig:
+    #  passwordComplexity: enabled
+    #  minPasswordLength: "15"
+    #  passwordRotationPeriod: "60"
     #sample-connection:
     #  username: root
     #  host: some.service

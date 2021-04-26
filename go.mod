@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310
+	github.com/aws/aws-sdk-go v1.38.25
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-logr/logr v0.1.0
 	github.com/go-sql-driver/mysql v1.6.0 // indirect

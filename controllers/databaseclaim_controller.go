@@ -35,7 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 )
 
 const (
@@ -52,9 +54,10 @@ const (
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-	Config *viper.Viper
+	Log        logr.Logger
+	Scheme     *runtime.Scheme
+	Config     *viper.Viper
+	MasterAuth *config.MasterAuth
 }
 
 func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -85,6 +88,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	log.Info("creating database client")
 	dbClient, err := r.getClient(ctx, log, fragmentKey, dbClaim)
 	if err != nil {
+		log.Error(err, "creating database client error")
 		return r.manageError(ctx, dbClaim, err)
 	}
 
@@ -237,6 +241,14 @@ func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
 
 func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
+}
+
+func (r *DatabaseClaimReconciler) getAuthSource() string {
+	return r.Config.GetString("authSource")
+}
+
+func (r *DatabaseClaimReconciler) getIAMRole() string {
+	return r.Config.GetString("iamRole")
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
@@ -423,9 +435,30 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 		return nil, err
 	}
 
-	password, err := r.readMasterPassword(ctx, fragmentKey, serviceNS)
-	if err != nil {
-		return nil, err
+	var password string
+
+	switch authType := r.getAuthSource(); authType {
+	case config.SecretAuthSourceType:
+		password, err = r.readMasterPassword(ctx, fragmentKey, serviceNS)
+		if err != nil {
+			return nil, err
+		}
+	case config.AWSAuthSourceType:
+		if r.MasterAuth.IsExpired() {
+			awsCreds, err := rdsauth.STSCreds(r.getIAMRole())
+			if err != nil {
+				return nil, err
+			}
+			password, err = rdsauth.CreateRDSToken(fmt.Sprintf("%s:%s", host, port), user, awsCreds)
+			if err != nil {
+				return nil, err
+			}
+			r.MasterAuth.Set(password)
+		} else {
+			password = r.MasterAuth.Get()
+		}
+	default:
+		return nil, fmt.Errorf("unknown auth source type")
 	}
 
 	if password == "" {
