@@ -46,7 +46,7 @@ func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmod
 
 // creates postgres client
 func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslmode string) (*PostgresClient, error) {
-	db, err := sql.Open(PostgresType, PostgresConnectionString(host, port, user, password, "", sslmode))
+	db, err := sql.Open(PostgresType, PostgresConnectionString(host, port, user, password, "postgres", sslmode))
 	if err != nil {
 		return nil, err
 	}
