@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -80,7 +81,7 @@ func main() {
 		Log:        ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
 		Scheme:     mgr.GetScheme(),
 		Config:     ctlConfig,
-		MasterAuth: config.NewMasterAuth(),
+		MasterAuth: rdsauth.NewMasterAuth(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)

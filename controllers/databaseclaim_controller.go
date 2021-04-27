@@ -57,7 +57,7 @@ type DatabaseClaimReconciler struct {
 	Log        logr.Logger
 	Scheme     *runtime.Scheme
 	Config     *viper.Viper
-	MasterAuth *config.MasterAuth
+	MasterAuth *rdsauth.MasterAuth
 }
 
 func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -439,24 +439,22 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 
 	switch authType := r.getAuthSource(); authType {
 	case config.SecretAuthSourceType:
+		r.Log.Info("using credentials from secret")
 		password, err = r.readMasterPassword(ctx, fragmentKey, serviceNS)
 		if err != nil {
 			return nil, err
 		}
 	case config.AWSAuthSourceType:
+		r.Log.Info("using aws IAM authorization")
 		if r.MasterAuth.IsExpired() {
-			awsCreds, err := rdsauth.STSCreds(r.getIAMRole())
+			token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", host, port), user)
 			if err != nil {
 				return nil, err
 			}
-			password, err = rdsauth.CreateRDSToken(fmt.Sprintf("%s:%s", host, port), user, awsCreds)
-			if err != nil {
-				return nil, err
-			}
-			r.MasterAuth.Set(password)
-		} else {
-			password = r.MasterAuth.Get()
+			r.MasterAuth.Set(token)
 		}
+		password = r.MasterAuth.Get()
+
 	default:
 		return nil, fmt.Errorf("unknown auth source type")
 	}

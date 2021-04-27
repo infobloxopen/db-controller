@@ -17,8 +17,6 @@ controllerConfig:
   config.yaml: |
     # master credentials source can be 'aws' or 'secret'
     authSource: "secret"
-    # if aws authorization is used iam role must be provided
-    #iamRole: "arn:aws:iam::12345678910:role/testrole"
     passwordConfig:
       passwordComplexity: enabled
       minPasswordLength: "15"
