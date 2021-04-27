@@ -1,5 +1,5 @@
-space:
-  enabled: false
+secrets:
+  enabled: true
 
 image:
   repository: infoblox/db-controller
@@ -25,24 +25,18 @@ controllerConfig:
       username: postgres
       host: db-controller-postgresql
       port: 5432
-      sslMode: require
-      #passwordSecretRef: sample-master-secret
+      sslMode: disable
+      passwordSecretRef: sample-master-secret
     another.connection:
       username: root
       host: some.other.service
       port: 5412
-      sslMode: disable
+      sslMode: require
       passwordSecretRef: another-connection-secret
 
 passwordSecretRefs:
   sample-master-secret:
     password: "{{ .Values.postgresql.postgresqlPassword }}"
-  # create space example
-  #sample-master-space:
-  #  path: /path/to/secret
-  #  secrets:
-  #    password: VAULT
-  #  type: Opaque
 
 dashboards:
   dashboard:
