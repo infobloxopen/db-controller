@@ -249,7 +249,7 @@ var testConfig = []byte(`
       Username: postgres
       Host: db-controller-postgresql
       Port: 5432
-      useSSL: false
+      sslMode: false
       PasswordSecretRef: sample-master-secret
 `)
 
@@ -363,12 +363,12 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 
 var sslModeDisabled = []byte(`
     sample-connection:
-      useSSL: false
+      sslMode: disable
 `)
 
 var sslModeEnabled = []byte(`
     sample-connection:
-      useSSL: true
+      sslMode: require
 `)
 
 func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
@@ -401,7 +401,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 				Config: NewConfig(sslModeEnabled),
 			},
 			args{fragmentKey: "sample-connection"},
-			"enable",
+			"require",
 		},
 	}
 	for _, tt := range tests {

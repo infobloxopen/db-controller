@@ -204,16 +204,7 @@ func (r *DatabaseClaimReconciler) getMasterPort(fragmentKey string, dbClaim *per
 }
 
 func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
-	var sslmode string
-
-	useSSL := r.Config.GetBool(fmt.Sprintf("%s::usessl", fragmentKey))
-	if useSSL {
-		sslmode = "enable"
-	} else {
-		sslmode = "disable"
-	}
-
-	return sslmode
+	return r.Config.GetString(fmt.Sprintf("%s::sslMode", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {

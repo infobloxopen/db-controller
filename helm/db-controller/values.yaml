@@ -99,11 +99,11 @@ controllerConfig:
     #  username: root
     #  host: some.service
     #  port: 5432
-    #  useSSL: false
+    #  sslMode: require
     #  passwordSecretRef: sample-master-secret
     #another.connection:
     #  username: root
     #  host: some.other.service
     #  port: 5412
-    #  useSSL: false
+    #  sslMode: disable
     #  passwordSecretRef: another-connection-secret

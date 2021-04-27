@@ -25,13 +25,13 @@ controllerConfig:
       username: postgres
       host: db-controller-postgresql
       port: 5432
-      useSSL: false
-      passwordSecretRef: sample-master-secret
+      sslMode: require
+      #passwordSecretRef: sample-master-secret
     another.connection:
       username: root
       host: some.other.service
       port: 5412
-      useSSL: false
+      sslMode: disable
       passwordSecretRef: another-connection-secret
 
 passwordSecretRefs:
