@@ -2,12 +2,17 @@ package config
 
 import (
 	"fmt"
-
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 )
 
+const (
+	AWSAuthSourceType    = "aws"
+	SecretAuthSourceType = "secret"
+)
+
+// NewConfig creates a new db-controller config
 func NewConfig(logger logr.Logger, configFile string) *viper.Viper {
 	c := viper.NewWithOptions(viper.KeyDelimiter("::"))
 	c.SetDefault("config", "config.yaml")

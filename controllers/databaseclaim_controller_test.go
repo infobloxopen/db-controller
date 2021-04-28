@@ -244,12 +244,12 @@ func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
 	}
 }
 
-var config = []byte(`
+var testConfig = []byte(`
     sample-connection:
       Username: postgres
       Host: db-controller-postgresql
       Port: 5432
-      useSSL: false
+      sslMode: false
       PasswordSecretRef: sample-master-secret
 `)
 
@@ -273,7 +273,7 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 		{
 			"Get master connection params Host Port Username",
 			mockReconciler{
-				Config: NewConfig(config),
+				Config: NewConfig(testConfig),
 			},
 			[]args{
 				{
@@ -329,11 +329,11 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
 			}
-			t.Log("getMasterHost() Host from config")
+			t.Log("getMasterHost() Host from testConfig")
 			if got := r.getMasterHost(tt.args[0].fragmentKey, tt.args[0].dbClaim); got != tt.want[0] {
 				t.Errorf("getMasterHost() = %v, want %v", got, tt.want[0])
 			}
-			t.Log("getMasterHost() Host from config PASS")
+			t.Log("getMasterHost() Host from testConfig PASS")
 
 			t.Log("getMasterHost() Host overridden by DB claim")
 			if got := r.getMasterHost(tt.args[1].fragmentKey, tt.args[1].dbClaim); got != tt.want[1] {
@@ -341,11 +341,11 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 			}
 			t.Log("getMasterPort() Host overridden by DB claim PASS")
 
-			t.Log("getMasterHost() Port from config")
+			t.Log("getMasterHost() Port from testConfig")
 			if got := r.getMasterPort(tt.args[2].fragmentKey, tt.args[2].dbClaim); got != tt.want[2] {
 				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[2])
 			}
-			t.Log("getMasterPort() Port from config PASS")
+			t.Log("getMasterPort() Port from testConfig PASS")
 
 			t.Log("getMasterHost() Port overridden by DB claim")
 			if got := r.getMasterPort(tt.args[3].fragmentKey, tt.args[3].dbClaim); got != tt.want[3] {
@@ -363,12 +363,12 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 
 var sslModeDisabled = []byte(`
     sample-connection:
-      useSSL: false
+      sslMode: disable
 `)
 
 var sslModeEnabled = []byte(`
     sample-connection:
-      useSSL: true
+      sslMode: require
 `)
 
 func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
@@ -401,7 +401,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 				Config: NewConfig(sslModeEnabled),
 			},
 			args{fragmentKey: "sample-connection"},
-			"enable",
+			"require",
 		},
 	}
 	for _, tt := range tests {

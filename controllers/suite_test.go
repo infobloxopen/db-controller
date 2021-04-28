@@ -48,6 +48,7 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 
 var controllerConfig = []byte(`
+    authSource: "secret"
     passwordConfig:
       passwordComplexity: enabled
       minPasswordLength: "15"
