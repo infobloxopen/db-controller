@@ -5,7 +5,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   appId: sample-app
-  secretName: sample-secret
+  secretName: databaseclaim-sample
+  type: postgres
   instanceLabel: sample-connection
   userName: sample_user
   databaseName: sample_app

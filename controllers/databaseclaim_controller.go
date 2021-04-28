@@ -104,41 +104,36 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		updateDBStatus(dbClaim, dbName)
 	}
 
-	username := dbClaim.Spec.Username
-	if r.isUserChanged(dbClaim) {
-		oldUsername := dbClaim.Status.ConnectionInfo.Username
-		if err := dbClient.UpdateUser(oldUsername, username); err != nil {
-			return r.manageError(ctx, dbClaim, err)
-		}
-		timeNow := metav1.Now()
-		dbClaim.Status.UserUpdatedAt = &timeNow
-		dbClaim.Status.ConnectionInfo.Username = username
-		dbClaim.Status.ConnectionInfoUpdatedAt = &timeNow
-	} else {
+	baseUsername := dbClaim.Spec.Username
+	rotationTime := r.getPasswordRotationTime()
+
+	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime {
+		log.Info("rotating users")
+		curTime := time.Now().Truncate(time.Minute)
+		timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
+		expiredTime := curTime.Add(-rotationTime)
+		timeStrExpired := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
+
+		usernamePrefix := fmt.Sprintf("dbctl_%s_", baseUsername)
+		newUsername := usernamePrefix + timeStr
+		expiredUsername := usernamePrefix + timeStrExpired
+
 		userPassword, err := r.generatePassword()
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
 
-		created, err := dbClient.CreateUser(dbName, username, userPassword)
+		created, err := dbClient.CreateUser(dbName, newUsername, userPassword)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		} else if created || dbClaim.Status.ConnectionInfo.Username == "" {
-			updateUserStatus(dbClaim, username, userPassword)
+			updateUserStatus(dbClaim, newUsername, userPassword)
 		}
-	}
 
-	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > r.getPasswordRotationTime() {
-		userPassword, err := r.generatePassword()
-		if err != nil {
+		if err := dbClient.RemoveExpiredUsers(dbName, newUsername, usernamePrefix, expiredUsername); err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
 
-		if err := dbClient.UpdatePassword(username, userPassword); err != nil {
-			return r.manageError(ctx, dbClaim, err)
-		}
-
-		updateUserStatus(dbClaim, username, userPassword)
 	}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
@@ -243,19 +238,19 @@ func (r *DatabaseClaimReconciler) getIAMRole() string {
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
-	claimName := dbClaim.Name
+	secretName := dbClaim.Spec.SecretName
 	truePtr := true
 	dsnName := dbClaim.Spec.DSNName
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
-			Name:      claimName,
+			Name:      secretName,
 			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         "databaseclaims.persistance.atlas.infoblox.com/v1",
 					Kind:               "CustomResourceDefinition",
-					Name:               claimName,
+					Name:               dbClaim.Name,
 					UID:                dbClaim.UID,
 					Controller:         &truePtr,
 					BlockOwnerDeletion: &truePtr,
@@ -289,6 +284,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
 	gs := &corev1.Secret{}
 	dbType := dbClaim.Spec.Type
+	secretName := dbClaim.Spec.SecretName
 	connInfo := dbClaim.Status.ConnectionInfo.DeepCopy()
 	var dsn, dbURI string
 
@@ -299,15 +295,12 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 	default:
-		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
-			connInfo.DatabaseName, connInfo.SSLMode)
-		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
-			connInfo.DatabaseName, connInfo.SSLMode)
+		return fmt.Errorf("unknown DB type")
 	}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: dbClaim.Namespace,
-		Name:      dbClaim.Name,
+		Name:      secretName,
 	}, gs)
 
 	if err != nil {
@@ -384,7 +377,7 @@ func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *pers
 		}
 		return ctrl.Result{}, err
 	}
-
+	r.Log.Error(inErr, "error")
 	return ctrl.Result{}, inErr
 }
 
@@ -400,7 +393,7 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: time.Minute}, nil
+	return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 }
 
 func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (dbclient.DBClient, error) {

@@ -20,8 +20,8 @@ const (
 type DBClient interface {
 	CreateDataBase(dbName string) (bool, error)
 	CreateUser(dbName string, username, userPassword string) (bool, error)
-	UpdateUser(oldUsername string, newUsername string) error
-	UpdatePassword(username string, userPassword string) error
+	RemoveExpiredUsers(dbName string, username, usernamePrefix, expiredUser string) error
+
 	DBCloser
 }
 
@@ -74,6 +74,33 @@ func PostgresURI(host, port, user, password, dbname, sslmode string) string {
 	return connURL.String()
 }
 
+func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
+	var exists bool
+	created := false
+	db := pc.DB
+	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbName).Scan(&exists)
+
+	if err != nil {
+		pc.log.Error(err, "could not query for database name")
+		metrics.DBProvisioningErrors.WithLabelValues("read error")
+		return created, err
+	}
+	if !exists {
+		pc.log.Info("creating DB:", "database name", dbName)
+		// create the database
+		if _, err := db.Exec(fmt.Sprintf("create database %q", dbName)); err != nil {
+			pc.log.Error(err, "could not create database")
+			metrics.DBProvisioningErrors.WithLabelValues("create error")
+			return created, err
+		}
+		created = true
+		pc.log.Info("database has been created", "DB", dbName)
+		metrics.DBCreated.Inc()
+	}
+
+	return created, nil
+}
+
 func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {
 	start := time.Now()
 
@@ -115,89 +142,50 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 	return created, nil
 }
 
-func (pc *PostgresClient) UpdateUser(oldUsername string, newUsername string) error {
-	start := time.Now()
-	var exists bool
+func (pc *PostgresClient) RemoveExpiredUsers(dbName string, username, usernamePrefix, expiredUser string) error {
+	log := pc.log
 	db := pc.DB
 
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", oldUsername).Scan(&exists)
-
+	// clean up expired users
+	log.Info("cleaning up expired users")
+	rows, err := db.Query("SELECT usename FROM pg_catalog.pg_user WHERE usename LIKE '"+usernamePrefix+"%' AND usename < $1 ORDER BY usename DESC", expiredUser)
 	if err != nil {
-		pc.log.Error(err, "could not query for user name")
-		metrics.UsersUpdatedErrors.WithLabelValues("read error").Inc()
+		log.Error(err, "could not select old usernames")
+
 		return err
 	}
-
-	if exists {
-		pc.log.Info(fmt.Sprintf("renaming user %s to %s", oldUsername, newUsername))
-
-		_, err = db.Exec("ALTER USER" + fmt.Sprintf("%q", oldUsername) + " RENAME TO  " + fmt.Sprintf("%q", newUsername))
+	defer rows.Close()
+	for rows.Next() {
+		var thisUsername string
+		err = rows.Scan(&thisUsername)
+		log.Info("dropping user " + thisUsername)
 		if err != nil {
-			pc.log.Error(err, "could not rename user "+oldUsername)
-			metrics.UsersUpdatedErrors.WithLabelValues("alter error").Inc()
+			log.Error(err, "could not scan usernames")
 			return err
 		}
 
-		pc.log.Info("user has been updated", "user", newUsername)
-		metrics.UsersUpdated.Inc()
-		duration := time.Since(start)
-		metrics.UsersUpdateTime.Observe(duration.Seconds())
-	}
+		if _, err := db.Exec("REASSIGN OWNED BY " + thisUsername + " TO " + username); err != nil {
+			log.Error(err, "could not reassign owned by "+thisUsername)
 
-	return nil
-}
-
-func (pc *PostgresClient) UpdatePassword(username string, userPassword string) error {
-	start := time.Now()
-	db := pc.DB
-	if userPassword == "" {
-		err := fmt.Errorf("an empty password")
-		pc.log.Error(err, "error occurred")
-		metrics.PasswordRotatedErrors.WithLabelValues("empty password").Inc()
-		return err
-	}
-
-	pc.log.Info("update user password", "user:", username)
-	_, err := db.Exec("ALTER ROLE" + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "'")
-	if err != nil {
-		if !strings.Contains(err.Error(), "already exists") {
-			pc.log.Error(err, "could not alter user "+username)
-			metrics.PasswordRotatedErrors.WithLabelValues("alter error").Inc()
 			return err
 		}
+
+		if _, err := db.Exec("REVOKE ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " FROM " + thisUsername); err != nil {
+			log.Error(err, "could not revoke privileges "+thisUsername)
+
+			return err
+		}
+		log.Info("DROP USER " + thisUsername)
+		if _, err := db.Exec("DROP USER " + thisUsername); err != nil {
+			log.Error(err, "could not drop user: "+thisUsername)
+
+			return err
+		}
+
+		log.Info("dropped user: " + thisUsername)
 	}
-	metrics.PasswordRotated.Inc()
-	duration := time.Since(start)
-	metrics.PasswordRotateTime.Observe(duration.Seconds())
 
 	return nil
-}
-
-func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
-	var exists bool
-	created := false
-	db := pc.DB
-	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbName).Scan(&exists)
-
-	if err != nil {
-		pc.log.Error(err, "could not query for database name")
-		metrics.DBProvisioningErrors.WithLabelValues("read error")
-		return created, err
-	}
-	if !exists {
-		pc.log.Info("creating DB:", "database name", dbName)
-		// create the database
-		if _, err := db.Exec("create database " + fmt.Sprintf("%q", dbName)); err != nil {
-			pc.log.Error(err, "could not create database")
-			metrics.DBProvisioningErrors.WithLabelValues("create error")
-			return created, err
-		}
-		created = true
-		pc.log.Info("database has been created", "DB", dbName)
-		metrics.DBCreated.Inc()
-	}
-
-	return created, nil
 }
 
 func (pc *PostgresClient) Close() error {
