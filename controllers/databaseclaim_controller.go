@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
@@ -170,8 +171,9 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 }
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	pred := predicate.GenerationChangedPredicate{}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&persistancev1.DatabaseClaim{}).
+		For(&persistancev1.DatabaseClaim{}).WithEventFilter(pred).
 		Complete(r)
 }
 
