@@ -38,6 +38,7 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
+	"github.com/infobloxopen/db-controller/pkg/metrics"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 )
 
@@ -109,6 +110,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime {
 		log.Info("rotating users")
+
 		curTime := time.Now().Truncate(time.Minute)
 		timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
 		expiredTime := curTime.Add(-rotationTime)
@@ -120,20 +122,25 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 		userPassword, err := r.generatePassword()
 		if err != nil {
+			metrics.PasswordRotatedErrors.WithLabelValues("generate error").Inc()
 			return r.manageError(ctx, dbClaim, err)
 		}
 
-		created, err := dbClient.CreateUser(dbName, newUsername, userPassword)
+		created, err = dbClient.CreateUser(dbName, newUsername, userPassword)
 		if err != nil {
+			metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 			return r.manageError(ctx, dbClaim, err)
 		} else if created || dbClaim.Status.ConnectionInfo.Username == "" {
 			updateUserStatus(dbClaim, newUsername, userPassword)
 		}
 
 		if err := dbClient.RemoveExpiredUsers(dbName, newUsername, usernamePrefix, expiredUsername); err != nil {
+			metrics.PasswordRotatedErrors.WithLabelValues("remove error").Inc()
 			return r.manageError(ctx, dbClaim, err)
 		}
-
+		metrics.PasswordRotated.Inc()
+		duration := time.Since(curTime)
+		metrics.PasswordRotateTime.Observe(duration.Seconds())
 	}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {

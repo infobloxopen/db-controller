@@ -19,26 +19,24 @@ var (
 		}, []string{"reason"},
 	)
 	UsersCreateTime = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "user_create_time_seconds",
-		Help:    "Histogram of user creation time in seconds",
-		Buckets: []float64{0.25, 0.5, 1, 2.5, 5, 10},
+		Name: "user_create_time_seconds",
+		Help: "Histogram of user creation time in seconds",
 	})
-	UsersUpdated = prometheus.NewCounter(
+	UsersRemoved = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "users_updated_total",
-			Help: "Number of updated users ",
+			Name: "users_removed_total",
+			Help: "Number of removed users ",
 		},
 	)
-	UsersUpdatedErrors = prometheus.NewCounterVec(
+	UsersRemovedErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "users_update_errors_total",
-			Help: "Number of users updated with errors",
+			Name: "users_remove_errors_total",
+			Help: "Number of users removed with errors",
 		}, []string{"reason"},
 	)
-	UsersUpdateTime = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "user_update_time_seconds",
-		Help:    "Histogram of user updating time in seconds",
-		Buckets: []float64{0.25, 0.5, 1, 2.5, 5, 10},
+	UsersRemoveTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "user_remove_time_seconds",
+		Help: "Histogram of user updating time in seconds",
 	})
 	DBProvisioningErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -65,16 +63,15 @@ var (
 		}, []string{"reason"},
 	)
 	PasswordRotateTime = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "user_rotation_time_seconds",
-		Help:    "Histogram of password rotation time in seconds",
-		Buckets: []float64{0.25, 0.5, 1, 2.5, 5, 10},
+		Name: "password_rotation_time_seconds",
+		Help: "Histogram of password rotation time in seconds",
 	})
 )
 
 func init() {
 	// Register custom metrics with the global prometheus registry
 	metrics.Registry.MustRegister(UsersCreated, UsersCreatedErrors, UsersCreateTime)
-	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersUpdateTime)
+	metrics.Registry.MustRegister(UsersRemoved, UsersRemovedErrors, UsersRemoveTime)
 	metrics.Registry.MustRegister(DBCreated, DBProvisioningErrors)
 	metrics.Registry.MustRegister(PasswordRotated, PasswordRotatedErrors, PasswordRotateTime)
 }

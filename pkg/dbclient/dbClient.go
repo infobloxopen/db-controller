@@ -145,45 +145,50 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 func (pc *PostgresClient) RemoveExpiredUsers(dbName string, username, usernamePrefix, expiredUser string) error {
 	log := pc.log
 	db := pc.DB
-
+	start := time.Now()
 	// clean up expired users
 	log.Info("cleaning up expired users")
 	rows, err := db.Query("SELECT usename FROM pg_catalog.pg_user WHERE usename LIKE '"+usernamePrefix+"%' AND usename < $1 ORDER BY usename DESC", expiredUser)
 	if err != nil {
 		log.Error(err, "could not select old usernames")
-
+		metrics.UsersRemovedErrors.WithLabelValues("read error").Inc()
 		return err
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		var thisUsername string
 		err = rows.Scan(&thisUsername)
 		log.Info("dropping user " + thisUsername)
 		if err != nil {
 			log.Error(err, "could not scan usernames")
+			metrics.UsersRemovedErrors.WithLabelValues("read error").Inc()
 			return err
 		}
 
 		if _, err := db.Exec("REASSIGN OWNED BY " + thisUsername + " TO " + username); err != nil {
 			log.Error(err, "could not reassign owned by "+thisUsername)
-
+			metrics.UsersRemovedErrors.WithLabelValues("reassign error").Inc()
 			return err
 		}
 
 		if _, err := db.Exec("REVOKE ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " FROM " + thisUsername); err != nil {
 			log.Error(err, "could not revoke privileges "+thisUsername)
-
+			metrics.UsersRemovedErrors.WithLabelValues("revoke error").Inc()
 			return err
 		}
 		log.Info("DROP USER " + thisUsername)
 		if _, err := db.Exec("DROP USER " + thisUsername); err != nil {
 			log.Error(err, "could not drop user: "+thisUsername)
-
+			metrics.UsersRemovedErrors.WithLabelValues("drop error").Inc()
 			return err
 		}
 
 		log.Info("dropped user: " + thisUsername)
 	}
+	metrics.UsersRemoved.Inc()
+	duration := time.Since(start)
+	metrics.UsersRemoveTime.Observe(duration.Seconds())
 
 	return nil
 }
