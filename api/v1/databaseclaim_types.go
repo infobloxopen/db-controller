@@ -32,7 +32,6 @@ type DatabaseClaimSpec struct {
 	// +kubebuilder:validation:MinLength=0
 
 	// Specifies the type of database to provision. Only postgres is supported.
-	// +optional
 	Type string `json:"type"`
 
 	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
