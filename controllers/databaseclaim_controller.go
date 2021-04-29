@@ -212,10 +212,10 @@ func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 	prt := r.Config.GetInt("passwordconfig::passwordRotationPeriod")
-	/*if prt < minRotationTime || prt > maxRotationTime {
+	if prt < minRotationTime || prt > maxRotationTime {
 		r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
 		return time.Duration(defaultRotationTime) * time.Minute
-	}*/
+	}
 
 	return time.Duration(prt) * time.Minute
 }
