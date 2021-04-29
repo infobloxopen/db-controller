@@ -91,12 +91,10 @@ func NewConfig(in []byte) *viper.Viper {
 }
 
 type mockClient struct {
-	client.Reader
-	client.Writer
-	client.StatusClient
+	client.Client
 }
 
-func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	_ = ctx
 	if key.Namespace == "testNamespace" && key.Name == "sample-master-secret" {
 		sec, ok := obj.(*corev1.Secret)

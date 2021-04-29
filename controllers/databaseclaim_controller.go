@@ -60,8 +60,7 @@ type DatabaseClaimReconciler struct {
 	MasterAuth *rdsauth.MasterAuth
 }
 
-func (r *DatabaseClaimReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("databaseclaim", req.NamespacedName)
 
 	var dbClaim persistancev1.DatabaseClaim
@@ -204,10 +203,10 @@ func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 	prt := r.Config.GetInt("passwordconfig::passwordRotationPeriod")
-	if prt < minRotationTime || prt > maxRotationTime {
+	/*if prt < minRotationTime || prt > maxRotationTime {
 		r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
 		return time.Duration(defaultRotationTime) * time.Minute
-	}
+	}*/
 
 	return time.Duration(prt) * time.Minute
 }
