@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	intg "github.com/infobloxopen/atlas-app-toolkit/integration"
@@ -96,8 +97,7 @@ func TestPostgresClientOperations(t *testing.T) {
 		dbName       string
 		username     string
 		userPassword string
-		newUsername  string
-		newPassword  string
+		rotationTime time.Duration
 	}
 	tests := []struct {
 		name    string
@@ -117,8 +117,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				"test_db",
 				"test_user",
 				"test_password",
-				"new_test_user",
-				"new_test_password",
+				time.Duration(60),
 			},
 			true,
 			false,
@@ -177,42 +176,51 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s CreateUser() is passed", succeed)
 
-			t.Logf("UpdateUser()")
-			err = pc.UpdateUser(tt.args.username, tt.args.newUsername)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("\t%s UpdateUser() error = %v, wantErr %v", failed, err, tt.wantErr)
-				return
+			t.Logf("RemoveExpiredUsers() test")
+			t.Logf("\n add test users")
+			curTime := time.Now().Truncate(time.Minute)
+			for i := 1; i < 10; i++ {
+				duration := time.Duration(60 * i)
+				expiredTime := curTime.Add(-duration * time.Second)
+				timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
+				usernamePrefix := fmt.Sprintf("dbctl_%s_", tt.args.username)
+				newUsername := usernamePrefix + timeStr
+				_, err := pc.CreateUser(tt.args.dbName, newUsername, tt.args.userPassword)
+				if err != nil {
+					t.Errorf("\tcreating user error %v", newUsername)
+					return
+				}
 			}
-
-			err = pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", tt.args.newUsername).Scan(&exists)
+			t.Logf("\n removing stale test users")
+			expiredTime := curTime.Add(-time.Duration(60))
+			timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
+			timeExpiredStr := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
+			usernamePrefix := fmt.Sprintf("dbctl_%s_", tt.args.username)
+			newUsername := usernamePrefix + timeStr
+			expiredUsername := usernamePrefix + timeExpiredStr
+			_, err = pc.CreateUser(tt.args.dbName, newUsername, tt.args.userPassword)
 			if err != nil {
-				t.Errorf("\t%s UpdateUser error = %v", failed, err)
-			}
-
-			if exists {
-				t.Logf("\t%s user %v has been updated", succeed, tt.args.newUsername)
-			} else {
-				t.Errorf("\t%s can't find new user %v", failed, tt.args.newUsername)
-			}
-			t.Logf("\t%s UpdateUser() is passed", succeed)
-
-			t.Logf("UpdatePassword() can't be updated, want error")
-			wantErr := true
-			err = pc.UpdatePassword(tt.args.username, tt.args.newPassword)
-			if (err != nil) != wantErr {
-				t.Errorf("\t%s UpdatePassword() error = %v, wantErr %v", failed, err, wantErr)
+				t.Errorf("\tcreating user error %v", newUsername)
 				return
 			}
-			t.Logf("\t%s UpdatePassword() can't be updated, want error, is passed", succeed)
 
-			t.Logf("UpdatePassword()")
-
-			err = pc.UpdatePassword(tt.args.newUsername, tt.args.newPassword)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("\t%s UpdatePassword() error = %v, wantErr %v", failed, err, tt.wantErr)
+			if err := pc.RemoveExpiredUsers(tt.args.dbName, newUsername, usernamePrefix, expiredUsername); err != nil {
+				t.Errorf("\tremoving expired users error = %v", err)
 				return
 			}
-			t.Logf("\t%s UpdatePassword() is passed", succeed)
+
+			var count int
+			err = pc.DB.QueryRow("SELECT count(pg_user.usename) FROM pg_catalog.pg_user where pg_user.usename LIKE '" + usernamePrefix + "%'").Scan(&count)
+			if err != nil {
+				t.Errorf("\tcan't get user count %v", err)
+				return
+			}
+			countWant := 2
+			if count != countWant {
+				t.Errorf("\tuser count mismatch want %v got %v", countWant, count)
+				return
+			}
+			t.Logf("\t%s RemoveExpiredUsers test is passed", succeed)
 		})
 	}
 }
