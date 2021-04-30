@@ -89,6 +89,10 @@ pdb:
 postgresql:
   enabled: false
 
+zapLogger:
+  develMode: false
+  level: info
+
 controllerConfig:
   config.yaml: |
     # master credentials source can be 'aws' or 'secret'

@@ -57,6 +57,12 @@ spec:
             - --health-probe-port={{ .Values.healthProbe.port }}
             - --enable-leader-election
             - --config-file=/etc/config/config.yaml
+            {{ if .Values.zapLogger.develMode }}
+            - --zap-devel
+            {{ end }}
+            {{ if .Values.zapLogger.level }}
+            - --zap-log-level={{ .Values.zapLogger.level}}
+            {{ end }}
           command:
             - /manager
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.Version }}"
