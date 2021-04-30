@@ -22,8 +22,8 @@ func NewConfig(logger logr.Logger, configFile string) *viper.Viper {
 	if err != nil {         // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
+
 	// monitor the changes in the config file
-	fmt.Println(viper.AllSettings())
 	c.WatchConfig()
 	c.OnConfigChange(func(e fsnotify.Event) {
 		logger.Info("Config file changed", "file", e.Name)

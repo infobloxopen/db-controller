@@ -53,6 +53,8 @@ spec:
           args:
             - --metrics-addr={{ .Values.metrics.address }}
             - --metrics-port={{ .Values.metrics.port }}
+            - --health-probe-address={{ .Values.healthProbe.address }}
+            - --health-probe-port={{ .Values.healthProbe.port }}
             - --enable-leader-election
             - --config-file=/etc/config/config.yaml
           command:
@@ -61,6 +63,18 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.healthProbe.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.healthProbe.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
