@@ -113,12 +113,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 		curTime := time.Now().Truncate(time.Minute)
 		timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
-		expiredTime := curTime.Add(-rotationTime)
-		timeStrExpired := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
-
 		usernamePrefix := fmt.Sprintf("dbctl_%s_", baseUsername)
 		newUsername := usernamePrefix + timeStr
-		expiredUsername := usernamePrefix + timeStrExpired
+		prevUsername := dbClaim.Status.ConnectionInfo.Username
 
 		userPassword, err := r.generatePassword()
 		if err != nil {
@@ -134,7 +131,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			updateUserStatus(dbClaim, newUsername, userPassword)
 		}
 
-		if err := dbClient.RemoveExpiredUsers(dbName, newUsername, usernamePrefix, expiredUsername); err != nil {
+		if err := dbClient.RemoveExpiredUsers(dbName, newUsername, prevUsername, usernamePrefix); err != nil {
 			metrics.PasswordRotatedErrors.WithLabelValues("remove error").Inc()
 			return r.manageError(ctx, dbClaim, err)
 		}

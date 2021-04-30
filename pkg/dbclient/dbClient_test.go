@@ -3,6 +3,7 @@ package dbclient
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -179,12 +180,16 @@ func TestPostgresClientOperations(t *testing.T) {
 			t.Logf("RemoveExpiredUsers() test")
 			t.Logf("\n add test users")
 			curTime := time.Now().Truncate(time.Minute)
-			for i := 1; i < 10; i++ {
+			var prevUser string
+			for i := 0; i < 10; i++ {
 				duration := time.Duration(60 * i)
-				expiredTime := curTime.Add(-duration * time.Second)
+				expiredTime := curTime.Add(-duration * time.Minute)
 				timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
 				usernamePrefix := fmt.Sprintf("dbctl_%s_", tt.args.username)
 				newUsername := usernamePrefix + timeStr
+				if i == 1 {
+					prevUser = newUsername
+				}
 				_, err := pc.CreateUser(tt.args.dbName, newUsername, tt.args.userPassword)
 				if err != nil {
 					t.Errorf("\tcreating user error %v", newUsername)
@@ -192,19 +197,16 @@ func TestPostgresClientOperations(t *testing.T) {
 				}
 			}
 			t.Logf("\n removing stale test users")
-			expiredTime := curTime.Add(-time.Duration(60))
 			timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
-			timeExpiredStr := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
 			usernamePrefix := fmt.Sprintf("dbctl_%s_", tt.args.username)
 			newUsername := usernamePrefix + timeStr
-			expiredUsername := usernamePrefix + timeExpiredStr
 			_, err = pc.CreateUser(tt.args.dbName, newUsername, tt.args.userPassword)
 			if err != nil {
 				t.Errorf("\tcreating user error %v", newUsername)
 				return
 			}
 
-			if err := pc.RemoveExpiredUsers(tt.args.dbName, newUsername, usernamePrefix, expiredUsername); err != nil {
+			if err := pc.RemoveExpiredUsers(tt.args.dbName, newUsername, prevUser, usernamePrefix); err != nil {
 				t.Errorf("\tremoving expired users error = %v", err)
 				return
 			}
@@ -220,6 +222,30 @@ func TestPostgresClientOperations(t *testing.T) {
 				t.Errorf("\tuser count mismatch want %v got %v", countWant, count)
 				return
 			}
+
+			expectedNames := []string{
+				prevUser,
+				newUsername,
+			}
+			gotNames := make([]string, 0, 0)
+
+			rows, err := pc.DB.Query("SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename LIKE '" + usernamePrefix + "%' ORDER BY usename")
+			defer rows.Close()
+
+			for rows.Next() {
+				var curUsername string
+				err = rows.Scan(&curUsername)
+				if err != nil {
+					t.Errorf("\tcan't get user names %v", err)
+					return
+				}
+				gotNames = append(gotNames, curUsername)
+			}
+			if !reflect.DeepEqual(gotNames, expectedNames) {
+				t.Logf("\t%s user names mismatch got %v want %v", failed, gotNames, expectedNames)
+				return
+			}
+
 			t.Logf("\t%s RemoveExpiredUsers test is passed", succeed)
 		})
 	}
