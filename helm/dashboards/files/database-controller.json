@@ -16,8 +16,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 239,
-  "iteration": 1618835275083,
+  "id": 249,
+  "iteration": 1619776342237,
   "links": [],
   "panels": [
     {
@@ -266,7 +266,9 @@
         }
       ],
       "thresholds": [],
+      "timeFrom": null,
       "timeRegions": [],
+      "timeShift": null,
       "title": "95th Percentile of Reconcile Request Latencies",
       "tooltip": {
         "shared": true,
@@ -415,7 +417,13 @@
       },
       "id": 35,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "remove error"
+          }
+        ]
       },
       "pluginVersion": "7.5.3",
       "targets": [
@@ -427,7 +435,7 @@
           "refId": "A"
         }
       ],
-      "title": "Panel Title",
+      "title": "Errors by reason",
       "type": "table"
     },
     {
@@ -608,7 +616,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "user_rotation_time_seconds_sum/user_rotation_time_seconds_count",
+          "expr": "password_rotation_time_seconds_sum{app_kubernetes_io_instance=\"db-controller\"}/password_rotation_time_seconds_count{app_kubernetes_io_instance=\"db-controller\"}",
           "interval": "",
           "legendFormat": "Avg password rotation time",
           "refId": "A"
@@ -1350,13 +1358,13 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "users_created_total{app_kubernetes_io_instance=\"db-controller\"}",
+          "expr": "users_removed_total{app_kubernetes_io_instance=\"db-controller\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "User created total",
+      "title": "User removed total",
       "type": "stat"
     },
     {
@@ -1396,7 +1404,13 @@
       "id": 18,
       "options": {
         "frameIndex": 0,
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "remove user error: reassign error"
+          }
+        ]
       },
       "pluginVersion": "7.5.3",
       "targets": [
@@ -1410,16 +1424,16 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(rate(users_update_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
+          "expr": "sum(rate(users_remove_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
           "hide": false,
           "interval": "",
-          "legendFormat": "update user error: {{reason}}",
+          "legendFormat": "remove user error: {{reason}}",
           "refId": "B"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "User create/update errors",
+      "title": "User create/remove errors",
       "type": "table"
     },
     {
@@ -1477,10 +1491,10 @@
         },
         {
           "exemplar": true,
-          "expr": "60*sum(rate(users_update_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
+          "expr": "60*sum(rate(users_remove_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
           "hide": false,
           "interval": "",
-          "legendFormat": "update error {{reason}}",
+          "legendFormat": "remove error {{reason}}",
           "refId": "B"
         }
       ],
@@ -1488,7 +1502,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "User create/update errors rate ",
+      "title": "User create/remove errors rate ",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1609,17 +1623,17 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "user_create_time_seconds_sum/user_create_time_seconds_count",
+          "expr": "user_create_time_seconds_sum{app_kubernetes_io_instance=\"db-controller\"}/user_create_time_seconds_count{app_kubernetes_io_instance=\"db-controller\"}",
           "interval": "",
           "legendFormat": "Avg user creation time",
           "refId": "A"
         },
         {
           "exemplar": true,
-          "expr": "user_update_time_seconds_sum/user_update_time_seconds_count",
+          "expr": "user_remove_time_seconds_sum{app_kubernetes_io_instance=\"db-controller\"}/user_remove_time_seconds_count{app_kubernetes_io_instance=\"db-controller\"}",
           "hide": false,
           "interval": "",
-          "legendFormat": "Avg user update time",
+          "legendFormat": "Avg user remove time",
           "refId": "B"
         }
       ],
@@ -1636,7 +1650,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Avg user creation time in seconds",
+      "title": "Avg user creation/removing time in seconds",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1729,10 +1743,10 @@
         },
         {
           "exemplar": true,
-          "expr": "(sum(users_update_errors_total{app_kubernetes_io_instance=\"db-controller\"})/sum(users_updated_total{app_kubernetes_io_instance=\"db-controller\"}))*100",
+          "expr": "(sum(users_remove_errors_total{app_kubernetes_io_instance=\"db-controller\"})/sum(users_removed_total{app_kubernetes_io_instance=\"db-controller\"}))*100",
           "hide": false,
           "interval": "",
-          "legendFormat": "update errors percent",
+          "legendFormat": "remove errors percent",
           "refId": "B"
         }
       ],
@@ -1740,7 +1754,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Users created/updated with errors in percentage",
+      "title": "Users created/removed with errors in percentage",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1820,5 +1834,5 @@
   "timezone": "",
   "title": "Database controller",
   "uid": "9pFkQLuGz",
-  "version": 30
+  "version": 10
 }
