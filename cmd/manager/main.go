@@ -64,8 +64,13 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
 		"Database connection string to with root credentials.")
+	opts := zap.Options{
+		Development: false,
+	}
+	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-	logger := zap.New(zap.UseDevMode(true))
+
+	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctlConfig := config.NewConfig(logger, configFile)
 	ctrl.SetLogger(logger)
 
