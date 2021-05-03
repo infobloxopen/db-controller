@@ -20,7 +20,7 @@ const (
 type DBClient interface {
 	CreateDataBase(dbName string) (bool, error)
 	CreateUser(dbName string, username, userPassword string) (bool, error)
-	RemoveExpiredUsers(dbName string, username, usernamePrefix, expiredUser string) error
+	RemoveExpiredUsers(dbName string, username, prevUser, usernamePrefix string) error
 
 	DBCloser
 }
@@ -118,7 +118,6 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 	if !exists {
 		pc.log.Info("creating a user", "user", username)
 		_, err = pc.DB.Exec("CREATE USER" + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "'")
-
 		if err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				pc.log.Error(err, "could not create user "+username)
@@ -142,13 +141,15 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 	return created, nil
 }
 
-func (pc *PostgresClient) RemoveExpiredUsers(dbName string, username, usernamePrefix, expiredUser string) error {
+func (pc *PostgresClient) RemoveExpiredUsers(dbName string, username, prevUsername, usernamePrefix string) error {
 	log := pc.log
 	db := pc.DB
 	start := time.Now()
 	// clean up expired users
 	log.Info("cleaning up expired users")
-	rows, err := db.Query("SELECT usename FROM pg_catalog.pg_user WHERE usename LIKE '"+usernamePrefix+"%' AND usename < $1 ORDER BY usename DESC", expiredUser)
+	rows, err := db.Query("SELECT usename FROM pg_catalog.pg_user WHERE usename LIKE '"+usernamePrefix+"%'"+
+		" AND usename NOT IN($1, $2) ORDER BY usename", username, prevUsername)
+
 	if err != nil {
 		log.Error(err, "could not select old usernames")
 		metrics.UsersRemovedErrors.WithLabelValues("read error").Inc()
@@ -177,7 +178,7 @@ func (pc *PostgresClient) RemoveExpiredUsers(dbName string, username, usernamePr
 			metrics.UsersRemovedErrors.WithLabelValues("revoke error").Inc()
 			return err
 		}
-		log.Info("DROP USER " + thisUsername)
+
 		if _, err := db.Exec("DROP USER " + thisUsername); err != nil {
 			log.Error(err, "could not drop user: "+thisUsername)
 			metrics.UsersRemovedErrors.WithLabelValues("drop error").Inc()
