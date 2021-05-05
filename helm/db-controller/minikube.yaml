@@ -41,3 +41,7 @@ passwordSecretRefs:
 dashboards:
   dashboard:
     enabled: false
+
+zapLogger:
+  develMode: true
+  level: debug

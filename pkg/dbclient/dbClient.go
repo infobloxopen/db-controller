@@ -19,8 +19,11 @@ const (
 
 type DBClient interface {
 	CreateDataBase(dbName string) (bool, error)
-	CreateUser(dbName string, username, userPassword string) (bool, error)
-	RemoveExpiredUsers(dbName string, username, prevUser, usernamePrefix string) error
+	CreateUser(username, role, userPassword string) (bool, error)
+	CreateGroup(dbName, username string) (bool, error)
+	RenameUser(oldUsername string, newUsername string) error
+	UpdateUser(oldUsername, newUsername, rolename, password string) error
+	UpdatePassword(username string, userPassword string) error
 
 	DBCloser
 }
@@ -101,9 +104,54 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 	return created, nil
 }
 
-func (pc *PostgresClient) CreateUser(dbName string, username, userPassword string) (bool, error) {
+func (pc *PostgresClient) CreateGroup(dbName, rolename string) (bool, error) {
 	start := time.Now()
+	var exists bool
+	db := pc.DB
+	created := false
 
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for role")
+		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
+		return created, err
+	}
+
+	if !exists {
+		pc.log.Info("creating a ROLE", "role", rolename)
+		_, err = pc.DB.Exec("CREATE ROLE" + fmt.Sprintf("%q", rolename) + "WITH NOLOGIN")
+		if err != nil {
+			pc.log.Error(err, "could not create role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
+			return created, err
+		}
+
+		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " TO " + fmt.Sprintf("%q", rolename)); err != nil {
+			pc.log.Error(err, "could not set permissions to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+		created = true
+		pc.log.Info("role has been created", "role", rolename)
+		metrics.UsersCreated.Inc()
+		duration := time.Since(start)
+		metrics.UsersCreateTime.Observe(duration.Seconds())
+	}
+
+	return created, nil
+}
+
+func (pc *PostgresClient) setGroup(username, rolename string) error {
+	db := pc.DB
+	if _, err := db.Exec("ALTER ROLE " + fmt.Sprintf("%q", username) + " SET ROLE TO " + fmt.Sprintf("%q", rolename)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (pc *PostgresClient) CreateUser(username, rolename, userPassword string) (bool, error) {
+	start := time.Now()
 	var exists bool
 	db := pc.DB
 	created := false
@@ -117,20 +165,21 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 
 	if !exists {
 		pc.log.Info("creating a user", "user", username)
-		_, err = pc.DB.Exec("CREATE USER" + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "'")
-		if err != nil {
-			if !strings.Contains(err.Error(), "already exists") {
-				pc.log.Error(err, "could not create user "+username)
-				metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
-				return created, err
-			}
-		}
 
-		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " TO " + fmt.Sprintf("%q", username)); err != nil {
-			pc.log.Error(err, "could not set permissions to user "+username)
-			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+		_, err = pc.DB.Exec("CREATE ROLE " + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "' LOGIN IN ROLE " + rolename)
+		if err != nil {
+			pc.log.Error(err, "could not create user "+username)
+			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
 			return created, err
 		}
+
+		if err := pc.setGroup(username, rolename); err != nil {
+			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, username))
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+
+			return created, err
+		}
+
 		created = true
 		pc.log.Info("user has been created", "user", username)
 		metrics.UsersCreated.Inc()
@@ -141,55 +190,90 @@ func (pc *PostgresClient) CreateUser(dbName string, username, userPassword strin
 	return created, nil
 }
 
-func (pc *PostgresClient) RemoveExpiredUsers(dbName string, username, prevUsername, usernamePrefix string) error {
-	log := pc.log
+func (pc *PostgresClient) RenameUser(oldUsername string, newUsername string) error {
+	var exists bool
 	db := pc.DB
-	start := time.Now()
-	// clean up expired users
-	log.Info("cleaning up expired users")
-	rows, err := db.Query("SELECT usename FROM pg_catalog.pg_user WHERE usename LIKE '"+usernamePrefix+"%'"+
-		" AND usename NOT IN($1, $2) ORDER BY usename", username, prevUsername)
+
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", oldUsername).Scan(&exists)
 
 	if err != nil {
-		log.Error(err, "could not select old usernames")
-		metrics.UsersRemovedErrors.WithLabelValues("read error").Inc()
+		pc.log.Error(err, "could not query for user name")
 		return err
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var thisUsername string
-		err = rows.Scan(&thisUsername)
-		log.Info("dropping user " + thisUsername)
+	if exists {
+		pc.log.Info(fmt.Sprintf("renaming user %s to %s", oldUsername, newUsername))
+
+		_, err = db.Exec("ALTER USER" + fmt.Sprintf("%q", oldUsername) + " RENAME TO  " + fmt.Sprintf("%q", newUsername))
 		if err != nil {
-			log.Error(err, "could not scan usernames")
-			metrics.UsersRemovedErrors.WithLabelValues("read error").Inc()
+			pc.log.Error(err, "could not rename user "+oldUsername)
 			return err
 		}
-
-		if _, err := db.Exec("REASSIGN OWNED BY " + thisUsername + " TO " + username); err != nil {
-			log.Error(err, "could not reassign owned by "+thisUsername)
-			metrics.UsersRemovedErrors.WithLabelValues("reassign error").Inc()
-			return err
-		}
-
-		if _, err := db.Exec("REVOKE ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " FROM " + thisUsername); err != nil {
-			log.Error(err, "could not revoke privileges "+thisUsername)
-			metrics.UsersRemovedErrors.WithLabelValues("revoke error").Inc()
-			return err
-		}
-
-		if _, err := db.Exec("DROP USER " + thisUsername); err != nil {
-			log.Error(err, "could not drop user: "+thisUsername)
-			metrics.UsersRemovedErrors.WithLabelValues("drop error").Inc()
-			return err
-		}
-
-		log.Info("dropped user: " + thisUsername)
 	}
-	metrics.UsersRemoved.Inc()
+
+	return nil
+}
+
+func (pc *PostgresClient) UpdateUser(oldUsername, newUsername, rolename, password string) error {
+	start := time.Now()
+	var exists bool
+	db := pc.DB
+
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", oldUsername).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for user name")
+		metrics.UsersUpdatedErrors.WithLabelValues("read error").Inc()
+		return err
+	}
+
+	if exists {
+		pc.log.Info(fmt.Sprintf("updating user %s", oldUsername))
+		if err := pc.RenameUser(oldUsername, newUsername); err != nil {
+			return err
+		}
+
+		if err := pc.setGroup(newUsername, rolename); err != nil {
+			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, newUsername))
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+
+			return err
+		}
+
+		if err := pc.UpdatePassword(newUsername, password); err != nil {
+			return err
+		}
+
+		pc.log.Info("user has been updated", "user", newUsername)
+		metrics.UsersUpdated.Inc()
+		duration := time.Since(start)
+		metrics.UsersUpdateTime.Observe(duration.Seconds())
+	}
+
+	return nil
+}
+
+func (pc *PostgresClient) UpdatePassword(username string, userPassword string) error {
+	start := time.Now()
+	db := pc.DB
+	if userPassword == "" {
+		err := fmt.Errorf("an empty password")
+		pc.log.Error(err, "error occurred")
+		metrics.PasswordRotatedErrors.WithLabelValues("empty password").Inc()
+		return err
+	}
+
+	pc.log.Info("update user password", "user:", username)
+	_, err := db.Exec("ALTER ROLE" + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "'")
+	if err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			pc.log.Error(err, "could not alter user "+username)
+			metrics.PasswordRotatedErrors.WithLabelValues("alter error").Inc()
+			return err
+		}
+	}
+	metrics.PasswordRotated.Inc()
 	duration := time.Since(start)
-	metrics.UsersRemoveTime.Observe(duration.Seconds())
+	metrics.PasswordRotateTime.Observe(duration.Seconds())
 
 	return nil
 }
