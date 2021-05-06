@@ -38,6 +38,7 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
+	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 )
@@ -106,38 +107,68 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	}
 
 	baseUsername := dbClaim.Spec.Username
+	dbu := dbuser.NewDBUser(baseUsername)
 	rotationTime := r.getPasswordRotationTime()
+
+	if dbu.IsUserChanged(dbClaim) {
+		oldUsername := dbu.TrimUserSuffix(dbClaim.Status.ConnectionInfo.Username)
+		// renaming common role
+		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+
+		// updating user a
+		userPassword, err := r.generatePassword()
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+
+		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixA, dbu.GetUserA(), baseUsername, userPassword); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+
+		updateUserStatus(dbClaim, dbu.GetUserA(), userPassword)
+
+		// updating user b
+		userPassword, err = r.generatePassword()
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+
+		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixB, dbu.GetUserB(), baseUsername, userPassword); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+
+	} else {
+		_, err = dbClient.CreateGroup(dbName, baseUsername)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+	}
 
 	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime {
 		log.Info("rotating users")
 
-		curTime := time.Now().Truncate(time.Minute)
-		timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
-		usernamePrefix := fmt.Sprintf("dbctl_%s_", baseUsername)
-		newUsername := usernamePrefix + timeStr
-		prevUsername := dbClaim.Status.ConnectionInfo.Username
-
 		userPassword, err := r.generatePassword()
 		if err != nil {
-			metrics.PasswordRotatedErrors.WithLabelValues("generate error").Inc()
 			return r.manageError(ctx, dbClaim, err)
 		}
 
-		created, err = dbClient.CreateUser(dbName, newUsername, userPassword)
+		nextUser := dbu.NextUser(dbClaim.Status.ConnectionInfo.Username)
+		created, err = dbClient.CreateUser(nextUser, baseUsername, userPassword)
 		if err != nil {
 			metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 			return r.manageError(ctx, dbClaim, err)
-		} else if created || dbClaim.Status.ConnectionInfo.Username == "" {
-			updateUserStatus(dbClaim, newUsername, userPassword)
 		}
 
-		if err := dbClient.RemoveExpiredUsers(dbName, newUsername, prevUsername, usernamePrefix); err != nil {
-			metrics.PasswordRotatedErrors.WithLabelValues("remove error").Inc()
-			return r.manageError(ctx, dbClaim, err)
+		if !created {
+			if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
 		}
-		metrics.PasswordRotated.Inc()
-		duration := time.Since(curTime)
-		metrics.PasswordRotateTime.Observe(duration.Seconds())
+
+		updateUserStatus(dbClaim, nextUser, userPassword)
+
 	}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
@@ -361,14 +392,6 @@ func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.Data
 	dbClaim.Status.MatchedLabel = m
 
 	return m, nil
-}
-
-func (r *DatabaseClaimReconciler) isUserChanged(dbClaim *persistancev1.DatabaseClaim) bool {
-	if dbClaim.Spec.Username != dbClaim.Status.ConnectionInfo.Username && dbClaim.Status.ConnectionInfo.Username != "" {
-		return true
-	}
-
-	return false
 }
 
 func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, inErr error) (ctrl.Result, error) {

@@ -22,20 +22,20 @@ var (
 		Name: "user_create_time_seconds",
 		Help: "Histogram of user creation time in seconds",
 	})
-	UsersRemoved = prometheus.NewCounter(
+	UsersUpdated = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "users_removed_total",
-			Help: "Number of removed users ",
+			Name: "users_updated_total",
+			Help: "Number of updated users ",
 		},
 	)
-	UsersRemovedErrors = prometheus.NewCounterVec(
+	UsersUpdatedErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "users_remove_errors_total",
-			Help: "Number of users removed with errors",
+			Name: "users_update_errors_total",
+			Help: "Number of users updated with errors",
 		}, []string{"reason"},
 	)
-	UsersRemoveTime = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "user_remove_time_seconds",
+	UsersUpdateTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "user_update_time_seconds",
 		Help: "Histogram of user updating time in seconds",
 	})
 	DBProvisioningErrors = prometheus.NewCounterVec(
@@ -71,7 +71,7 @@ var (
 func init() {
 	// Register custom metrics with the global prometheus registry
 	metrics.Registry.MustRegister(UsersCreated, UsersCreatedErrors, UsersCreateTime)
-	metrics.Registry.MustRegister(UsersRemoved, UsersRemovedErrors, UsersRemoveTime)
+	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersUpdateTime)
 	metrics.Registry.MustRegister(DBCreated, DBProvisioningErrors)
 	metrics.Registry.MustRegister(PasswordRotated, PasswordRotatedErrors, PasswordRotateTime)
 }

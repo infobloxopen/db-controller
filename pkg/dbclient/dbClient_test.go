@@ -3,10 +3,8 @@ package dbclient
 import (
 	"database/sql"
 	"fmt"
-	"reflect"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr"
 	intg "github.com/infobloxopen/atlas-app-toolkit/integration"
@@ -96,9 +94,11 @@ func TestPostgresClientOperations(t *testing.T) {
 	}
 	type args struct {
 		dbName       string
+		role         string
 		username     string
 		userPassword string
-		rotationTime time.Duration
+		newUsername  string
+		newPassword  string
 	}
 	tests := []struct {
 		name    string
@@ -116,9 +116,11 @@ func TestPostgresClientOperations(t *testing.T) {
 			},
 			args{
 				"test_db",
+				"test_role",
 				"test_user",
 				"test_password",
-				time.Duration(60),
+				"new_test_user",
+				"new_test_password",
 			},
 			true,
 			false,
@@ -155,8 +157,30 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s CreateDataBase() is passed", succeed)
 
+			t.Logf("CreateGroup()")
+			got, err = pc.CreateGroup(tt.args.dbName, tt.args.role)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s CreateGroup() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("\t%sCreateGroup() got = %v, want %v", failed, got, tt.want)
+			}
+
+			err = pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", tt.args.role).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s CreateGroup error = %v", failed, err)
+			}
+
+			if exists {
+				t.Logf("\t%s role %v has been created", succeed, tt.args.role)
+			} else {
+				t.Errorf("\t%s can't find user %v", failed, tt.args.role)
+			}
+			t.Logf("\t%s CreateGroup() is passed", succeed)
+
 			t.Logf("CreateUser()")
-			got, err = pc.CreateUser(tt.args.dbName, tt.args.username, tt.args.userPassword)
+			got, err = pc.CreateUser(tt.args.username, tt.args.role, tt.args.userPassword)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("\t%s CreateUser() error = %v, wantErr %v", failed, err, tt.wantErr)
 				return
@@ -177,76 +201,43 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s CreateUser() is passed", succeed)
 
-			t.Logf("RemoveExpiredUsers() test")
-			t.Logf("\n add test users")
-			curTime := time.Now().Truncate(time.Minute)
-			var prevUser string
-			for i := 0; i < 10; i++ {
-				duration := time.Duration(60 * i)
-				expiredTime := curTime.Add(-duration * time.Minute)
-				timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", expiredTime.Year(), expiredTime.Month(), expiredTime.Day(), expiredTime.Hour(), expiredTime.Minute())
-				usernamePrefix := fmt.Sprintf("dbctl_%s_", tt.args.username)
-				newUsername := usernamePrefix + timeStr
-				if i == 1 {
-					prevUser = newUsername
-				}
-				_, err := pc.CreateUser(tt.args.dbName, newUsername, tt.args.userPassword)
-				if err != nil {
-					t.Errorf("\tcreating user error %v", newUsername)
-					return
-				}
+			t.Logf("UpdateUser()")
+			err = pc.UpdateUser(tt.args.username, tt.args.newUsername, tt.args.role, tt.args.newPassword)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s UpdateUser() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
 			}
-			t.Logf("\n removing stale test users")
-			timeStr := fmt.Sprintf("%d%02d%02d%02d%02d", curTime.Year(), curTime.Month(), curTime.Day(), curTime.Hour(), curTime.Minute())
-			usernamePrefix := fmt.Sprintf("dbctl_%s_", tt.args.username)
-			newUsername := usernamePrefix + timeStr
-			_, err = pc.CreateUser(tt.args.dbName, newUsername, tt.args.userPassword)
+
+			err = pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", tt.args.newUsername).Scan(&exists)
 			if err != nil {
-				t.Errorf("\tcreating user error %v", newUsername)
+				t.Errorf("\t%s UpdateUser error = %v", failed, err)
+			}
+
+			if exists {
+				t.Logf("\t%s user %v has been updated", succeed, tt.args.newUsername)
+			} else {
+				t.Errorf("\t%s can't find new user %v", failed, tt.args.newUsername)
+			}
+			t.Logf("\t%s UpdateUser() is passed", succeed)
+
+			t.Logf("UpdatePassword() can't be updated, want error")
+			wantErr := true
+			err = pc.UpdatePassword(tt.args.username, tt.args.newPassword)
+			if (err != nil) != wantErr {
+				t.Errorf("\t%s UpdatePassword() error = %v, wantErr %v", failed, err, wantErr)
 				return
 			}
+			t.Logf("\t%s UpdatePassword() can't be updated, want error, is passed", succeed)
 
-			if err := pc.RemoveExpiredUsers(tt.args.dbName, newUsername, prevUser, usernamePrefix); err != nil {
-				t.Errorf("\tremoving expired users error = %v", err)
+			t.Logf("UpdatePassword()")
+
+			err = pc.UpdatePassword(tt.args.newUsername, tt.args.newPassword)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s UpdatePassword() error = %v, wantErr %v", failed, err, tt.wantErr)
 				return
 			}
+			t.Logf("\t%s UpdatePassword() is passed", succeed)
 
-			var count int
-			err = pc.DB.QueryRow("SELECT count(pg_user.usename) FROM pg_catalog.pg_user where pg_user.usename LIKE '" + usernamePrefix + "%'").Scan(&count)
-			if err != nil {
-				t.Errorf("\tcan't get user count %v", err)
-				return
-			}
-			countWant := 2
-			if count != countWant {
-				t.Errorf("\tuser count mismatch want %v got %v", countWant, count)
-				return
-			}
-
-			expectedNames := []string{
-				prevUser,
-				newUsername,
-			}
-			gotNames := make([]string, 0, 0)
-
-			rows, err := pc.DB.Query("SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename LIKE '" + usernamePrefix + "%' ORDER BY usename")
-			defer rows.Close()
-
-			for rows.Next() {
-				var curUsername string
-				err = rows.Scan(&curUsername)
-				if err != nil {
-					t.Errorf("\tcan't get user names %v", err)
-					return
-				}
-				gotNames = append(gotNames, curUsername)
-			}
-			if !reflect.DeepEqual(gotNames, expectedNames) {
-				t.Logf("\t%s user names mismatch got %v want %v", failed, gotNames, expectedNames)
-				return
-			}
-
-			t.Logf("\t%s RemoveExpiredUsers test is passed", succeed)
 		})
 	}
 }
