@@ -421,7 +421,7 @@
         "sortBy": [
           {
             "desc": true,
-            "displayName": "remove error"
+            "displayName": "update error"
           }
         ]
       },
@@ -1358,13 +1358,13 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "users_removed_total{app_kubernetes_io_instance=\"db-controller\"}",
+          "expr": "users_updated_total{app_kubernetes_io_instance=\"db-controller\"}",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "User removed total",
+      "title": "User updated total",
       "type": "stat"
     },
     {
@@ -1408,7 +1408,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "remove user error: reassign error"
+            "displayName": "update user error: reassign error"
           }
         ]
       },
@@ -1424,16 +1424,16 @@
         },
         {
           "exemplar": true,
-          "expr": "sum(rate(users_remove_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
+          "expr": "sum(rate(users_update_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
           "hide": false,
           "interval": "",
-          "legendFormat": "remove user error: {{reason}}",
+          "legendFormat": "update user error: {{reason}}",
           "refId": "B"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "User create/remove errors",
+      "title": "User create/update errors",
       "type": "table"
     },
     {
@@ -1491,10 +1491,10 @@
         },
         {
           "exemplar": true,
-          "expr": "60*sum(rate(users_remove_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
+          "expr": "60*sum(rate(users_update_errors_total{app_kubernetes_io_instance=\"db-controller\"}[5m])) by (reason)",
           "hide": false,
           "interval": "",
-          "legendFormat": "remove error {{reason}}",
+          "legendFormat": "update error {{reason}}",
           "refId": "B"
         }
       ],
@@ -1502,7 +1502,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "User create/remove errors rate ",
+      "title": "User create/update errors rate ",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1630,10 +1630,10 @@
         },
         {
           "exemplar": true,
-          "expr": "user_remove_time_seconds_sum{app_kubernetes_io_instance=\"db-controller\"}/user_remove_time_seconds_count{app_kubernetes_io_instance=\"db-controller\"}",
+          "expr": "user_update_time_seconds_sum{app_kubernetes_io_instance=\"db-controller\"}/user_update_time_seconds_count{app_kubernetes_io_instance=\"db-controller\"}",
           "hide": false,
           "interval": "",
-          "legendFormat": "Avg user remove time",
+          "legendFormat": "Avg user update time",
           "refId": "B"
         }
       ],
@@ -1743,10 +1743,10 @@
         },
         {
           "exemplar": true,
-          "expr": "(sum(users_remove_errors_total{app_kubernetes_io_instance=\"db-controller\"})/sum(users_removed_total{app_kubernetes_io_instance=\"db-controller\"}))*100",
+          "expr": "(sum(users_update_errors_total{app_kubernetes_io_instance=\"db-controller\"})/sum(users_updated_total{app_kubernetes_io_instance=\"db-controller\"}))*100",
           "hide": false,
           "interval": "",
-          "legendFormat": "remove errors percent",
+          "legendFormat": "update errors percent",
           "refId": "B"
         }
       ],
@@ -1754,7 +1754,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Users created/removed with errors in percentage",
+      "title": "Users created/updated with errors in percentage",
       "tooltip": {
         "shared": true,
         "sort": 0,
