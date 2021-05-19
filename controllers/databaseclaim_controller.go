@@ -250,11 +250,8 @@ func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 
 func (r *DatabaseClaimReconciler) isPasswordComplexity() bool {
 	complEnabled := r.Config.GetString("passwordconfig::passwordComplexity")
-	if complEnabled == "enabled" {
-		return true
-	}
 
-	return false
+	return complEnabled == "enabled"
 }
 
 func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
@@ -267,10 +264,6 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 
 func (r *DatabaseClaimReconciler) getAuthSource() string {
 	return r.Config.GetString("authSource")
-}
-
-func (r *DatabaseClaimReconciler) getIAMRole() string {
-	return r.Config.GetString("iamRole")
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
@@ -299,22 +292,16 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 		},
 	}
 	r.Log.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
-	if err := r.Client.Create(ctx, secret); err != nil {
-		return err
-	}
 
-	return nil
+	return r.Client.Create(ctx, secret)
 }
 
 func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, exSecret *corev1.Secret) error {
 	exSecret.Data[dsnName] = []byte(dsn)
 	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
 	r.Log.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
-	if err := r.Client.Update(ctx, exSecret); err != nil {
-		return err
-	}
 
-	return nil
+	return r.Client.Update(ctx, exSecret)
 }
 
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
@@ -346,10 +333,8 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		if err := r.createSecret(ctx, dbClaim, dsn, dbURI); err != nil {
 			return err
 		}
-	} else {
-		if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, gs); err != nil {
-			return err
-		}
+	} else if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, gs); err != nil {
+		return err
 	}
 
 	return nil
@@ -378,7 +363,7 @@ func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.Data
 	settingsMap := r.Config.AllSettings()
 
 	rTree := radix.New()
-	for k, _ := range settingsMap {
+	for k := range settingsMap {
 		if k != "passwordconfig" {
 			rTree.Insert(k, true)
 		}
