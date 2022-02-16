@@ -5,7 +5,7 @@ pipeline {
     label 'ubuntu_docker_label'
   }
   tools {
-    go "Go 1.15"
+    go "Go 1.17"
   }
   options {
     checkoutToSubdirectory('src/github.com/infobloxopen/db-controller')

@@ -148,5 +148,11 @@ var _ = BeforeSuite(func(done Done) {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	err := testEnv.Stop()
-	Expect(err).ToNot(HaveOccurred())
+	//  commented that line due to controller-runtime issue: https://github.com/kubernetes-sigs/controller-runtime/issues/1571 Should be reverted later
+	//	Expect(err).ToNot(HaveOccurred())
+	if err.Error() != "timeout waiting for process kube-apiserver to stop" {
+		Expect(err).ToNot(HaveOccurred())
+	} else {
+		By(err.Error())
+	}
 })
