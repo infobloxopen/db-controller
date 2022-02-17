@@ -6,8 +6,10 @@ IMAGE_NAME ?= db-controller
 TAG ?= latest
 # Image URL to use all building/pushing image targets
 IMG ?= ${REGISTRY}/${IMAGE_NAME}:${TAG}
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+
+GOBIN := ~/go/bin
+K8S_VERSION := 1.22.1
+ACK_GINKGO_DEPRECATIONS := 1.16.5
 
 CMD := "cmd/manager"
 
@@ -88,7 +90,7 @@ deploy: manifests
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 # Run go fmt against code
 fmt:
@@ -118,18 +120,21 @@ docker-push:
 # download controller-gen if necessary
 controller-gen:
 ifeq (, $(shell which controller-gen))
-	@{ \
+	{ \
 	set -e ;\
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
+export KUBEBUILDER_ASSETS
 
 # find or download kubebuilder
 # download kubebuilder if necessary
@@ -139,15 +144,16 @@ ifeq (, $(shell which kubebuilder))
 	set -e ;\
 	os=$(shell go env GOOS) ;\
 	arch=$(shell go env GOARCH) ;\
-	echo $$arhch ;\
-	curl -L https://go.kubebuilder.io/dl/2.3.1/$${os}/$${arch} | tar -xz -C /tmp/ ;\
-	(sudo mv /tmp/kubebuilder_2.3.1_$${os}_$${arch}/ /usr/local/kubebuilder) ;\
+	sudo mkdir -p /usr/local/kubebuilder/bin/ ; \
+	sudo curl -k -Lo /usr/local/kubebuilder/bin/kubebuilder https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.2.0/kubebuilder_$${os}_$${arch} ; \
+	curl -k -sSLo /tmp/envtest-bins.tar.gz "https://go.kubebuilder.io/test-tools/${K8S_VERSION}/$${os}/$${arch}" ; \
+	sudo tar -C /usr/local/kubebuilder --strip-components=1 -zvxf /tmp/envtest-bins.tar.gz ; \
 	export PATH=$$PATH:/usr/local/kubebuilder/bin ;\
 	}
-KUBEBUILDER_ASSETS=$(GOBIN)/kubebuilder
-else
-KUBEBUILDER_ASSETS=$(shell which kubebuilder)
 endif
+	mkdir -p .build
+	${KUBEBUILDER_ASSETS}/kube-apiserver --version
+	${KUBEBUILDER_ASSETS}/kubectl version || true
 
 create-namespace:
 	kubectl create namespace ${DBCTL_NAMESPACE}
