@@ -22,3 +22,7 @@ vendor
 *.swp
 *.swo
 *~
+
+# Platform exclusions
+.DS_Store
+
