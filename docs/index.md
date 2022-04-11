@@ -40,6 +40,8 @@ information by the client service.
 | DDCR                   | Support dynamically changing the connection information                                       |
 | DDCR                   | Modify at least one Atlas app to show as an example of implementing this pattern              |
 | Cloud Provider Tagging | Cloud Resource must be tagged so that then can following organization guidelines.             |
+| DB Instance Migration  | CR Change create new database instance and migrate data and delete infrastructure CR          |
+| DB Instance Migration  | Migration should with Canary pattern once tests pass all traffic to the new database          |
 
 ## Service Architecture
 The first component is a db-controller service that will be responsible 
@@ -82,6 +84,17 @@ new connection string information provided by the proxy.
     rect rgb(0, 255, 0, .3)
         loop
             K8S->>db-controller: new DBClaim
+            rect rgba(0, 0, 255, .2)
+                Note over db-controller: Database Host == Presence of Instance 
+                db-controller->>db-controller: Instance exists?
+                db-controller->>infra-operator: CloudDatabaseClaim
+                loop Wait for Database Instance
+                    infra-operator->>infra-operator: provision instance
+                end
+                loop Wait for Database Connection
+                    db-controller->>db-controller: Connection Secret exists?
+                end
+            end
             db-controller->>RDS: DB exists?
             RDS->>db-controller: no
             db-controller->>RDS: create DB
@@ -109,12 +122,88 @@ new connection string information provided by the proxy.
 ```
 
 ## Data Model
-The database proxy will include a DatabaseClaim Custom Resource.  The DatabaseClaim 
-will contain information related to a specific instance of a database.  It will 
+The database proxy will include a DatabaseClaim Custom Resource. In the first
+version of the application the DatabaseClaim contained information related 
+to a specific instance of a database. In the next major release the DatabaseClaim
+has information to help an infrastructure operator select a database for the
+client application. This pattern will allow us to make the database selection be
+pre-provisioned or dynamic on demand. It will also allow the database selction to
+be multi-cloud e.g. AWS or Azure.
+
+DatabaseClaim will 
 include properties such as the name, appID, Type, etc. During startup, 
 the db-controller will read the set of CR’s describing the DatabaseClaim and store 
-them in-memory.  The db-controller will listen for any changes to the CR’s and 
-remain in-sync with the K8 definitions.
+them in-memory. In the case of dynamic database provisioning
+a CR is created to request infrastructure operator to create the database instance.
+db-controller will check the CR satus and to make sure that the database is provisioned
+and information about it is available in a secret refrenced by the CR.
+
+The db-controller will listen for any changes to the DatabaseClaim CR’s and 
+remain in-sync with the K8 definitions. In the case of dynamic database provisioning
+a change will cause a new infrastructure CR to be created, when the new database
+instance is created we should migrate all password, data and connection to it and delete
+the old infrastructure CR. It will be infrastructure operator concern if the cloud
+database instances are deleted immediately or there is a higher level operations
+workflow to reclaim them. We can break the database migration into phases and deliver
+just new infrastructure CR on change, this might be fine for development environments
+and work on the full feature for production. There are also advanced use case like 
+canary where where an new release of the application creates the new database, tests
+the migration and once everything is working all traffic is migrated away from the
+old database and it can be reclaimed.
+
+The following shows the mapping of the DatabaseClaim to a CloudDatabase.
+The CloudDatabaseClaim could be custom or use a infrastructure provider like
+[crossplane resource composition](https://github.com/crossplane/crossplane/blob/master/design/design-doc-composition.md#resource-composition).
+The DatabaseClaim could also be mapped to a Cloud provider like
+[AWS ACK](https://github.com/aws-controllers-k8s/community), providing multi-cloud support by transforming
+DatabaseClaim to a specific cloud provider CR.
+In the case of AWS you would leverage
+[ACK RDS Provider](https://github.com/aws-controllers-k8s/rds-controller).
+
+The ClaimMap is meant to transform between DatabaseClaim and CloudDatabaseClaim.
+If we use a solution like crossplane which provides
+[transform functions](https://github.com/crossplane/crossplane/blob/master/design/design-doc-composition.md#transform-functions)
+this part of the data model might be deleted.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'fontFamily': 'aerial', 'fontSize': '50px', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+erDiagram
+    DatabaseClaim ||--o{ ClaimMap : ""
+    DatabaseClaim ||--|| CloudDatabaseClaim : ""
+    CloudDatabaseClaim ||--o{ ClaimMap : ""
+```
+
+This the deploying with the CR scheme:
+**Relationship of a DatabaseClaim to a Secret and a Pod:**
+```mermaid
+stateDiagram
+  direction LR
+  Application --> DatabaseClaim : Mamofest
+  DatabaseClaim --> CloudDatabaseClaim : map internal or</br> using ClaimMap
+  CloudDatabaseClaim --> rdsInstance : create instance
+```
+Here is an example of what the CloudDatabaseClaim would look like if we used
+Crossplane. The compositionRef maps our CloudDatabaseClaim to a cloud specific 
+database instance defintion that is managed by Crossplane:
+```yaml
+apiVersion: database.infobloxopen.github.com/v1alpha1
+kind: CloudDatabaseClaim
+metadata:
+  name: db-controller-cloud-claim-database-some-app
+  namespace: db-controller-namespace
+spec:
+  parameters:
+    type: postgres
+    storage: 20GB
+  compositionRef:
+    name: cloud.database.infobloxopen.github.com
+  writeConnectionSecretToRef:
+    name: db-controller-postgres-con-some-app
+```
+
+In this example db-controller-postgres-con-some-app Secret that is written by the
+infrastructure operator has the connection string and password information for the 
+db-controller to manage the instance, similar to the pre-provisioned use case.
 
 ### ConfigMap
 The db-controller will consume a configMap that contains global config values.
@@ -155,6 +244,8 @@ data:
       useSSL=false
       passwordSecretRef=athena-hostapp-password
 ```
+
+* authSource: Determines how database host master password is retrieved. The possible values are "secret" and "aws". In the case of "secret" the value from the passwordSecretRef Secret is used for the password. In the case of "aws" the RDS password is retrieved using AWS APIs and db-controller should have IAM credentials to make the necessary calls.
 
 * passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disabled.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
 
@@ -227,7 +318,10 @@ DatabaseClaim:
       - [Host]: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
       - [Port]: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
       - DatabaseName: The name of the database instance.
-
+      - Shape: The optional Shape values are arbitrary and help drive instance selection
+      - CPUs: The optional CPUs value requests the database host cpu core capacity
+      - RAM: The optional RAM value requests the database host memory capacity
+      - Storage: The optional Storage value requests the database host storage capacity
 
    * status:
       - Error: Any errors related to provisioning this claim.
