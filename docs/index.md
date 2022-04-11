@@ -309,19 +309,18 @@ a database instance.  It includes the following properties:
 DatabaseClaim:
 
    * spec:
-      - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
       - AppID: Application ID used for the application.
       - SecretName: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.  The SecretName is Namespace scoped.
       - Type: The type of the database instance. E.g. Postgres
       - InstanceLabel: The matching fragment key name of the database instance that will host the database. The fragment keys are defined in the db-controller configMap and describe the connection information for the database instance that this DBClaim is associated with. The longest match will win. For example, the database claim can have a label of athena.hostapp but the only available RDS instances have a label of athena, atlas and northstar. So the controller would match the athena instance. If however an instance label has a label of athena.hostapp, then the hostapp claim would match it exactly.
       - Username: The username that the application will use for accessing the database.
+      - DatabaseName: The name of the database instance. 
+      - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
+      - DSNName: The key used for the client dsn connection string in the Secret
       - [Host]: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
       - [Port]: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - DatabaseName: The name of the database instance.
-      - Shape: The optional Shape values are arbitrary and help drive instance selection
-      - CPUs: The optional CPUs value requests the database host cpu core capacity
-      - RAM: The optional RAM value requests the database host memory capacity
-      - Storage: The optional Storage value requests the database host storage capacity
+      - [Shape]: The optional Shape values are arbitrary and help drive instance selection
+      - [MinStorage]: The optional Storage value requests the minimum database host storage capacity
 
    * status:
       - Error: Any errors related to provisioning this claim.
