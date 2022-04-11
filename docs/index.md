@@ -194,7 +194,7 @@ metadata:
 spec:
   parameters:
     type: postgres
-    storage: 20GB
+    minStorage: 20GB
   compositionRef:
     name: cloud.database.infobloxopen.github.com
   writeConnectionSecretToRef:
