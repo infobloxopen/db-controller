@@ -5,7 +5,7 @@ metadata:
   # XRDs follow the constraints of CRD names. They must be named
   # <plural>.<group>, per the plural and group names configured by the
   # crdSpecTemplate below.
-  name: compositepostgresinstances.database.example.org
+  name: compositepostgresinstances.database.infobloxopen.github.com
 spec:
   # Composite resources may optionally expose a connection secret - a Kubernetes
   # Secret containing all of the details a pod might need to connect to the
@@ -23,7 +23,7 @@ spec:
   # will override any selectors and references.
   # enforcedCompositionRef:
   #   name: securemysql.acme.org
-  group: database.example.org
+  group: database.infobloxopen.github.com
   # The defined kind of composite resource.
   names:
     kind: CompositePostgresInstance

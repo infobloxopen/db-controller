@@ -1,4 +1,4 @@
-apiVersion: database.example.org/v1alpha1
+apiVersion: database.infobloxopen.github.com/v1alpha1
 kind: PostgresInstance
 metadata:
   # Composite resources are cluster scoped, so there's no need for a namespace.
@@ -18,7 +18,7 @@ spec:
   # it is also possible to select a composition by labels - see the below
   # PostgresInstance for an example of this approach.
   compositionRef:
-    name: compositepostgresinstances.aws.database.example.org
+    name: compositepostgresinstances.aws.infobloxopen.github.com
   # Alternative to compositionRef is to use compositionSelector shown below:
 #  compositionSelector:
 #    matchLabels:

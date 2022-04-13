@@ -3,7 +3,7 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: compositepostgresinstances.aws.database.example.org
+  name: compositepostgresinstances.aws.database.infobloxopen.github.com
   labels:
     purpose: rds-deployment
     provider: aws
@@ -14,14 +14,9 @@ spec:
   # Note that the version in apiVersion must be the referenceable version of the
   # XRD.
   compositeTypeRef:
-    apiVersion: database.example.org/v1alpha1
+    apiVersion: database.infobloxopen.github.com/v1alpha1
     kind: CompositePostgresInstance
-  # This Composition reconciles a CompositePostgresInstance by patching from
-  # the CompositeMySQLInstance "to" new instances of the infrastructure
-  # resources below. These resources may be the managed resources of an
-  # infrastructure provider such as provider-azure, or other composite
-  # resources.
-  # for this example we reference an existing dbsubnet and create the RDS instance there
+  # For this example we reference a dbsubnet and security group to create the RDS instance
   #TODO add a policy to an existing iam role
   resources:
     - name: rdsinstance
@@ -84,7 +79,7 @@ spec:
   #   # that control Crossplane's behaviour. Patching the entire annotations
   #   # object can therefore have unexpected consquences and is not recommended.
   #   # Instead patch specific annotations by specifying their keys.
-  #   - fromFieldPath: metadata.annotations[example.org/app-name]
+  #   - fromFieldPath: metadata.annotations[infobloxopen.github.com/app-name]
   # - name: external-name
   #   patches:
   #   # FromCompositeFieldPath is the default patch type and is thus often

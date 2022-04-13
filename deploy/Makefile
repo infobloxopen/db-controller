@@ -124,6 +124,9 @@ postgres-direct: postgres-direct.yaml
 postgres-claim: postgres-claim.yaml
 	kubectl apply -f postgres-claim.yaml
 
+clean_rds_comp:
+	kubectl delete -f rds-comp-resource-def.yaml
+	kubectl delete -f rds-composition.yaml
 
 clean:
 	eksctl delete cluster --name $(shell cat .cluster) --region $(AWS_REGION)
