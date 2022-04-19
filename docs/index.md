@@ -38,6 +38,7 @@ information by the client service.
 | DDCR                   | Establish a pattern (and possible code) for apps to reload connection information from a file |
 | DDCR                   | Establish a pattern for mounting a secret that contains connection information in a secret    |
 | DDCR                   | Support dynamically changing the connection information                                       |
+| DDCR                   | Support labels for sharing of dynamically created databases                                   |
 | DDCR                   | Modify at least one Atlas app to show as an example of implementing this pattern              |
 | Cloud Provider Tagging | Cloud Resource must be tagged so that then can following organization guidelines.             |
 | DB Instance Migration  | CR Change create new database instance and migrate data and delete infrastructure CR          |
@@ -320,7 +321,7 @@ DatabaseClaim:
       - [Host]: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
       - [Port]: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
       - [Shape]: The optional Shape values are arbitrary and help drive instance selection
-      - [MinStorage]: The optional Storage value requests the minimum database host storage capacity
+      - [MinStorageGB]: The optional MinStorageGB value requests the minimum database host storage capacity
 
    * status:
       - Error: Any errors related to provisioning this claim.
@@ -389,6 +390,107 @@ stateDiagram
 ***N/A***
 
 ## Implementation
+***TODO***
+***Document full implementation for now focused on claim pattern updates***
+
+This implementation will use the 
+[kubebuilder](https://book.kubebuilder.io/introduction.html) pattern
+for implementation of the db-controller. This implementation starts
+with building a project:
+```bash
+kubebuilder init --domain atlas.infoblox.com --repo github.com/infobloxopen/db-controller
+```
+This project was layed down by kubebuilder which depend on
+*sigs.k8s.io/controller-runtime* and supports an architecture
+[described here](https://book.kubebuilder.io/architecture.html).
+A key part of this architecture is the *Reconciler* that encapsulates
+the custom logic that runs when request are forwarded from Kubernetes
+API Server to this controller. Specifically it the DatabaseClaim
+resources that is served.
+
+There is a go method (class) defined for handling reconcile functions:
+```go
+// DatabaseClaimReconciler reconciles a DatabaseClaim object
+type DatabaseClaimReconciler struct {
+	client.Client
+	Log        logr.Logger
+	Scheme     *runtime.Scheme
+	Config     *viper.Viper
+	MasterAuth *rdsauth.MasterAuth
+}
+```
+Then the reconcile functions that are parts of the method class are
+defined with this signature:
+```go
+func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {...}
+func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {...}
+```
+
+The following is the high level view of the reconcile logic:
+```mermaid
+graph TB
+A((Client)) --o B
+B[K8S API Server] --> C[db-controller]
+C--> D[Reconciler]
+D--> E{claim valid?}
+E -- No --> C
+E -- Yes --> F[UpdateStatus]
+F --> C
+C -->B
+B --> A
+```
+
+The DatabaseClaim
+Status is where keep the state used by the reconciler. The two parts
+of the Status that are important are:
+
+* MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+* ConnectionInfo[]: connection info about the database that is projected into a client accessible secret
+
+There is also a fragmentKey that is the same as the MatchedLabel,
+but not sure there are two items versus one ***TBD***.
+
+In this part we will look at the UpdateStatus function sequence and the
+proposed changes to support dynamic database creation while leaving much of
+the working db-controller to interoperate:
+
+```mermaid
+  sequenceDiagram
+    UpdateStatus->>matchInstanceLabel: Spec.InstanceLabel
+    matchInstanceLabel->>Status: Status.MatchedLabel
+    UpdateStatus->>getClient: Status.MatchedLabel
+      rect rgba(255, 0, 255, .2) 
+        par New Dynamic Database Binding
+          getClient->>getHost: dbClaim
+          getHost->>getHost: Spec.Host && Config::Status.MatchedLabel.Host == "" ?
+          getHost->>getHost: Yes
+          Status->>getHost: Status.CloudDatabase.Host == "" ?
+          getHost->>getHost: Yes        
+          getHost->>createCloudDatabase: dbClaim
+          createCloudDatabase->>createCloudDatabase: Wait for resource ready
+          createCloudDatabase->>getHost: CloudDatabase
+          getHost->>Status: Status.CloudDatabase.{Name, Host, Port, User, Password}
+          getHost->>getClient: {Host, Port, User, Password}
+        end
+      end
+      rect rgba(255, 255, 0, .2) 
+        par Existing Static Database Binding
+          getHost->>getHost: Spec.Host && Config::Status.MatchedLabel.Host == ""
+          getHost->>getHost: No
+          getProvisionedHost->>getHost: {Host, Port, User, Password}
+          getHost->>getClient: {Host, Port, User, Password}
+        end
+    end   
+    getClient->>Status: Status.ConnectionInfo.Host
+    getClient->>Status: Status.ConnectionInfo.Port
+    getClient->>Status: Status.ConnectionInfo.SSLMode
+    getClient->>Status: Status.ConnectionInfo.ConnectionInfoUpdatedAt
+    getClient->>DBClientFactory: host, port, user, password, sslmode
+    DBClientFactory->>getClient: dbClient
+    getClient->>UpdateStatus: dbClient
+    UpdateStatus->>GetDBName: dbClaim
+    GetDBName->>UpdateStatus: Spec.DatabaseName or Spec.DBNameOverride            
+```
 
 ### Authentication
 ### Authorization

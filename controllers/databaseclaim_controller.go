@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 	"time"
-
+	
 	"github.com/armon/go-radix"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
@@ -34,7 +34,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
+	
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
+	
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
@@ -264,6 +267,92 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 
 func (r *DatabaseClaimReconciler) getAuthSource() string {
 	return r.Config.GetString("authSource")
+}
+
+func (r *DatabaseClaimReconciler) createCloudDatabase(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	// TODO - pick a name using random number so its unique
+	dbName := "db-controller-1234"
+	dbSecret := xpv1.SecretReference{
+		Name: dbName,
+		// TODO - Namesapce should come from db-controller instance cluster context
+		Namespace: "db-controller",
+	}
+	
+	// TODO - These should come from configuration
+	// Infrastructure Config
+	region := "us-west-1"
+	providerConfigReference := xpv1.Reference{
+		Name: "default",
+	}
+	// Database Config
+	masterUsername := "masteruser"
+	engineVersion := "12.8"
+	skipFinalSnapshotBeforeDeletion := false
+	publiclyAccessible := false
+	enableIAMDatabaseAuthentication	:= true
+	
+	rdsInstance := &crossplanedb.RDSInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dbName,
+			// TODO - Figure out the proper labels for resource
+			// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+			// TODO - Figure out the proper OwnerReferences
+			//OwnerReferences: []metav1.OwnerReference{
+			//	{
+			//		APIVersion:         "databaseclaims.persistance.atlas.infoblox.com/v1",
+			//		Kind:               "CustomResourceDefinition",
+			//		Name:               dbClaim.Name,
+			//		UID:                dbClaim.UID,
+			//		Controller:         &truePtr,
+			//		BlockOwnerDeletion: &truePtr,
+			//	},
+			//},
+		},
+		Spec: crossplanedb.RDSInstanceSpec{
+			ForProvider: crossplanedb.RDSInstanceParameters{
+				Region: &region,
+				// TODO - the RDS Security Group reference should come from config
+				VPCSecurityGroupIDRefs: []xpv1.Reference{
+					{Name: "seizadi-bloxinabox-rds-sg"},
+				},
+				// TODO - the RDS Subnet Group reference should come from config
+				DBSubnetGroupNameRef: &xpv1.Reference{
+					Name: "seizadi-bloxinabox-rds-subnetgroup",
+				},
+				// Items from Claim
+				// Ony Support Postgres right now ignore Claim Type value
+				// Engine: dbClaim.Spec.Type,
+				Engine: "postgres",
+				DBInstanceClass: dbClaim.Spec.Shape,
+				AllocatedStorage: &dbClaim.Spec.MinStorageGB,
+				// Items from Config
+				MasterUsername: &masterUsername,
+				EngineVersion: &engineVersion,
+				SkipFinalSnapshotBeforeDeletion: &skipFinalSnapshotBeforeDeletion,
+				PubliclyAccessible: &publiclyAccessible,
+				EnableIAMDatabaseAuthentication: &enableIAMDatabaseAuthentication,
+			},
+			ResourceSpec: xpv1.ResourceSpec{
+				WriteConnectionSecretToReference: &dbSecret,
+				ProviderConfigReference: &providerConfigReference,
+			},
+		},
+	}
+	r.Log.Info("creating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+	
+	return r.Client.Create(ctx, rdsInstance)
+}
+
+func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	// FIXME - Implement updateCloudDatabase()
+	// Retrieve Database from dbClaim reference
+	rdsInstance := &crossplanedb.RDSInstance{}
+	
+	// Update RDSInstance
+	
+	r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+	
+	return r.Client.Update(ctx, rdsInstance)
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
