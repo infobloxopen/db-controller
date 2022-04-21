@@ -1,0 +1,22 @@
+# master credentials source can be 'aws' or 'secret'
+#authSource: "aws"
+authSource: "secret"
+# if aws authorization is used iam role must be provided
+#iamRole: "rds-role"
+passwordConfig:
+  passwordComplexity: enabled
+  minPasswordLength: "15"
+  passwordRotationPeriod: "60"
+sample-connection:
+  username: postgres
+  host: localhost
+  port: 5432
+  sslMode: disable
+  passwordSecretRef: postgres-postgresql
+  passwordSecretKey: postgresql-password
+another.connection:
+  username: root
+  host: some.other.service
+  port: 5412
+  sslMode: require
+  passwordSecretRef: another-connection-secret

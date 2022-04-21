@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-sdk-go v1.42.0
+	github.com/crossplane/crossplane-runtime v0.15.1-0.20220315141414-988c9ba9c255 // indirect
 	github.com/crossplane/provider-aws v0.26.0
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/go-logr/logr v1.2.0

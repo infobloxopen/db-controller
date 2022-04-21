@@ -265,6 +265,10 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
 }
 
+func (r *DatabaseClaimReconciler) getSecretKey(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretKey", fragmentKey))
+}
+
 func (r *DatabaseClaimReconciler) getAuthSource() string {
 	return r.Config.GetString("authSource")
 }
@@ -444,8 +448,13 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragme
 	if err != nil {
 		return "", err
 	}
-
-	return string(gs.Data["password"]), nil
+	
+	secretKey := r.getSecretKey(fragmentKey)
+	if secretKey == "" {
+		secretKey = "password"
+	}
+	
+	return string(gs.Data[secretKey]), nil
 }
 
 func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.DatabaseClaim) (string, error) {
@@ -593,7 +602,7 @@ func updateHostPortStatus(dbClaim *persistancev1.DatabaseClaim, host, port, sslM
 func getServiceNamespace() (string, error) {
 	ns, found := os.LookupEnv(serviceNamespaceEnvVar)
 	if !found {
-		return "", fmt.Errorf("service namespcae env %s must be set", serviceNamespaceEnvVar)
+		return "", fmt.Errorf("service namespace env %s must be set", serviceNamespaceEnvVar)
 	}
 	return ns, nil
 }

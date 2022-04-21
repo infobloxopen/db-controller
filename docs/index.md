@@ -224,31 +224,32 @@ data:
       username: root
       host: some.service
       port: 5432
-      useSSL: false
+      sslMode: disable
       passwordSecretRef: atlas-master-password
+      passwordSecretKey: password
     atlas.recyclebin:
       username: root
       host: some.other.service
       port: 5412
-      useSSL: false
+      sslMode: disable
       passwordSecretRef: atlas-recyclebin-password
     athena:
       username=root
       host=some.service
       port=5432
-      useSSL=false
+      sslMode: disable
       passwordSecretRef=athena-master-password
     athena.hostapp:
       username=root
       host=some.service
       port=5432
-      useSSL=false
+      sslMode: require
       passwordSecretRef=athena-hostapp-password
 ```
 
 * authSource: Determines how database host master password is retrieved. The possible values are "secret" and "aws". In the case of "secret" the value from the passwordSecretRef Secret is used for the password. In the case of "aws" the RDS password is retrieved using AWS APIs and db-controller should have IAM credentials to make the necessary calls.
 
-* passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disabled.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
+* passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disable.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
 
 * minPasswordLength: Ensures that the generated password is at least this length.  The value is in the range [15, 99].  The default value is 15.  Upper limit is Postgresql max password length limit.
 
@@ -258,8 +259,9 @@ data:
    - Username: The username for the master/root user of the database instance
    - Host: The host name where the database instance is located
    - Port: The port to use for connecting to the host
-   - useSSL: Indicates of the connection to the DB instance requires secure connection.
+   - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disabled"
    - passwordSecretRef: The name of the secret that contains the password for this connection
+   - passwordSecretKey: Optional value for the key value, default value is "password"
 
 The configMap and credential secrets must be mounted to volumes within the 
 pod for the db-controller.  This ensures that when the keys are updated, the 
