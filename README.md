@@ -186,3 +186,42 @@ databaseclaim-sample                   Opaque                                2  
 default-token-mnrfg                    kubernetes.io/service-account-token   3      22h
 sh.helm.release.v1.dbclaim-sample.v1   helm.sh/release.v1                    1      22h
 ```
+
+### Debug Dynamic Database
+The implementation is currently using crossplane but
+it could use any provider to overlay over the DatabaseClaim.
+
+We need to configure a dynamic database connection in the
+configuration. TODO - this could be omitted and we could
+setup everything from the claim. The configuration looks like:
+
+```yaml
+# host omitted, allocates database dynamically
+dynamic-connection:
+  username: root
+  port: 5432
+  sslMode: require
+  engineVersion: 12.8
+  passwordSecretRef: dynamic-connection-secret
+```
+
+There will be two local debugging environment:
+
+* one will be to setup crossplane on kind cluster and debug as that will be the fastest way to bring up the environment.
+  - This will require having a EKS cluster that you can reference for setting up the subnet-group and security group which tied to EKS vpc
+  - It will also require setting up a different ProviderConfig right now it is using IRSA and will need local credentials
+* second will be to setup crossplane on EKS and this will the closest to production testing
+
+For kind environment run the deploy setps:
+***TODO - This is not working yet, see above notes***
+```bash
+cd deploy
+make kind
+```
+
+For EKS we assume you have run:
+```bash
+cd deploy
+make eks
+kubectl create namespace db-controller    
+```

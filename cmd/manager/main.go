@@ -33,6 +33,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	// +kubebuilder:scaffold:imports
+	crossplanedbv1beta1 "github.com/crossplane/provider-aws/apis/database/v1beta1"
 )
 
 var (
@@ -45,6 +46,9 @@ func init() {
 
 	_ = persistancev1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+
+	// Infrastructure provisioning using crossplane
+	_ = crossplanedbv1beta1.SchemeBuilder.AddToScheme(scheme)
 
 }
 
@@ -86,6 +90,8 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	// Need to add Custom Crossplane Resource
 
 	if err = (&controllers.DatabaseClaimReconciler{
 		Client:     mgr.GetClient(),

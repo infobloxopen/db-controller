@@ -61,10 +61,10 @@ type DatabaseClaimSpec struct {
 
 	// DSN key name.
 	DSNName string `json:"dsnName"`
-	
+
 	// The optional Shape values are arbitrary and help drive instance selection
 	Shape string `json:"shape"`
-	
+
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	MinStorageGB int `json:"minStorageGB"`
 }

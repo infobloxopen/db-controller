@@ -1,10 +1,9 @@
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.5.0
+    controller-gen.kubebuilder.io/version: ""
   creationTimestamp: null
   name: databaseclaims.persistance.atlas.infoblox.com
 spec:
@@ -22,10 +21,14 @@ spec:
         description: DatabaseClaim is the Schema for the databaseclaims API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -33,40 +36,60 @@ spec:
             description: DatabaseClaimSpec defines the desired state of DatabaseClaim
             properties:
               appId:
-                description: Specifies an indentifier for the application using the database.
+                description: Specifies an indentifier for the application using the
+                  database.
                 minLength: 1
                 type: string
               databaseName:
                 description: The name of the database instance.
                 type: string
               dbNameOverride:
-                description: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
+                description: In most cases the AppID will match the database name.
+                  In some cases, however, we will need to provide an optional override.
                 type: string
               dsnName:
                 description: DSN key name.
                 type: string
               host:
-                description: The optional host name where the database instance is located. If the value is omitted, then the host value from the matching InstanceLabel will be used.
+                description: The optional host name where the database instance is
+                  located. If the value is omitted, then the host value from the matching
+                  InstanceLabel will be used.
                 type: string
               instanceLabel:
-                description: The matching fragment key name of the database instance that will host the database.
+                description: The matching fragment key name of the database instance
+                  that will host the database.
                 type: string
+              minStorageGB:
+                description: The optional MinStorageGB value requests the minimum
+                  database host storage capacity in GBytes
+                type: integer
               port:
-                description: The optional port to use for connecting to the host. If the value is omitted, then the host value from the matching InstanceLabel will be used.
+                description: The optional port to use for connecting to the host.
+                  If the value is omitted, then the host value from the matching InstanceLabel
+                  will be used.
                 type: string
               secretName:
-                description: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
+                description: The name of the secret to use for storing the ConnectionInfo.  Must
+                  follow a naming convention that ensures it is unique.
+                type: string
+              shape:
+                description: The optional Shape values are arbitrary and help drive
+                  instance selection
                 type: string
               type:
-                description: Specifies the type of database to provision. Only postgres is supported.
+                description: Specifies the type of database to provision. Only postgres
+                  is supported.
                 minLength: 0
                 type: string
               userName:
-                description: The username that the application will use for accessing the database.
+                description: The username that the application will use for accessing
+                  the database.
                 type: string
             required:
             - appId
             - dsnName
+            - minStorageGB
+            - shape
             - type
             - userName
             type: object
@@ -100,7 +123,8 @@ spec:
                 description: Any errors related to provisioning this claim.
                 type: string
               matchLabel:
-                description: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+                description: The name of the label that was successfully matched against
+                  the fragment key names in the db-controller configMap
                 type: string
               userUpdatedAt:
                 description: Time the user/password was updated/created
@@ -114,9 +138,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

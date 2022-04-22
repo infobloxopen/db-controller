@@ -1,12 +1,17 @@
 # master credentials source can be 'aws' or 'secret'
-#authSource: "aws"
-authSource: "secret"
+#authSource: aws
+authSource: secret
 # if aws authorization is used iam role must be provided
-#iamRole: "rds-role"
+#iamRole: rds-role
+region: us-west-1
+vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
+dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
+dynamicHostWaitTimeMin: 1
+
 passwordConfig:
   passwordComplexity: enabled
-  minPasswordLength: "15"
-  passwordRotationPeriod: "60"
+  minPasswordLength: 15
+  passwordRotationPeriod: 60
 sample-connection:
   username: postgres
   host: localhost
@@ -14,6 +19,13 @@ sample-connection:
   sslMode: disable
   passwordSecretRef: postgres-postgresql
   passwordSecretKey: postgresql-password
+# host omitted, allocates database dynamically
+dynamic-connection:
+  username: root
+  port: 5432
+  sslMode: require
+  engineVersion: 12.8
+  passwordSecretRef: dynamic-connection-secret
 another.connection:
   username: root
   host: some.other.service

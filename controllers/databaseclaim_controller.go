@@ -20,8 +20,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
-	
+
 	"github.com/armon/go-radix"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
@@ -34,10 +35,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	
+
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
-	
+
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
@@ -53,6 +54,7 @@ const (
 	// rotation time in minutes
 	minRotationTime        = 60
 	maxRotationTime        = 1440
+	maxWaitTime            = 10
 	defaultRotationTime    = minRotationTime
 	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
 )
@@ -90,8 +92,23 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		return r.manageError(ctx, dbClaim, err)
 	}
 
+	connInfo := r.getClientConn(fragmentKey, dbClaim)
+
+	if connInfo.Host == "" {
+		// We will now support dynamic database provisioning
+		// return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
+		connInfo, err = r.getDynamicHost(ctx, fragmentKey, dbClaim)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		if connInfo.Host == "" {
+			// Schedule a new reconciliation after getDynamicHostWaitTime()
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+		}
+	}
+
 	log.Info("creating database client")
-	dbClient, err := r.getClient(ctx, log, fragmentKey, dbClaim)
+	dbClient, err := r.getClient(ctx, log, fragmentKey, dbClaim, &connInfo)
 	if err != nil {
 		log.Error(err, "creating database client error")
 		return r.manageError(ctx, dbClaim, err)
@@ -273,31 +290,145 @@ func (r *DatabaseClaimReconciler) getAuthSource() string {
 	return r.Config.GetString("authSource")
 }
 
-func (r *DatabaseClaimReconciler) createCloudDatabase(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
-	// TODO - pick a name using random number so its unique
-	dbName := "db-controller-1234"
-	dbSecret := xpv1.SecretReference{
-		Name: dbName,
-		// TODO - Namesapce should come from db-controller instance cluster context
-		Namespace: "db-controller",
+func (r *DatabaseClaimReconciler) getRegion() string {
+	return r.Config.GetString("region")
+}
+
+func (r *DatabaseClaimReconciler) getVpcSecurityGroupIDRefs() string {
+	return r.Config.GetString("vpcSecurityGroupIDRefs")
+}
+
+func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
+	return r.Config.GetString("dbSubnetGroupNameRef")
+}
+
+func (r *DatabaseClaimReconciler) getEngineVersion(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
+	t := r.Config.GetInt("dynamicHostWaitTimeMin")
+	if t > maxWaitTime {
+		msg := "dynamic host wait time is out of range, should be between 1 " + strconv.Itoa(maxWaitTime) + " min"
+		r.Log.Info(msg)
+		return time.Minute
+	}
+
+	return time.Duration(t) * time.Minute
+}
+
+// FindStatusCondition finds the conditionType in conditions.
+func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus ) bool {
+	conditions :=  resourceStatus.Conditions
+	ready := xpv1.TypeReady
+	for i := range conditions {
+		if conditions[i].Type == ready {
+			return true
+		}
 	}
 	
-	// TODO - These should come from configuration
+	return false
+}
+
+func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
+	rs := &corev1.Secret{}
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+	
+	secretName := r.getDynamicHostName(fragmentKey, dbClaim)
+	serviceNS, _ := getServiceNamespace()
+	
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: serviceNS,
+		Name:      secretName,
+	}, rs)
+	if err != nil {
+		return connInfo
+	}
+	
+	connInfo.Host = string(rs.Data["endpoint"])
+	connInfo.Port = string(rs.Data["port"])
+	connInfo.Username = string(rs.Data["username"])
+	
+	return connInfo
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHostName(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	// Make sure dynamic host name is unique used for infrastructure and
+	// secret resources.
+	//
+	// This pattern is picked so if fragmentKey is set the database could be
+	// shared by multiple claims, while if not set it is used exclusively by
+	// a single claim.
+	prefix := "db-controller-"
+	
+	if fragmentKey == "" {
+		return  prefix + dbClaim.Name
+	}
+	
+	return prefix + fragmentKey
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (persistancev1.DatabaseClaimConnectionInfo, error) {
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+	
+	// Make sure dbHostName is unique
+	dbHostName := r.getDynamicHostName(fragmentKey, dbClaim)
+
+	rds := &crossplanedb.RDSInstance{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, rds)
+	if err != nil {
+		err = r.createCloudDatabase(dbHostName, ctx, fragmentKey, dbClaim)
+		if err != nil {
+			return connInfo, err
+		}
+		return connInfo, nil
+	}
+	
+	// Check if resource is ready
+	if !r.isResourceReady(rds.Status.ResourceStatus) {
+		return connInfo, nil
+	}
+	
+	// Check database secret
+	connInfo = r.readResourceSecret(ctx, fragmentKey, dbClaim)
+	
+	// SSL Mode is always required
+	// TODO connInfo.SSLMode should have types for enums
+	connInfo.SSLMode = "require"
+	
+	return connInfo, nil
+}
+
+func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
+	serviceNS, err := getServiceNamespace()
+	if err != nil {
+		return err
+	}
+
+	dbSecret := xpv1.SecretReference{
+		Name:      dbHostName,
+		Namespace: serviceNS,
+	}
+
 	// Infrastructure Config
-	region := "us-west-1"
+	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
 	// Database Config
-	masterUsername := "masteruser"
-	engineVersion := "12.8"
+	masterUsername := r.getMasterUser(fragmentKey)
+	engineVersion := r.getEngineVersion(fragmentKey)
 	skipFinalSnapshotBeforeDeletion := false
 	publiclyAccessible := false
-	enableIAMDatabaseAuthentication	:= true
-	
+	// TODO - Enable IAM auth based on authSource config
+	enableIAMDatabaseAuthentication := false
+
 	rdsInstance := &crossplanedb.RDSInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      dbName,
+			Name: dbHostName,
 			// TODO - Figure out the proper labels for resource
 			// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			// TODO - Figure out the proper OwnerReferences
@@ -315,47 +446,45 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(ctx context.Context, dbCla
 		Spec: crossplanedb.RDSInstanceSpec{
 			ForProvider: crossplanedb.RDSInstanceParameters{
 				Region: &region,
-				// TODO - the RDS Security Group reference should come from config
 				VPCSecurityGroupIDRefs: []xpv1.Reference{
-					{Name: "seizadi-bloxinabox-rds-sg"},
+					{Name: r.getVpcSecurityGroupIDRefs()},
 				},
-				// TODO - the RDS Subnet Group reference should come from config
 				DBSubnetGroupNameRef: &xpv1.Reference{
-					Name: "seizadi-bloxinabox-rds-subnetgroup",
+					Name: r.getDbSubnetGroupNameRef(),
 				},
-				// Items from Claim
-				// Ony Support Postgres right now ignore Claim Type value
+				// Items from Claim and fragmentKey
+				// Only Support Postgres right now ignore Claim Type value
 				// Engine: dbClaim.Spec.Type,
-				Engine: "postgres",
-				DBInstanceClass: dbClaim.Spec.Shape,
+				Engine:           "postgres",
+				DBInstanceClass:  dbClaim.Spec.Shape,
 				AllocatedStorage: &dbClaim.Spec.MinStorageGB,
 				// Items from Config
-				MasterUsername: &masterUsername,
-				EngineVersion: &engineVersion,
+				MasterUsername:                  &masterUsername,
+				EngineVersion:                   &engineVersion,
 				SkipFinalSnapshotBeforeDeletion: &skipFinalSnapshotBeforeDeletion,
-				PubliclyAccessible: &publiclyAccessible,
+				PubliclyAccessible:              &publiclyAccessible,
 				EnableIAMDatabaseAuthentication: &enableIAMDatabaseAuthentication,
 			},
 			ResourceSpec: xpv1.ResourceSpec{
 				WriteConnectionSecretToReference: &dbSecret,
-				ProviderConfigReference: &providerConfigReference,
+				ProviderConfigReference:          &providerConfigReference,
 			},
 		},
 	}
 	r.Log.Info("creating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-	
+
 	return r.Client.Create(ctx, rdsInstance)
 }
 
-func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
 	// FIXME - Implement updateCloudDatabase()
 	// Retrieve Database from dbClaim reference
 	rdsInstance := &crossplanedb.RDSInstance{}
-	
+
 	// Update RDSInstance
-	
+
 	r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-	
+
 	return r.Client.Update(ctx, rdsInstance)
 }
 
@@ -433,9 +562,22 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, namespace string) (string, error) {
+func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, namespace string) (string, error) {
 	gs := &corev1.Secret{}
-	secretName := r.getSecretRef(fragmentKey)
+	
+	secretName := ""
+	secretKey := ""
+	
+	if dbClaim.Spec.Host == "" {
+		secretName = r.getDynamicHostName(fragmentKey, dbClaim)
+		secretKey = "password"
+	} else {
+		secretName = r.getSecretRef(fragmentKey)
+		secretKey = r.getSecretKey(fragmentKey)
+		if secretKey == "" {
+			secretKey = "password"
+		}
+	}
 
 	if secretName == "" {
 		return "", fmt.Errorf("an empty password secret reference")
@@ -448,12 +590,7 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragme
 	if err != nil {
 		return "", err
 	}
-	
-	secretKey := r.getSecretKey(fragmentKey)
-	if secretKey == "" {
-		secretKey = "password"
-	}
-	
+
 	return string(gs.Data[secretKey]), nil
 }
 
@@ -507,22 +644,30 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 	return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 }
 
-func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (dbclient.DBClient, error) {
+func (r *DatabaseClaimReconciler) getClientConn(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+
+	connInfo.Host = r.getMasterHost(fragmentKey, dbClaim)
+	connInfo.Port = r.getMasterPort(fragmentKey, dbClaim)
+	connInfo.Username = r.getMasterUser(fragmentKey)
+	connInfo.SSLMode = r.getSSLMode(fragmentKey)
+
+	return connInfo
+}
+
+func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.DBClient, error) {
 	dbType := dbClaim.Spec.Type
 
-	host := r.getMasterHost(fragmentKey, dbClaim)
-	if host == "" {
-		return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
-	}
-
-	port := r.getMasterPort(fragmentKey, dbClaim)
-	if port == "" {
+	if connInfo.Port == "" {
 		return nil, fmt.Errorf("cannot get master port for fragment key %s", fragmentKey)
 	}
 
-	user := r.getMasterUser(fragmentKey)
-	if user == "" {
+	if connInfo.Username == "" {
 		return nil, fmt.Errorf("invalid credentials (username)")
+	}
+
+	if connInfo.SSLMode == "" {
+		return nil, fmt.Errorf("invalid sslMode")
 	}
 
 	serviceNS, err := getServiceNamespace()
@@ -535,14 +680,14 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 	switch authType := r.getAuthSource(); authType {
 	case config.SecretAuthSourceType:
 		r.Log.Info("using credentials from secret")
-		password, err = r.readMasterPassword(ctx, fragmentKey, serviceNS)
+		password, err = r.readMasterPassword(ctx, fragmentKey, dbClaim, serviceNS)
 		if err != nil {
 			return nil, err
 		}
 	case config.AWSAuthSourceType:
 		r.Log.Info("using aws IAM authorization")
 		if r.MasterAuth.IsExpired() {
-			token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", host, port), user)
+			token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", connInfo.Host, connInfo.Port), connInfo.Username)
 			if err != nil {
 				return nil, err
 			}
@@ -558,14 +703,9 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 		return nil, fmt.Errorf("invalid credentials (password)")
 	}
 
-	sslMode := r.getSSLMode(fragmentKey)
-	if sslMode == "" {
-		return nil, fmt.Errorf("invalid sslMode")
-	}
+	updateHostPortStatus(dbClaim, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
-	updateHostPortStatus(dbClaim, host, port, sslMode)
-
-	return dbclient.DBClientFactory(log, dbType, host, port, user, password, sslMode)
+	return dbclient.DBClientFactory(log, dbType, connInfo.Host, connInfo.Port, connInfo.Username, password, connInfo.SSLMode)
 }
 
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {

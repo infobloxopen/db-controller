@@ -161,6 +161,9 @@ create-namespace:
 delete-namespace:
 	kubectl delete namespace ${DBCTL_NAMESPACE}
 
+update_crds: manifests
+	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crds/persistance.atlas.infoblox.com_databaseclaims.yaml
+
 install-crds:
 	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl apply -f -
 

@@ -248,7 +248,7 @@ data:
 ```
 
 * authSource: Determines how database host master password is retrieved. The possible values are "secret" and "aws". In the case of "secret" the value from the passwordSecretRef Secret is used for the password. In the case of "aws" the RDS password is retrieved using AWS APIs and db-controller should have IAM credentials to make the necessary calls.
-
+* region: The region where dynamic database is allocated
 * passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disable.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
 
 * minPasswordLength: Ensures that the generated password is at least this length.  The value is in the range [15, 99].  The default value is 15.  Upper limit is Postgresql max password length limit.
@@ -259,7 +259,8 @@ data:
    - Username: The username for the master/root user of the database instance
    - Host: The host name where the database instance is located
    - Port: The port to use for connecting to the host
-   - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disabled"
+   - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disable"
+   - * engineVersion: The version of RDS instance, for now Postgres version, but could be other types
    - passwordSecretRef: The name of the secret that contains the password for this connection
    - passwordSecretKey: Optional value for the key value, default value is "password"
 
@@ -392,6 +393,7 @@ stateDiagram
 ***N/A***
 
 ## Implementation
+
 ***TODO***
 ***Document full implementation for now focused on claim pattern updates***
 
@@ -493,7 +495,13 @@ the working db-controller to interoperate:
     UpdateStatus->>GetDBName: dbClaim
     GetDBName->>UpdateStatus: Spec.DatabaseName or Spec.DBNameOverride            
 ```
-
+### Deployment
+When API is updated need to update the crd definition
+and helm chart that updates it. The following make target
+is setup to do this:
+```bash
+make update_crds
+```
 ### Authentication
 ### Authorization
 This db-controller service will require access to credentials that have
