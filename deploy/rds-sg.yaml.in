@@ -20,6 +20,7 @@ spec:
         ipProtocol: tcp
         ipRanges:
           - cidrIp: 0.0.0.0/0
-            description: all ips
+            # TODO - For production limit to private vpc
+            description: all ips - TODO - For production limit to private vpc
   providerConfigRef:
     name: default

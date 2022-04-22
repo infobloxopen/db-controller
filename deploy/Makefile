@@ -10,7 +10,14 @@ POSTGRES_VERSION := 12.8
 
 default: eks
 
+kind:  crossplane crossplane_aws
+	@echo "kind cluster setup complete"
+
+kind_cluster: .cluster
+	kind create cluster
+
 eks: cluster crossplane crossplane_trust crossplane_aws
+	@echo "EKS cluster setup complete"
 
 .id:
 	git config user.email | awk -F@ '{print $$1}' > .id
