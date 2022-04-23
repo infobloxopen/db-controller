@@ -121,7 +121,7 @@ kubectl create namespace db-controller
 
 Create postgres database server:
 ```bash
-cd infobloxopen/db-controller/helm/sample-postgres
+cd helm/sample-postgres
 helm install -n db-controller postgres .
 ```
 Make sure it is running

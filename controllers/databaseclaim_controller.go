@@ -568,7 +568,7 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragme
 	secretName := ""
 	secretKey := ""
 	
-	if dbClaim.Spec.Host == "" {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
 		secretName = r.getDynamicHostName(fragmentKey, dbClaim)
 		secretKey = "password"
 	} else {
