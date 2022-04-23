@@ -318,25 +318,25 @@ func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
 }
 
 // FindStatusCondition finds the conditionType in conditions.
-func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus ) bool {
-	conditions :=  resourceStatus.Conditions
+func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus) bool {
+	conditions := resourceStatus.Conditions
 	ready := xpv1.TypeReady
 	for i := range conditions {
 		if conditions[i].Type == ready {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
 	rs := &corev1.Secret{}
 	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
-	
+
 	secretName := r.getDynamicHostName(fragmentKey, dbClaim)
 	serviceNS, _ := getServiceNamespace()
-	
+
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: serviceNS,
 		Name:      secretName,
@@ -344,11 +344,11 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, fragme
 	if err != nil {
 		return connInfo
 	}
-	
+
 	connInfo.Host = string(rs.Data["endpoint"])
 	connInfo.Port = string(rs.Data["port"])
 	connInfo.Username = string(rs.Data["username"])
-	
+
 	return connInfo
 }
 
@@ -360,17 +360,17 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(fragmentKey string, dbClaim
 	// shared by multiple claims, while if not set it is used exclusively by
 	// a single claim.
 	prefix := "db-controller-"
-	
+
 	if fragmentKey == "" {
-		return  prefix + dbClaim.Name
+		return prefix + dbClaim.Name
 	}
-	
+
 	return prefix + fragmentKey
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (persistancev1.DatabaseClaimConnectionInfo, error) {
 	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
-	
+
 	// Make sure dbHostName is unique
 	dbHostName := r.getDynamicHostName(fragmentKey, dbClaim)
 
@@ -386,19 +386,19 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 		}
 		return connInfo, nil
 	}
-	
+
 	// Check if resource is ready
 	if !r.isResourceReady(rds.Status.ResourceStatus) {
 		return connInfo, nil
 	}
-	
+
 	// Check database secret
 	connInfo = r.readResourceSecret(ctx, fragmentKey, dbClaim)
-	
+
 	// SSL Mode is always required
 	// TODO connInfo.SSLMode should have types for enums
 	connInfo.SSLMode = "require"
-	
+
 	return connInfo, nil
 }
 
@@ -564,10 +564,10 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 
 func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, namespace string) (string, error) {
 	gs := &corev1.Secret{}
-	
+
 	secretName := ""
 	secretKey := ""
-	
+
 	if r.getMasterHost(fragmentKey, dbClaim) == "" {
 		secretName = r.getDynamicHostName(fragmentKey, dbClaim)
 		secretKey = "password"
