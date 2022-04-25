@@ -7,6 +7,10 @@ region: us-west-1
 vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
 dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
 dynamicHostWaitTimeMin: 1
+defaultShape: db.t2.small
+defaultMinStorageGB: 20
+defaultEngineVersion: 12.8
+defaultMasterUsername: root
 
 passwordConfig:
   passwordComplexity: enabled
@@ -24,8 +28,10 @@ dynamic-connection:
   username: root
   port: 5432
   sslMode: require
-  engineVersion: 12.8
   passwordSecretRef: dynamic-connection-secret
+  shape: db.t2.small
+  minStorageGB: 20
+  engineVersion: 12.8
 another.connection:
   username: root
   host: some.other.service

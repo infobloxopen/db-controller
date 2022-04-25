@@ -302,10 +302,6 @@ func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
 	return r.Config.GetString("dbSubnetGroupNameRef")
 }
 
-func (r *DatabaseClaimReconciler) getEngineVersion(fragmentKey string) string {
-	return r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
-}
-
 func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
 	t := r.Config.GetInt("dynamicHostWaitTimeMin")
 	if t > maxWaitTime {
@@ -402,6 +398,64 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 	return connInfo, nil
 }
 
+type DynamicHostParms struct {
+	Engine string
+	Shape string
+	MinStorageGB int
+	EngineVersion string
+	MasterUsername string
+	SkipFinalSnapshotBeforeDeletion bool
+	PubliclyAccessible bool
+	EnableIAMDatabaseAuthentication bool
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHostParams (ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (DynamicHostParms, error) {
+	params := DynamicHostParms{}
+	
+	// Only Support Postgres right now ignore Claim Type value
+	// Engine: dbClaim.Spec.Type,
+	params.Engine = "postgres"
+	
+	// Database Config
+	if fragmentKey == "" {
+		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
+		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
+		params.Shape = dbClaim.Spec.Shape
+		params.MinStorageGB = dbClaim.Spec.MinStorageGB
+	} else {
+		params.MasterUsername = r.getMasterUser(fragmentKey)
+		params.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
+		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
+		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
+	}
+	
+	// Set defaults
+	
+	if params.MasterUsername == "" {
+		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
+	}
+	
+	if params.EngineVersion == "" {
+		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
+	}
+	
+	if params.Shape == "" {
+		params.Shape = r.Config.GetString("defaultShape")
+	}
+	
+	if params.MinStorageGB == 0 {
+		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
+	}
+
+	params.SkipFinalSnapshotBeforeDeletion = false
+	params.PubliclyAccessible = false
+	
+	// TODO - Enable IAM auth based on authSource config
+	params.EnableIAMDatabaseAuthentication = false
+	
+	return params, nil
+}
+
 func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
 	serviceNS, err := getServiceNamespace()
 	if err != nil {
@@ -418,13 +472,8 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
-	// Database Config
-	masterUsername := r.getMasterUser(fragmentKey)
-	engineVersion := r.getEngineVersion(fragmentKey)
-	skipFinalSnapshotBeforeDeletion := false
-	publiclyAccessible := false
-	// TODO - Enable IAM auth based on authSource config
-	enableIAMDatabaseAuthentication := false
+	
+	params, _ := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
 	rdsInstance := &crossplanedb.RDSInstance{
 		ObjectMeta: metav1.ObjectMeta{
@@ -455,15 +504,15 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 				// Items from Claim and fragmentKey
 				// Only Support Postgres right now ignore Claim Type value
 				// Engine: dbClaim.Spec.Type,
-				Engine:           "postgres",
-				DBInstanceClass:  dbClaim.Spec.Shape,
-				AllocatedStorage: &dbClaim.Spec.MinStorageGB,
+				Engine:           params.Engine,
+				DBInstanceClass:  params.Shape,
+				AllocatedStorage: &params.MinStorageGB,
 				// Items from Config
-				MasterUsername:                  &masterUsername,
-				EngineVersion:                   &engineVersion,
-				SkipFinalSnapshotBeforeDeletion: &skipFinalSnapshotBeforeDeletion,
-				PubliclyAccessible:              &publiclyAccessible,
-				EnableIAMDatabaseAuthentication: &enableIAMDatabaseAuthentication,
+				MasterUsername:                  &params.MasterUsername,
+				EngineVersion:                   &params.EngineVersion,
+				SkipFinalSnapshotBeforeDeletion: &params.SkipFinalSnapshotBeforeDeletion,
+				PubliclyAccessible:              &params.PubliclyAccessible,
+				EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 			},
 			ResourceSpec: xpv1.ResourceSpec{
 				WriteConnectionSecretToReference: &dbSecret,

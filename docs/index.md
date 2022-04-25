@@ -260,9 +260,16 @@ data:
    - Host: The host name where the database instance is located
    - Port: The port to use for connecting to the host
    - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disable"
-   - * engineVersion: The version of RDS instance, for now Postgres version, but could be other types
    - passwordSecretRef: The name of the secret that contains the password for this connection
    - passwordSecretKey: Optional value for the key value, default value is "password"
+   - shape: The value of shape, see DatabaseClaim, specified here when defined by FragmentKey
+   - minStorageGB: The value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
+   - engineVersion: The version of RDS instance, for now Postgres version, but could be other types
+
+* defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
+* defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
+* defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
+* defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
 
 The configMap and credential secrets must be mounted to volumes within the 
 pod for the db-controller.  This ensures that when the keys are updated, the 
