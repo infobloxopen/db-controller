@@ -34,6 +34,10 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
 	//+kubebuilder:scaffold:imports
+	"github.com/infobloxopen/db-controller/pkg/config"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+	// +kubebuilder:scaffold:imports
+	crossplanedbv1beta1 "github.com/crossplane/provider-aws/apis/database/v1beta1"
 )
 
 var (
@@ -55,20 +59,25 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var configFile string
 	var probeAddr string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
+		"Database connection string to with root credentials.")
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
+	
+	logger := zap.New(zap.UseFlagOptions(&opts))
+	ctlConfig := config.NewConfig(logger, configFile)
+	ctrl.SetLogger(logger)
+	
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -83,8 +92,11 @@ func main() {
 	}
 
 	if err = (&controllers.DatabaseClaimReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:     mgr.GetClient(),
+		Log:        ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
+		Scheme:     mgr.GetScheme(),
+		Config:     ctlConfig,
+		MasterAuth: rdsauth.NewMasterAuth(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
