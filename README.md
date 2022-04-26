@@ -225,3 +225,11 @@ cd deploy
 make eks
 kubectl create namespace db-controller    
 ```
+
+### Problems with Integration Tests
+
+I raised an 
+[issue on Kubebuilder community](https://github.com/kubernetes-sigs/kubebuilder/issues/2642)
+seems to be problem with MacOS based on my investigation. If you running MacOS you can 
+[load the tools locally](https://book.kubebuilder.io/reference/envtest.html?highlight=integration#configuring-envtest-for-integration-tests)
+and tests should run.

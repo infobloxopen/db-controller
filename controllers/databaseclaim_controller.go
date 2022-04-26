@@ -399,23 +399,23 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 }
 
 type DynamicHostParms struct {
-	Engine string
-	Shape string
-	MinStorageGB int
-	EngineVersion string
-	MasterUsername string
+	Engine                          string
+	Shape                           string
+	MinStorageGB                    int
+	EngineVersion                   string
+	MasterUsername                  string
 	SkipFinalSnapshotBeforeDeletion bool
-	PubliclyAccessible bool
+	PubliclyAccessible              bool
 	EnableIAMDatabaseAuthentication bool
 }
 
-func (r *DatabaseClaimReconciler) getDynamicHostParams (ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
+func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
 	params := DynamicHostParms{}
-	
+
 	// Only Support Postgres right now ignore Claim Type value
 	// Engine: dbClaim.Spec.Type,
 	params.Engine = "postgres"
-	
+
 	// Database Config
 	if fragmentKey == "" {
 		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
@@ -428,31 +428,31 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams (ctx context.Context, fra
 		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
 		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
 	}
-	
+
 	// Set defaults
-	
+
 	if params.MasterUsername == "" {
 		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
 	}
-	
+
 	if params.EngineVersion == "" {
 		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
 	}
-	
+
 	if params.Shape == "" {
 		params.Shape = r.Config.GetString("defaultShape")
 	}
-	
+
 	if params.MinStorageGB == 0 {
 		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
 	}
 
 	params.SkipFinalSnapshotBeforeDeletion = false
 	params.PubliclyAccessible = false
-	
+
 	// TODO - Enable IAM auth based on authSource config
 	params.EnableIAMDatabaseAuthentication = false
-	
+
 	return params
 }
 
@@ -472,7 +472,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
-	
+
 	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
 	rdsInstance := &crossplanedb.RDSInstance{
