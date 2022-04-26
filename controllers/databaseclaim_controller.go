@@ -409,7 +409,7 @@ type DynamicHostParms struct {
 	EnableIAMDatabaseAuthentication bool
 }
 
-func (r *DatabaseClaimReconciler) getDynamicHostParams (ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (DynamicHostParms, error) {
+func (r *DatabaseClaimReconciler) getDynamicHostParams (ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
 	params := DynamicHostParms{}
 	
 	// Only Support Postgres right now ignore Claim Type value
@@ -453,7 +453,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams (ctx context.Context, fra
 	// TODO - Enable IAM auth based on authSource config
 	params.EnableIAMDatabaseAuthentication = false
 	
-	return params, nil
+	return params
 }
 
 func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
@@ -473,7 +473,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 		Name: "default",
 	}
 	
-	params, _ := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
+	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
 	rdsInstance := &crossplanedb.RDSInstance{
 		ObjectMeta: metav1.ObjectMeta{

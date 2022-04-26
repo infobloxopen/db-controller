@@ -50,7 +50,7 @@ func init() {
 
 	utilruntime.Must(persistancev1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
-	
+
 	// Infrastructure provisioning using crossplane
 	utilruntime.Must(crossplanedbv1beta1.SchemeBuilder.AddToScheme(scheme))
 
@@ -73,11 +73,11 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-	
+
 	logger := zap.New(zap.UseFlagOptions(&opts))
 	ctlConfig := config.NewConfig(logger, configFile)
 	ctrl.SetLogger(logger)
-	
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,

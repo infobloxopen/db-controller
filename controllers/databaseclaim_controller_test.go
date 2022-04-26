@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -96,7 +97,9 @@ type mockClient struct {
 
 func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	_ = ctx
-	if key.Namespace == "testNamespace" && key.Name == "sample-master-secret" {
+	if (key.Namespace == "testNamespace") &&
+		(key.Name == "sample-master-secret" || key.Name == "db-controller-sample-connection" ||
+			key.Name == "db-controller-sample-claim") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")
@@ -121,6 +124,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		ctx         context.Context
 		fragmentKey string
 		namespace   string
+		dbclaim     persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name       string
@@ -156,6 +160,33 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			true,
 		},
 		{
+			"Get dynamic database master password no fragment, from dbclaim name",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretRef),
+			},
+			args{
+				fragmentKey: "",
+				namespace:   "testNamespace",
+				dbclaim:     persistancev1.DatabaseClaim{ObjectMeta: metav1.ObjectMeta{Name: "sample-claim"}},
+			},
+			"masterpassword",
+			false,
+		},
+		{
+			"Get dynamic database master password no fragment host",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+				namespace:   "testNamespace",
+			},
+			"masterpassword",
+			false,
+		},
+		{
 			"Get master password secret not found",
 			mockReconciler{
 				Client: &mockClient{},
@@ -177,7 +208,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
 			}
-			got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, tt.args.namespace)
+			got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, &tt.args.dbclaim, tt.args.namespace)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("readMasterPassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -190,6 +221,12 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 }
 
 var secretRef = []byte(`
+    sample-connection:
+      host: sample-master-host
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostRef = []byte(`
     sample-connection:
       PasswordSecretRef: sample-master-secret
 `)
@@ -251,6 +288,7 @@ var testConfig = []byte(`
       PasswordSecretRef: sample-master-secret
 `)
 
+// TODO - Write additional tests for dynamic host allocation
 func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 	type mockReconciler struct {
 		Client client.Client
