@@ -86,13 +86,13 @@ new connection string information provided by the proxy.
         loop
             K8S->>db-controller: new DBClaim
             rect rgba(0, 0, 255, .2)
-                Note over db-controller: Database Host == Presence of Instance 
+                Note over db-controller: Check for Dynamic Database Creation 
                 db-controller->>db-controller: Instance exists?
-                db-controller->>infra-operator: CloudDatabaseClaim
+                db-controller->>infra-operator: No -> CloudDatabaseClaim
                 loop Wait for Database Instance
                     infra-operator->>infra-operator: provision instance
                 end
-                loop Wait for Database Connection
+                loop Wait for Database Connection Secret
                     db-controller->>db-controller: Connection Secret exists?
                 end
             end
@@ -262,14 +262,16 @@ data:
    - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disable"
    - passwordSecretRef: The name of the secret that contains the password for this connection
    - passwordSecretKey: Optional value for the key value, default value is "password"
-   - shape: The value of shape, see DatabaseClaim, specified here when defined by FragmentKey
-   - minStorageGB: The value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
-   - engineVersion: The version of RDS instance, for now Postgres version, but could be other types
+   - shape: The optional value of shape, see DatabaseClaim, specified here when defined by FragmentKey
+   - minStorageGB: The optional value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
+   - engineVersion: The optional version of RDS instance, for now Postgres version, but could be other types
+   - ReclaimPolicy: The optional ReclaimPolicy value defines policy, default delete, possible values: delete, recycle
 
 * defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
 * defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
 * defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
 * defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
+* defaultReclaimPolicy: The ReclaimPolicy policy default delete, possible values: delete, recycle
 
 The configMap and credential secrets must be mounted to volumes within the 
 pod for the db-controller.  This ensures that when the keys are updated, the 
@@ -328,10 +330,11 @@ DatabaseClaim:
       - DatabaseName: The name of the database instance. 
       - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
       - DSNName: The key used for the client dsn connection string in the Secret
-      - [Host]: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - [Port]: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - [Shape]: The optional Shape values are arbitrary and help drive instance selection
-      - [MinStorageGB]: The optional MinStorageGB value requests the minimum database host storage capacity
+      - Host: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Port: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Shape: The optional Shape values are arbitrary and help drive instance selection
+      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity
+      - ReclaimPolicy: The optional ReclaimPolicy value defines policy, default delete, possible values: delete, recycle
 
    * status:
       - Error: Any errors related to provisioning this claim.
@@ -502,6 +505,68 @@ the working db-controller to interoperate:
     UpdateStatus->>GetDBName: dbClaim
     GetDBName->>UpdateStatus: Spec.DatabaseName or Spec.DBNameOverride            
 ```
+
+### Lifecycle
+***TODO - Document the full lifecycle not just for Dynamic Host***
+
+The dynamic host allocation will have the following lifecycle, the
+ReclaimPolicy has been simplified, is not a single flag but an
+aggregated values from a number of sources.
+
+```mermaid
+graph TB
+A((DbClaim)) --o B
+B[Create] --> D[Create Dynamic Host]
+C[Update] --> E[Update Dynamic Host]
+A --o C
+F[Delete] --> G{ReclaimPolicy == Delete?}
+A --o F
+G -- No --> H[Delete DbClaim]
+G -- Yes --> I[Delete CloudDatabase]
+I --> H
+```
+
+The intent is to have the
+[pattern used by pv and pvc](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaiming)
+in Kubernetes. The ReclaimPolicy attribute with the DatabaseClaim that informs the
+db-controller of the application intent for how to dispose of the
+CloudDatabase resource. The CloudDataBase resource ReclaimPolicy is
+to inform the Infrastructure Operator of how to dispose of the external
+RDS database resource.
+
+In addition to the ReclaimPolicy attribute with the DatabaseClaim, there are
+global ReclaimPolicy and per FragmentKey ReclaimPolicy flags that define how
+the CloudDatabase ReclaimPolicy should be managed.
+
+The global ReclaimPolicy will override the DatabaseClaim so that in production
+we can ignore the application request and retain the database. The FragmentKey
+ReclaimPolicy gives us finer control over how databases managed by FragmentKeys
+are treated and overrider the global ReclaimPolicy.
+
+The FragmentKey allows databases to be shared using InstanceLabel.
+DatabaseClaim resources are namespaced, but the
+CloudDatabase resources they dynamically provision are cluster scoped. 
+A namespaced resource cannot, by design, own a cluster scoped resource. 
+This could be an issue in how we manage lifecycle, see 
+[kubernetes](https://github.com/kubernetes/kubernetes/issues/65200) and 
+[crossplane](https://github.com/crossplane/provider-gcp/issues/99) references. 
+I don't set a owner reference for cluster scoped resources that are
+created by DatabaseClaim resource.
+
+The Crossplane Infrastructure Operator, has a
+resource DeletionPolicy which specifies what will happen 
+to the underlying external cloud resource when this managed resource is 
+deleted - either "Delete" or "Orphan" the external resource. At this time
+there is not a plan to use this feature.
+
+Another features we have is to share resources like RDS among
+different clusters that are deployed. We don't have a design yet on
+how to best support this requirement.
+Crossplane Infrastructure Operator supports multiple clusters,
+using an admin cluster and then resources like CloudDatabases
+are pushed to the managed clusters,
+[Crossplane workload reference](https://blog.crossplane.io/crossplane-v0-7-schedule-workloads-to-any-kubernetes-cluster-including-bare-metal/).
+
 ### Deployment
 When API is updated need to update the crd definition
 and helm chart that updates it. The following make target
