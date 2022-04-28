@@ -511,17 +511,40 @@ the working db-controller to interoperate:
 
 The dynamic host allocation will have the following lifecycle:
 
+The create and update lifecycles are fairly simple:
 ```mermaid
-graph TB
-A((DbClaim)) --o B
-B[Create] --> D[Create Dynamic Host]
-C[Update] --> E[Update Dynamic Host]
-A --o C
-F[Delete] --> G{InstanceLabel == "" ?}
-A --o F
-G -- No --> H[Delete DbClaim]
-G -- Yes --> I[Delete CloudDatabase]
-I --> H
+stateDiagram-v2
+CDH: Create Dynamic Host
+CDU: Update Dynamic Host
+
+[*] --> DbClaim
+state DbClaim {
+    Create --> CDH
+    --
+    Update --> CDU
+}
+```
+
+The delete lifecycle is more complex shown below:
+
+```mermaid
+stateDiagram-v2
+DCD: Delete CloudDatabase
+DDC: Delete DatabaseClaim
+
+[*] --> DbClaim
+state DbClaim {
+    Delete --> Finalizer
+    state Finalizer {
+        state check_label <<choice>>
+        [*] --> check_label
+        check_label --> DCD: if ReclaimPolicy == Delete && No Other DbClaims == InstanceLabel
+        check_label --> [*] : if ReclaimPolicy == Retain || Other DbClaims == InstanceLabel
+        DCD --> [*]
+    }
+    Finalizer --> DDC
+    DDC --> [*]
+}
 ```
 
 The sharing of database by multiple applicaitons (Claims) by Crossplane
@@ -563,8 +586,18 @@ does not offer a
 A argument made [here](https://github.com/crossplane/crossplane/issues/1229#issuecomment-585382715) 
 suggest that in most cases sharing infrastructure within namespace 
 boundaries with a  single claim is valid, as namespace == application 
-team boundary. Does forcing applciations to share namespaces for
+team boundary. Does forcing applciations to share namespace for
 database sharing cause any issues, e.g. RBAC?
+
+The initial PoC will manage ReclaimPolicy from the db-controller
+configuration using the InstanceLabels that enable sharing.
+There will be a DatabaseClaim finalizer that will run 
+and if there are no more claims against the InstanceLabel
+then the dynamic database is reclaimed. There will also
+be a global and reclaim policy per InstanceLabel/FragmentKey.
+This will not be exposed to the Applications e.g. ReclaimPolicy 
+in the DatabaseClaim. I don't think we need this complexity
+but could be added if there is a need.
 
 The Crossplane Infrastructure Operator, has a
 resource DeletionPolicy which specifies what will happen 
