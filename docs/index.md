@@ -265,13 +265,13 @@ data:
    - shape: The optional value of shape, see DatabaseClaim, specified here when defined by FragmentKey
    - minStorageGB: The optional value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
    - engineVersion: The optional version of RDS instance, for now Postgres version, but could be other types
-   - ReclaimPolicy: The optional ReclaimPolicy value defines policy, default delete, possible values: delete, recycle
+   - DeletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan
 
 * defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
 * defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
 * defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
 * defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
-* defaultReclaimPolicy: The ReclaimPolicy policy default delete, possible values: delete, recycle
+* defaultDeletePolicy: The DeletePolicy for CloudDatabase, default delete, possible values: delete, orphan
 
 The configMap and credential secrets must be mounted to volumes within the 
 pod for the db-controller.  This ensures that when the keys are updated, the 
@@ -334,7 +334,7 @@ DatabaseClaim:
       - Port: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
       - Shape: The optional Shape values are arbitrary and help drive instance selection
       - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity
-      - ReclaimPolicy: The optional ReclaimPolicy value defines policy, default delete, possible values: delete, recycle
+      - DeletePolicy: The optional DeletePolicy value defines policy, default delete, possible values: delete, recycle
 
    * status:
       - Error: Any errors related to provisioning this claim.
@@ -509,9 +509,7 @@ the working db-controller to interoperate:
 ### Lifecycle
 ***TODO - Document the full lifecycle not just for Dynamic Host***
 
-The dynamic host allocation will have the following lifecycle, the
-ReclaimPolicy has been simplified, is not a single flag but an
-aggregated values from a number of sources.
+The dynamic host allocation will have the following lifecycle:
 
 ```mermaid
 graph TB
@@ -519,45 +517,60 @@ A((DbClaim)) --o B
 B[Create] --> D[Create Dynamic Host]
 C[Update] --> E[Update Dynamic Host]
 A --o C
-F[Delete] --> G{ReclaimPolicy == Delete?}
+F[Delete] --> G{InstanceLabel == "" ?}
 A --o F
 G -- No --> H[Delete DbClaim]
 G -- Yes --> I[Delete CloudDatabase]
 I --> H
 ```
 
-The intent is to have the
+The sharing of database by multiple applicaitons (Claims) by Crossplane
+[is an open issue](https://github.com/crossplane/provider-gcp/issues/157.
+The db-controller creates the CloudDatabase Claim and the associated
+connection secret is created in the db-controller namespace.
+We can allow sharing of the database using the FragmentKey structure
+by mapping to the FragmentKKey using DatabaseClaim InstanceLabel property.
+
+[Crossplane](https://github.com/crossplane/crossplane-runtime/issues/21) started 
+with the intent of using a similar
 [pattern used by pv and pvc](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaiming)
-in Kubernetes. The ReclaimPolicy attribute with the DatabaseClaim that informs the
-db-controller of the application intent for how to dispose of the
-CloudDatabase resource. The CloudDataBase resource ReclaimPolicy is
-to inform the Infrastructure Operator of how to dispose of the external
-RDS database resource.
+in Kubernetes. The ReclaimPolicy had a lot off issues and it
+[got backed out](https://github.com/crossplane/crossplane-runtime/issues/179) and
+it got renamed to DeletionPolicy on just the CloudDatabase resource.
 
-In addition to the ReclaimPolicy attribute with the DatabaseClaim, there are
-global ReclaimPolicy and per FragmentKey ReclaimPolicy flags that define how
-the CloudDatabase ReclaimPolicy should be managed.
-
-The global ReclaimPolicy will override the DatabaseClaim so that in production
-we can ignore the application request and retain the database. The FragmentKey
-ReclaimPolicy gives us finer control over how databases managed by FragmentKeys
-are treated and overrider the global ReclaimPolicy.
-
-The FragmentKey allows databases to be shared using InstanceLabel.
 DatabaseClaim resources are namespaced, but the
-CloudDatabase resources they dynamically provision are cluster scoped. 
-A namespaced resource cannot, by design, own a cluster scoped resource. 
-This could be an issue in how we manage lifecycle, see 
-[kubernetes](https://github.com/kubernetes/kubernetes/issues/65200) and 
-[crossplane](https://github.com/crossplane/provider-gcp/issues/99) references. 
-I don't set a owner reference for cluster scoped resources that are
-created by DatabaseClaim resource.
+CloudDatabase resources are dynamically provisioned as cluster scoped.
+A namespaced resource cannot, by design, own a cluster scoped resource.
+This could be an issue in how we manage lifecycle, see
+[kubernetes](https://github.com/kubernetes/kubernetes/issues/65200) and
+[crossplane](https://github.com/crossplane/provider-gcp/issues/99) references.
+
+Given the Crossplane experience we will retain the FragmentKey allocation
+CloudDatabase cluster resource so that it can be shared. The deletion of
+ClaimDatabase will remove the CloudDatabase directly allocated
+directly by its claim, similar behavior to Crossplane composite behavior 
+
+We need some more research PoC to figure out if
+we can use 
+[Kubernetes Finalizers](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/)
+on DatabaseClaim to honor a ReclaimPolicy with values of delete and retain.
+Then have ReclaimPolicy delete a dynamically allocated database
+that is no longer shared. The reason for the 
+[deprecation of ReclaimPolicy from CrossPlane](https://github.com/crossplane/crossplane-runtime/issues/179#issuecomment-637462056)
+needs to be examined in the light of our requirements and why Crossplane
+does not offer a 
+[Shared Database Pattern](https://github.com/crossplane/provider-gcp/issues/157).
+A argument made [here](https://github.com/crossplane/crossplane/issues/1229#issuecomment-585382715) 
+suggest that in most cases sharing infrastructure within namespace 
+boundaries with a  single claim is valid, as namespace == application 
+team boundary. Does forcing applciations to share namespaces for
+database sharing cause any issues, e.g. RBAC?
 
 The Crossplane Infrastructure Operator, has a
 resource DeletionPolicy which specifies what will happen 
 to the underlying external cloud resource when this managed resource is 
-deleted - either "Delete" or "Orphan" the external resource. At this time
-there is not a plan to use this feature.
+deleted - either "Delete" or "Orphan" the external resource. This will
+be managed by defaultDeletionPolicy and deletionPolicy on each FragmentKey.
 
 Another features we have is to share resources like RDS among
 different clusters that are deployed. We don't have a design yet on
@@ -566,6 +579,8 @@ Crossplane Infrastructure Operator supports multiple clusters,
 using an admin cluster and then resources like CloudDatabases
 are pushed to the managed clusters,
 [Crossplane workload reference](https://blog.crossplane.io/crossplane-v0-7-schedule-workloads-to-any-kubernetes-cluster-including-bare-metal/).
+Crossplane also have an [observerable pattern](https://github.com/crossplane/provider-gcp/issues/157)
+to deal with this coupling between clusters trying to share resources.
 
 ### Deployment
 When API is updated need to update the crd definition
