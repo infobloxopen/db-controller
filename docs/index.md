@@ -78,7 +78,6 @@ new database connections for the application will then transparently use the
 new connection string information provided by the proxy.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'fontFamily': 'aerial', 'fontSize': '50px', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
   sequenceDiagram
     autonumber
     CD ->> K8S: apply manifest
@@ -473,7 +472,6 @@ proposed changes to support dynamic database creation while leaving much of
 the working db-controller to interoperate:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
   sequenceDiagram
     UpdateStatus->>matchInstanceLabel: Spec.InstanceLabel
     matchInstanceLabel->>Status: Status.MatchedLabel
