@@ -78,6 +78,7 @@ new database connections for the application will then transparently use the
 new connection string information provided by the proxy.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'fontFamily': 'aerial', 'fontSize': '50px', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
   sequenceDiagram
     autonumber
     CD ->> K8S: apply manifest
@@ -167,7 +168,7 @@ If we use a solution like crossplane which provides
 this part of the data model might be deleted.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'fontFamily': 'aerial', 'fontSize': '50px', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 erDiagram
     DatabaseClaim ||--o{ ClaimMap : ""
     DatabaseClaim ||--|| CloudDatabaseClaim : ""
@@ -177,9 +178,10 @@ erDiagram
 This the deploying with the CR scheme:
 **Relationship of a DatabaseClaim to a Secret and a Pod:**
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 stateDiagram
   direction LR
-  Application --> DatabaseClaim : Mamofest
+  Application --> DatabaseClaim : Manifest
   DatabaseClaim --> CloudDatabaseClaim : map internal or</br> using ClaimMap
   CloudDatabaseClaim --> rdsInstance : create instance
 ```
@@ -393,6 +395,7 @@ spec:
 
 **Relationship of a DatabaseClaim to a Secret and a Pod:**
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 stateDiagram
   direction LR
   Pod --> Secret : references
@@ -442,6 +445,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 The following is the high level view of the reconcile logic:
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 graph TB
 A((Client)) --o B
 B[K8S API Server] --> C[db-controller]
@@ -469,6 +473,7 @@ proposed changes to support dynamic database creation while leaving much of
 the working db-controller to interoperate:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
   sequenceDiagram
     UpdateStatus->>matchInstanceLabel: Spec.InstanceLabel
     matchInstanceLabel->>Status: Status.MatchedLabel
@@ -513,6 +518,7 @@ The dynamic host allocation will have the following lifecycle:
 
 The create and update lifecycles are fairly simple:
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 stateDiagram-v2
 CDH: Create Dynamic Host
 CDU: Update Dynamic Host
@@ -528,6 +534,7 @@ state DbClaim {
 The delete lifecycle is more complex shown below:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 stateDiagram-v2
 DCD: Delete CloudDatabase
 DDC: Delete DatabaseClaim
