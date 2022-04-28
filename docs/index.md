@@ -525,7 +525,7 @@ I --> H
 ```
 
 The sharing of database by multiple applicaitons (Claims) by Crossplane
-[is an open issue](https://github.com/crossplane/provider-gcp/issues/157.
+[is an open issue](https://github.com/crossplane/provider-gcp/issues/157).
 The db-controller creates the CloudDatabase Claim and the associated
 connection secret is created in the db-controller namespace.
 We can allow sharing of the database using the FragmentKey structure
