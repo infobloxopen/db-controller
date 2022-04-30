@@ -162,9 +162,10 @@ In the case of AWS you would leverage
 [ACK RDS Provider](https://github.com/aws-controllers-k8s/rds-controller).
 
 The ClaimMap is meant to transform between DatabaseClaim and CloudDatabaseClaim.
-If we use a solution like crossplane which provides
-[transform functions](https://github.com/crossplane/crossplane/blob/master/design/design-doc-composition.md#transform-functions)
-this part of the data model might be deleted.
+We will not use a resource for the ClaimMap, but will use a naming convention to do the
+mapping and will use the existing FragmentKey for the map to group a number of
+DatabaseClaim to share a database instance. If more complex use cases arrive we
+could implement a resource to provide the mapping.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
@@ -251,10 +252,8 @@ data:
 * authSource: Determines how database host master password is retrieved. The possible values are "secret" and "aws". In the case of "secret" the value from the passwordSecretRef Secret is used for the password. In the case of "aws" the RDS password is retrieved using AWS APIs and db-controller should have IAM credentials to make the necessary calls.
 * region: The region where dynamic database is allocated
 * passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disable.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
-
 * minPasswordLength: Ensures that the generated password is at least this length.  The value is in the range [15, 99].  The default value is 15.  Upper limit is Postgresql max password length limit.
-
-* passwordRotationPeriod defines the period of time (in minutes) before a password is rotated.  The value can be in the range [60, 1440] minutes.  The default value is 60 minutes.
+* passwordRotationPeriod: Defines the period of time (in minutes) before a password is rotated.  The value can be in the range [60, 1440] minutes.  The default value is 60 minutes.
 
 * Fragment Keys: This is the label to use for identifying the master connection information to a DB instance
    - Username: The username for the master/root user of the database instance
@@ -266,13 +265,15 @@ data:
    - shape: The optional value of shape, see DatabaseClaim, specified here when defined by FragmentKey
    - minStorageGB: The optional value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
    - engineVersion: The optional version of RDS instance, for now Postgres version, but could be other types
-   - DeletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan
+   - deletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan
+   - reclaimPolicy: Used as value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
 
 * defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
 * defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
 * defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
 * defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
-* defaultDeletePolicy: The DeletePolicy for CloudDatabase, default delete, possible values: delete, orphan
+* defaultDeletionPolicy: The DeletionPolicy for CloudDatabase, possible values: delete, orphan
+* defaultReclaimPolicy: Used as default value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
 
 The configMap and credential secrets must be mounted to volumes within the 
 pod for the db-controller.  This ensures that when the keys are updated, the 
@@ -451,8 +452,11 @@ B[K8S API Server] --> C[db-controller]
 C--> D[Reconciler]
 D--> E{claim valid?}
 E -- No --> C
-E -- Yes --> F[UpdateStatus]
-F --> C
+E -- Yes -->F{Delete?}
+F -- No --> G[UpdateStatus]
+F -- Yes --> H[Clean Up Resources]
+H --> C
+G --> C
 C -->B
 B --> A
 ```
@@ -541,10 +545,13 @@ DDC: Delete DatabaseClaim
 state DbClaim {
     Delete --> Finalizer
     state Finalizer {
+        state check_host <<choice>>
         state check_label <<choice>>
-        [*] --> check_label
-        check_label --> DCD: if ReclaimPolicy == Delete && No Other DbClaims == InstanceLabel
-        check_label --> [*] : if ReclaimPolicy == Retain || Other DbClaims == InstanceLabel
+        [*] --> check_host
+        check_host --> check_label: if Claim.Host == ""
+        check_host --> [*] : if Claim.Host != ""
+        check_label --> DCD: if ReclaimPolicy == Delete &&<br/> DbClaims using CloudDB == 1
+        check_label --> [*] : if ReclaimPolicy == Retain
         DCD --> [*]
     }
     Finalizer --> DDC

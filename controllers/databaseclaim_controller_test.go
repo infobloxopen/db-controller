@@ -33,6 +33,38 @@ var complexityDisabled = []byte(`
       passwordRotationPeriod: "60"
 `)
 
+var secretRef = []byte(`
+    sample-connection:
+      host: sample-master-host
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostRef = []byte(`
+    defaultReclaimPolicy: retain
+    sample-connection:
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostDeleteRef = []byte(`
+    defaultReclaimPolicy: delete
+    sample-connection:
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHosFragmentDeleteRef = []byte(`
+    defaultReclaimPolicy: retain
+    sample-connection:
+      ReclaimPolicy: delete
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostFragmentRetainRef = []byte(`
+    defaultReclaimPolicy: delete
+    sample-connection:
+      ReclaimPolicy: retain
+      PasswordSecretRef: sample-master-secret
+`)
+
 func TestDatabaseClaimReconcilerGeneratePassword(t *testing.T) {
 	type reconciler struct {
 		Client client.Client
@@ -220,16 +252,93 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 	}
 }
 
-var secretRef = []byte(`
-    sample-connection:
-      host: sample-master-host
-      PasswordSecretRef: sample-master-secret
-`)
-
-var secretNoHostRef = []byte(`
-    sample-connection:
-      PasswordSecretRef: sample-master-secret
-`)
+func TestGetReclaimPolicy(t *testing.T) {
+	type mockReconciler struct {
+		Client client.Client
+		Log    logr.Logger
+		Scheme *runtime.Scheme
+		Config *viper.Viper
+	}
+	type args struct {
+		fragmentKey string
+	}
+	tests := []struct {
+		name       string
+		reconciler mockReconciler
+		args       args
+		want       string
+	}{
+		{
+			"Get retain with empty fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"retain",
+		},
+		{
+			"Get delete with empty fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostDeleteRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"delete",
+		},
+		{
+			"Get delete with fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHosFragmentDeleteRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"delete",
+		},
+		{
+			"Get retain with fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostFragmentRetainRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"retain",
+		},
+		{
+			"Get delete from defaultReclaimPolicy with no fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostFragmentRetainRef),
+			},
+			args{
+				fragmentKey: "",
+			},
+			"delete",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client: tt.reconciler.Client,
+				Log:    tt.reconciler.Log,
+				Scheme: tt.reconciler.Scheme,
+				Config: tt.reconciler.Config,
+			}
+			got := r.getReclaimPolicy(tt.args.fragmentKey)
+			if got != tt.want {
+				t.Errorf("getReclaimPolicy() got = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
 	type mockReconciler struct {

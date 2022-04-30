@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -75,6 +76,41 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
 		log.Error(err, "unable to fetch DatabaseClaim")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// name of our custom finalizer
+	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
+
+	// examine DeletionTimestamp to determine if object is under deletion
+	if dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object. This is equivalent
+		// registering our finalizer.
+		if !controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			controllerutil.AddFinalizer(&dbClaim, dbFinalizerName)
+			if err := r.Update(ctx, &dbClaim); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			// our finalizer is present, so lets handle any external dependency
+			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(&dbClaim, dbFinalizerName)
+			if err := r.Update(ctx, &dbClaim); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
 	}
 
 	return r.updateStatus(ctx, &dbClaim)
@@ -203,6 +239,57 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	return r.manageSuccess(ctx, dbClaim)
 }
 
+func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
+	defaultReclaimPolicy := r.Config.GetString("defaultReclaimPolicy")
+
+	if fragmentKey == "" {
+		return defaultReclaimPolicy
+	}
+
+	reclaimPolicy := r.Config.GetString(fmt.Sprintf("%s::reclaimPolicy", fragmentKey))
+
+	if reclaimPolicy == "retain" || (reclaimPolicy == "" && defaultReclaimPolicy == "retain") {
+		// Don't need to delete
+		return "retain"
+	} else {
+		// Assume reclaimPolicy == "delete"
+		return "delete"
+	}
+}
+
+func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	// delete any external resources associated with the dbClaim
+	// Only RDS Instance are managed for now
+	
+	if dbClaim.Spec.Host == "" {
+		
+		fragmentKey := dbClaim.Spec.InstanceLabel
+		reclaimPolicy := r.getReclaimPolicy(fragmentKey)
+
+		if reclaimPolicy == "delete" {
+			dbHostName := r.getDynamicHostName(fragmentKey, dbClaim)
+			if fragmentKey == "" {
+				// Delete
+				return r.deleteCloudDatabase(dbHostName, ctx)
+			} else {
+				// Check there is no other Claims that use this fragment
+				var dbClaimList persistancev1.DatabaseClaimList
+				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+					return err
+				}
+				
+				if len(dbClaimList.Items) == 1 {
+					// Delete
+					return r.deleteCloudDatabase(dbHostName, ctx)
+				}
+			}
+		}
+		// else reclaimPolicy == "retain" nothing to do!
+	}
+
+	return nil
+}
+
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	var pass string
 	var err error
@@ -225,7 +312,22 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
+
+var(
+	instanceLableKey = ".spec.instanceLabel"
+	apiGVStr    = persistancev1.GroupVersion.String()
+)
+
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &persistancev1.DatabaseClaim{}, instanceLableKey, func(rawObj client.Object) []string {
+		// grab the DatabaseClaim object, extract the InstanceLabel for index...
+		claim := rawObj.(*persistancev1.DatabaseClaim)
+		return []string{claim.Spec.InstanceLabel}
+	}); err != nil {
+		return err
+	}
+	
 	pred := predicate.GenerationChangedPredicate{}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DatabaseClaim{}).WithEventFilter(pred).
@@ -382,6 +484,13 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 		}
 		return connInfo, nil
 	}
+	
+	// Deletion is long running task check that is not being deleted.
+	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
+		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
+		r.Log.Error(err, "RDSInstance", dbHostName)
+		return connInfo, err
+	}
 
 	// Check if resource is ready
 	if !r.isResourceReady(rds.Status.ResourceStatus) {
@@ -407,6 +516,7 @@ type DynamicHostParms struct {
 	SkipFinalSnapshotBeforeDeletion bool
 	PubliclyAccessible              bool
 	EnableIAMDatabaseAuthentication bool
+	DeletionPolicy xpv1.DeletionPolicy
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
@@ -446,9 +556,15 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 	if params.MinStorageGB == 0 {
 		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
 	}
-
-	params.SkipFinalSnapshotBeforeDeletion = false
-	params.PubliclyAccessible = false
+	
+	// TODO - Implement these for each fragmentKey also
+	params.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool ("defaultSkipFinalSnapshotBeforeDeletion")
+	params.PubliclyAccessible = r.Config.GetBool ("defaultPubliclyAccessible")
+	if r.Config.GetString ("defaultDeletionPolicy") == "delete" {
+		params.DeletionPolicy = xpv1.DeletionDelete
+	} else {
+		params.DeletionPolicy = xpv1.DeletionOrphan
+	}
 
 	// TODO - Enable IAM auth based on authSource config
 	params.EnableIAMDatabaseAuthentication = false
@@ -480,17 +596,6 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 			Name: dbHostName,
 			// TODO - Figure out the proper labels for resource
 			// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-			// TODO - Figure out the proper OwnerReferences
-			//OwnerReferences: []metav1.OwnerReference{
-			//	{
-			//		APIVersion:         "databaseclaims.persistance.atlas.infoblox.com/v1",
-			//		Kind:               "CustomResourceDefinition",
-			//		Name:               dbClaim.Name,
-			//		UID:                dbClaim.UID,
-			//		Controller:         &truePtr,
-			//		BlockOwnerDeletion: &truePtr,
-			//	},
-			//},
 		},
 		Spec: crossplanedb.RDSInstanceSpec{
 			ForProvider: crossplanedb.RDSInstanceParameters{
@@ -517,12 +622,41 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 			ResourceSpec: xpv1.ResourceSpec{
 				WriteConnectionSecretToReference: &dbSecret,
 				ProviderConfigReference:          &providerConfigReference,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
+
 	r.Log.Info("creating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
 
 	return r.Client.Create(ctx, rdsInstance)
+}
+
+func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
+	
+	rds := &crossplanedb.RDSInstance{}
+	
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, rds)
+	if err != nil {
+		// Nothing to delete
+		return nil
+	}
+	
+	// Deletion is long running task check that is not already deleted.
+	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
+		return nil
+	}
+	
+	if err := r.Delete(ctx, rds, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+		r.Log.Info("unable delete crossplane RDSInstance resource", "RDSInstance", dbHostName)
+		return err
+	} else {
+		r.Log.Info("deleted crossplane RDSInstance resource", "RDSInstance", dbHostName)
+	}
+	
+	return nil
 }
 
 func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {

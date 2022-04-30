@@ -11,6 +11,11 @@ defaultShape: db.t2.small
 defaultMinStorageGB: 20
 defaultEngineVersion: 12.8
 defaultMasterUsername: root
+defaultReclaimPolicy: retain
+# For Production this should be false and if SnapShot is not taken it will not be deleted
+defaultSkipFinalSnapshotBeforeDeletion: true
+defaultPubliclyAccessible: false
+defaultDeletionPolicy: delete
 
 passwordConfig:
   passwordComplexity: enabled
@@ -32,6 +37,7 @@ dynamic-connection:
   shape: db.t2.small
   minStorageGB: 20
   engineVersion: 12.8
+  reclaimPolicy: delete
 another.connection:
   username: root
   host: some.other.service
