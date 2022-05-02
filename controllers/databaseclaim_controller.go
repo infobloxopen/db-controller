@@ -133,11 +133,11 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	}
 
 	connInfo := r.getClientConn(fragmentKey, dbClaim)
-
 	if connInfo.Host == "" {
+		var err error
 		// We will now support dynamic database provisioning
 		// return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
-		connInfo, err := r.getDynamicHost(ctx, fragmentKey, dbClaim)
+		connInfo, err = r.getDynamicHost(ctx, fragmentKey, dbClaim)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -161,6 +161,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	dbName := GetDBName(dbClaim)
 	created, err := dbClient.CreateDataBase(dbName)
 	if err != nil {
+		postrgresURI := dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, "", dbName, connInfo.SSLMode)
+		msg := fmt.Sprintf("error creating database postgresURI %s", postrgresURI)
+		log.Error(err, msg)
 		return r.manageError(ctx, dbClaim, err)
 	} else if created || dbClaim.Status.ConnectionInfo.DatabaseName == "" {
 		updateDBStatus(dbClaim, dbName)
@@ -533,6 +536,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 
 	// SSL Mode is always required
 	// TODO connInfo.SSLMode should have types for enums
+	// FIXME - should come from config now that it is defined.
 	connInfo.SSLMode = "require"
 
 	return connInfo, nil

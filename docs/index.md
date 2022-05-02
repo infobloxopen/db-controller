@@ -44,6 +44,42 @@ information by the client service.
 | DB Instance Migration  | CR Change create new database instance and migrate data and delete infrastructure CR          |
 | DB Instance Migration  | Migration should with Canary pattern once tests pass all traffic to the new database          |
 
+## Demo
+
+### Configuration
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+
+flowchart TB
+subgraph shared
+app1-->claim1
+app2-->claim2
+end
+subgraph dedicated
+app3-->claim3
+end
+
+claim1 --> rdsinstance1[(RDS Instance 1)]
+claim2 --> rdsinstance1
+claim3 --> rdsinstance2[(RDS Instance 2)]
+```
+
+### Policy Demo
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+
+flowchart TB
+subgraph shared policy
+reclaim1[shared ReclaimPolicy] --> shared[retain]
+end
+subgraph default policy
+reclaim2[default ReclaimPolicy] --> dedicated[delete]
+end
+
+reclaim1 --> rdsinstance1[(RDS Instance 1)]
+reclaim2 --> rdsinstance2[(RDS Instance 2)]
+```
+
 ## Service Architecture
 The first component is a db-controller service that will be responsible 
 for reading DBClaims and then provisioning the database and user(s) 

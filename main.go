@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -58,13 +59,16 @@ func init() {
 
 func main() {
 	var metricsAddr string
+	var metricsPort int
 	var enableLeaderElection bool
 	var configFile string
 	var probeAddr string
-	// FIXME - Need default values for the config and config-file should be optional over-ride defaults
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+	var probePort int
+	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
+	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-address", "", "The address the probe endpoint binds to.")
+	flag.IntVar(&probePort, "health-probe-port", 8081, "The port the probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
@@ -81,11 +85,11 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		MetricsBindAddress:     fmt.Sprintf("%s:%d", metricsAddr, metricsPort),
+		HealthProbeBindAddress: fmt.Sprintf("%s:%d", probeAddr, probePort),
 		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "01434111.atlas.infoblox.com",
+		LeaderElectionID:       "32151587.atlas.infoblox.com",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
