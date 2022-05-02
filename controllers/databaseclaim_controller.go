@@ -123,9 +123,13 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{}
 	}
 
-	fragmentKey, err := r.matchInstanceLabel(dbClaim)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
+	var fragmentKey string
+	if dbClaim.Spec.InstanceLabel != "" {
+		var err error
+		fragmentKey, err = r.matchInstanceLabel(dbClaim)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
 	}
 
 	connInfo := r.getClientConn(fragmentKey, dbClaim)
@@ -133,7 +137,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	if connInfo.Host == "" {
 		// We will now support dynamic database provisioning
 		// return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
-		connInfo, err = r.getDynamicHost(ctx, fragmentKey, dbClaim)
+		connInfo, err := r.getDynamicHost(ctx, fragmentKey, dbClaim)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -260,9 +264,9 @@ func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
 func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
 	// delete any external resources associated with the dbClaim
 	// Only RDS Instance are managed for now
-	
+
 	if dbClaim.Spec.Host == "" {
-		
+
 		fragmentKey := dbClaim.Spec.InstanceLabel
 		reclaimPolicy := r.getReclaimPolicy(fragmentKey)
 
@@ -277,7 +281,7 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
 					return err
 				}
-				
+
 				if len(dbClaimList.Items) == 1 {
 					// Delete
 					return r.deleteCloudDatabase(dbHostName, ctx)
@@ -312,14 +316,13 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
-
-var(
+var (
 	instanceLableKey = ".spec.instanceLabel"
-	apiGVStr    = persistancev1.GroupVersion.String()
+	apiGVStr         = persistancev1.GroupVersion.String()
 )
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	
+
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &persistancev1.DatabaseClaim{}, instanceLableKey, func(rawObj client.Object) []string {
 		// grab the DatabaseClaim object, extract the InstanceLabel for index...
 		claim := rawObj.(*persistancev1.DatabaseClaim)
@@ -327,7 +330,7 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}); err != nil {
 		return err
 	}
-	
+
 	pred := predicate.GenerationChangedPredicate{}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DatabaseClaim{}).WithEventFilter(pred).
@@ -343,20 +346,48 @@ func (r *DatabaseClaimReconciler) getMasterHost(fragmentKey string, dbClaim *per
 	return r.Config.GetString(fmt.Sprintf("%s::Host", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getMasterUser(fragmentKey string) string {
+func (r *DatabaseClaimReconciler) getMasterUser(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		return r.Config.GetString("defaultMasterUsername")
+	}
+
+	if dbClaim.Spec.Username != "" {
+		return dbClaim.Spec.Username
+	}
+
+	if fragmentKey == "" {
+		return r.Config.GetString("defaultMasterUsername")
+	}
+
 	return r.Config.GetString(fmt.Sprintf("%s::Username", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) getMasterPort(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		return r.Config.GetString("defaultMasterPort")
+	}
+
 	// If config port is overridden by db claims port
 	if dbClaim.Spec.Port != "" {
 		return dbClaim.Spec.Port
 	}
 
+	if fragmentKey == "" {
+		return r.Config.GetString("defaultMasterPort")
+	}
+
 	return r.Config.GetString(fmt.Sprintf("%s::Port", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
+func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		return r.Config.GetString("defaultSslMode")
+	}
+
+	if fragmentKey == "" {
+		return r.Config.GetString("defaultSslMode")
+	}
+
 	return r.Config.GetString(fmt.Sprintf("%s::sslMode", fragmentKey))
 }
 
@@ -484,7 +515,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 		}
 		return connInfo, nil
 	}
-	
+
 	// Deletion is long running task check that is not being deleted.
 	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
 		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
@@ -516,7 +547,7 @@ type DynamicHostParms struct {
 	SkipFinalSnapshotBeforeDeletion bool
 	PubliclyAccessible              bool
 	EnableIAMDatabaseAuthentication bool
-	DeletionPolicy xpv1.DeletionPolicy
+	DeletionPolicy                  xpv1.DeletionPolicy
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
@@ -533,7 +564,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 		params.Shape = dbClaim.Spec.Shape
 		params.MinStorageGB = dbClaim.Spec.MinStorageGB
 	} else {
-		params.MasterUsername = r.getMasterUser(fragmentKey)
+		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
 		params.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
 		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
 		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
@@ -556,11 +587,11 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 	if params.MinStorageGB == 0 {
 		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
 	}
-	
+
 	// TODO - Implement these for each fragmentKey also
-	params.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool ("defaultSkipFinalSnapshotBeforeDeletion")
-	params.PubliclyAccessible = r.Config.GetBool ("defaultPubliclyAccessible")
-	if r.Config.GetString ("defaultDeletionPolicy") == "delete" {
+	params.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool("defaultSkipFinalSnapshotBeforeDeletion")
+	params.PubliclyAccessible = r.Config.GetBool("defaultPubliclyAccessible")
+	if r.Config.GetString("defaultDeletionPolicy") == "delete" {
 		params.DeletionPolicy = xpv1.DeletionDelete
 	} else {
 		params.DeletionPolicy = xpv1.DeletionOrphan
@@ -622,7 +653,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 			ResourceSpec: xpv1.ResourceSpec{
 				WriteConnectionSecretToReference: &dbSecret,
 				ProviderConfigReference:          &providerConfigReference,
-				DeletionPolicy: params.DeletionPolicy,
+				DeletionPolicy:                   params.DeletionPolicy,
 			},
 		},
 	}
@@ -633,9 +664,9 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 }
 
 func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
-	
+
 	rds := &crossplanedb.RDSInstance{}
-	
+
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, rds)
@@ -643,19 +674,19 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 		// Nothing to delete
 		return nil
 	}
-	
+
 	// Deletion is long running task check that is not already deleted.
 	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
 		return nil
 	}
-	
+
 	if err := r.Delete(ctx, rds, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
 		r.Log.Info("unable delete crossplane RDSInstance resource", "RDSInstance", dbHostName)
 		return err
 	} else {
 		r.Log.Info("deleted crossplane RDSInstance resource", "RDSInstance", dbHostName)
 	}
-	
+
 	return nil
 }
 
@@ -832,8 +863,8 @@ func (r *DatabaseClaimReconciler) getClientConn(fragmentKey string, dbClaim *per
 
 	connInfo.Host = r.getMasterHost(fragmentKey, dbClaim)
 	connInfo.Port = r.getMasterPort(fragmentKey, dbClaim)
-	connInfo.Username = r.getMasterUser(fragmentKey)
-	connInfo.SSLMode = r.getSSLMode(fragmentKey)
+	connInfo.Username = r.getMasterUser(fragmentKey, dbClaim)
+	connInfo.SSLMode = r.getSSLMode(fragmentKey, dbClaim)
 
 	return connInfo
 }

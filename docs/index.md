@@ -268,7 +268,9 @@ data:
    - deletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan
    - reclaimPolicy: Used as value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
 
+* defaultMasterPort: Value of MasterPort if not specified in FragmentKey
 * defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
+* defaultSslMode: Value of sslMode if not specified in FragmentKey
 * defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
 * defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
 * defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
