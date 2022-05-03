@@ -70,10 +70,10 @@ claim3 --> rdsinstance2[(RDS Instance 2)]
 
 flowchart TB
 subgraph shared policy
-reclaim1[shared ReclaimPolicy] --> shared[retain]
+reclaim1[shared ReclaimPolicy] --> shared[delete]
 end
 subgraph default policy
-reclaim2[default ReclaimPolicy] --> dedicated[delete]
+reclaim2[default ReclaimPolicy] --> dedicated[retain]
 end
 
 reclaim1 --> rdsinstance1[(RDS Instance 1)]
@@ -218,7 +218,7 @@ This the deploying with the CR scheme:
 stateDiagram
   direction LR
   Application --> DatabaseClaim : Manifest
-  DatabaseClaim --> CloudDatabaseClaim : map internal or</br> using ClaimMap
+  DatabaseClaim --> CloudDatabaseClaim : Claim Map
   CloudDatabaseClaim --> rdsInstance : create instance
 ```
 Here is an example of what the CloudDatabaseClaim would look like if we used

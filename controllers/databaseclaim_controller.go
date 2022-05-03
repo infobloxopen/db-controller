@@ -508,6 +508,14 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 
 	rds := &crossplanedb.RDSInstance{}
 
+	// Found a use case where the change in DatabaseClaim updated crossplane RDSInstance resource
+	// the change was rejected but the cache was updated and was out of sync with api server
+	// See https://pkg.go.dev/sigs.k8s.io/controller-runtime#hdr-Clients_and_Caches
+	// "client does not promise to invalidate the cache during writes"
+	// We can use mgr.GetAPIReader() to bypass the cache and read value directly from API Server
+	// Since update does not work I am not going to make this change as it will impact
+	// the performance of the controller.
+	//
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, rds)
@@ -523,6 +531,12 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
 		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
 		r.Log.Error(err, "RDSInstance", dbHostName)
+		return connInfo, err
+	}
+	
+	update, err := r.updateCloudDatabase(ctx, fragmentKey, dbClaim, rds)
+	if update {
+		// Reschedule run after update is complete
 		return connInfo, err
 	}
 
@@ -694,16 +708,29 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
-	// FIXME - Implement updateCloudDatabase()
-	// Retrieve Database from dbClaim reference
-	rdsInstance := &crossplanedb.RDSInstance{}
-
+func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
+	
+	update := false
+	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
+	
 	// Update RDSInstance
+	// Update Shape and MinGibStorage for now
+	if (rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape) {
+		rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
+		update = true
+	}
+	
+	if (*rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB) {
+		rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
+		update = true
+	}
 
-	r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+	if update {
+		r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+		return update, r.Client.Update(ctx, rdsInstance)
+	}
 
-	return r.Client.Update(ctx, rdsInstance)
+	return update, nil
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
