@@ -313,8 +313,10 @@ kubectl create ns postgres
 helm install postgres -n postgres .
 ```
 After the database is running we can use the bundled psql client to test our database,
-using the postgres dsn from the db-controller log
+using the postgres dsn from the db-controller log. Note that the password is missing from
+the logs and you will need to find the value from the secret in db-controller namespace for
+this database as part of your connection string.
 ```bash
 kubectl exec -it postgres-postgresql-0 /bin/sh
-> psql postgres://root:@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
+> psql postgres://root:<password>@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
 ```
