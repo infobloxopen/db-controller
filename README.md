@@ -233,3 +233,74 @@ I raised an
 seems to be problem with MacOS based on my investigation. If you running MacOS you can 
 [load the tools locally](https://book.kubebuilder.io/reference/envtest.html?highlight=integration#configuring-envtest-for-integration-tests)
 and tests should run.
+
+### Problems with EKS Cluster
+
+This was a problem that was raised about this not working on a cluster that was not
+setup using the Deploy project here that is using eksctl but using other tooling.
+
+I looked at the logs:
+```bash
+kubectl logs -f db-controller-5c475895b4-44cqc -c db-controller-manager  
+```
+
+There is this error about connectivity problem:
+```json
+{
+  "level": "error",
+  "ts": 1651940225.8717563,
+  "logger": "controllers.DatabaseClaim",
+  "msg": "error creating database postgresURI postgres://root:@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require",
+  "databaseclaim": "<some namespace>/databaseclaim-dynamic-1",
+  "error": "dial tcp 10.0.0.206:5432: connect: connection timed out",
+  "stacktrace": "github.com/infobloxopen/db-controller/controllers.(*DatabaseClaimReconciler).Reconcile\n\t/workspace/controllers/databaseclaim_controller.go:116\nsigs.k8s.io/controller-runtime/pkg/internal/controller.(*Controller).Reconcile\n\t/go/pkg/mod/sigs.k8s.io/controller-runtime@v0.11.0/pkg/internal/controller/controller.go:114\nsigs.k8s.io/controller-runtime/pkg/internal/controller.(*Controller).reconcileHandler\n\t/go/pkg/mod/sigs.k8s.io/controller-runtime@v0.11.0/pkg/internal/controller/controller.go:311\nsigs.k8s.io/controller-runtime/pkg/internal/controller.(*Controller).processNextWorkItem\n\t/go/pkg/mod/sigs.k8s.io/controller-runtime@v0.11.0/pkg/internal/controller/controller.go:266\nsigs.k8s.io/controller-runtime/pkg/internal/controller.(*Controller).Start.func2.2\n\t/go/pkg/mod/sigs.k8s.io/controller-runtime@v0.11.0/pkg/internal/controller/controller.go:227"
+}
+```
+You can use a command like:
+```bash
+aws --profile <some profile> --region <some region> rds describe-db-instances  --db-instance-identifier db-controller-dynamic
+```
+
+* DBInstances->Endpoint->Address : Should match the endpoint for Postgres msg db-controller-dynamic.<some region>.rds.amazonaws.com
+* DBInstances->Endpoint->Port : 5432
+* DBInstances->VpcSecurityGroups->VpcSecurityGroupId : "sg-..." Make sure that it allows connectivity to cluster
+* DBInstances->DBSubnetGroup->VpcId: Matches EKS Cluster
+* DBInstances->DBSubnetGroup->Subnets[]: Matches EKS Cluster Subnets
+
+To check the security group you can use a command like:
+```bash
+❯ aws --profile <some-profile> --region <some-region> ec2 describe-security-groups --group-ids sg-...
+```
+
+* SecurityGroups->IpPermissions[]: Should match the port above
+
+In the above case we had:
+```json
+{
+  "SecurityGroups": [
+    {
+      "Description": "<some description>",
+      "GroupName": "<some group name>",
+      "IpPermissions": [
+        {
+          "FromPort": 10000,
+          "IpProtocol": "tcp",
+          "IpRanges": [
+            {
+              "CidrIp": "0.0.0.0/0",
+              "Description": "all ips"
+            }
+          ],
+          "Ipv6Ranges": [],
+          "PrefixListIds": [],
+          "ToPort": 10000,
+          "UserIdGroupPairs": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+Note that this Security Group is programmed to accept connection on 10000 while
+db-controller is setup to connect to 5432 so that is the cause of the issue.
