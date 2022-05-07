@@ -304,3 +304,17 @@ In the above case we had:
 
 Note that this Security Group is programmed to accept connection on 10000 while
 db-controller is setup to connect to 5432 so that is the cause of the issue.
+
+How would you test this with postgres client?
+First lets run a container with psql client in it:
+```bash
+cd helm/sample-postgres
+kubectl create ns postgres
+helm install postgres -n postgres .
+```
+After the database is running we can use the bundled psql client to test our database,
+using the postgres dsn from the db-controller log
+```bash
+kubectl exec -it postgres-postgresql-0 /bin/sh
+> psql postgres://root:@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
+```
