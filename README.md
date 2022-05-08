@@ -318,5 +318,6 @@ the logs and you will need to find the value from the secret in db-controller na
 this database as part of your connection string.
 ```bash
 kubectl exec -it postgres-postgresql-0 /bin/sh
-> psql postgres://root:<password>@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
+PGPASSWORD=mleYrpUpOz... createdb -h db-controller-dynamic.<some-region>.rds.amazonaws.com  -U root -p 10000 sample_app_claim_1
+psql postgres://root:mleYrpUpOz...@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
 ```
