@@ -317,7 +317,12 @@ using the postgres dsn from the db-controller log. Note that the password is mis
 the logs and you will need to find the value from the secret in db-controller namespace for
 this database as part of your connection string.
 ```bash
-kubectl exec -it postgres-postgresql-0 /bin/sh
+kubectl -n postgres exec -it postgres-postgresql-0 /bin/sh
 PGPASSWORD=mleYrpUpOz... createdb -h db-controller-dynamic.<some-region>.rds.amazonaws.com  -U root -p 10000 sample_app_claim_1
-psql postgres://root:mleYrpUpOz...@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
+psql postgres://root:<password>@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
 ```
+psql postgres://root:mleYrpUpOzqvKC7jC8FtKDAbyQb@db-controller-dynamic-bjeevan-connection.ctzctg1lnwhq.us-east-1.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
+psql postgres://root:mleYrpUpOzqvKC7jC8FtKDAbyQb@db-controller-dynamic-bjeevan-connection.ctzctg1lnwhq.us-east-1.rds.amazonaws.com:10000/sample_app_claim_1?sslmode=require
+
+PGPASSWORD=mleYrpUpOzqvKC7jC8FtKDAbyQb createdb -h db-controller-dynamic-bjeevan-connection.ctzctg1lnwhq.us-east-1.rds.amazonaws.com  -U root -p 5432 sample_app_claim_1
+PGPASSWORD=EonpdKzIqu0kIU8WpzmUcEFtfMm  createdb -h db-controller-databaseclaim-dynamic-1.crs4bvboouwp.us-west-1.rds.amazonaws.com -U root -p 5432 sample_app_claim_1
