@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -30,6 +31,38 @@ var complexityDisabled = []byte(`
       passwordComplexity: disabled
       minPasswordLength: "15"
       passwordRotationPeriod: "60"
+`)
+
+var secretRef = []byte(`
+    sample-connection:
+      host: sample-master-host
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostRef = []byte(`
+    defaultReclaimPolicy: retain
+    sample-connection:
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostDeleteRef = []byte(`
+    defaultReclaimPolicy: delete
+    sample-connection:
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHosFragmentDeleteRef = []byte(`
+    defaultReclaimPolicy: retain
+    sample-connection:
+      ReclaimPolicy: delete
+      PasswordSecretRef: sample-master-secret
+`)
+
+var secretNoHostFragmentRetainRef = []byte(`
+    defaultReclaimPolicy: delete
+    sample-connection:
+      ReclaimPolicy: retain
+      PasswordSecretRef: sample-master-secret
 `)
 
 func TestDatabaseClaimReconcilerGeneratePassword(t *testing.T) {
@@ -96,7 +129,9 @@ type mockClient struct {
 
 func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	_ = ctx
-	if key.Namespace == "testNamespace" && key.Name == "sample-master-secret" {
+	if (key.Namespace == "testNamespace") &&
+		(key.Name == "sample-master-secret" || key.Name == "db-controller-sample-connection" ||
+			key.Name == "db-controller-sample-claim") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")
@@ -121,6 +156,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		ctx         context.Context
 		fragmentKey string
 		namespace   string
+		dbclaim     persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name       string
@@ -156,6 +192,33 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			true,
 		},
 		{
+			"Get dynamic database master password no fragment, from dbclaim name",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretRef),
+			},
+			args{
+				fragmentKey: "",
+				namespace:   "testNamespace",
+				dbclaim:     persistancev1.DatabaseClaim{ObjectMeta: metav1.ObjectMeta{Name: "sample-claim"}},
+			},
+			"masterpassword",
+			false,
+		},
+		{
+			"Get dynamic database master password no fragment host",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+				namespace:   "testNamespace",
+			},
+			"masterpassword",
+			false,
+		},
+		{
 			"Get master password secret not found",
 			mockReconciler{
 				Client: &mockClient{},
@@ -177,7 +240,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
 			}
-			got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, tt.args.namespace)
+			got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, &tt.args.dbclaim, tt.args.namespace)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("readMasterPassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -189,10 +252,93 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 	}
 }
 
-var secretRef = []byte(`
-    sample-connection:
-      PasswordSecretRef: sample-master-secret
-`)
+func TestGetReclaimPolicy(t *testing.T) {
+	type mockReconciler struct {
+		Client client.Client
+		Log    logr.Logger
+		Scheme *runtime.Scheme
+		Config *viper.Viper
+	}
+	type args struct {
+		fragmentKey string
+	}
+	tests := []struct {
+		name       string
+		reconciler mockReconciler
+		args       args
+		want       string
+	}{
+		{
+			"Get retain with empty fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"retain",
+		},
+		{
+			"Get delete with empty fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostDeleteRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"delete",
+		},
+		{
+			"Get delete with fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHosFragmentDeleteRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"delete",
+		},
+		{
+			"Get retain with fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostFragmentRetainRef),
+			},
+			args{
+				fragmentKey: "sample-connection",
+			},
+			"retain",
+		},
+		{
+			"Get delete from defaultReclaimPolicy with no fragment key",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(secretNoHostFragmentRetainRef),
+			},
+			args{
+				fragmentKey: "",
+			},
+			"delete",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client: tt.reconciler.Client,
+				Log:    tt.reconciler.Log,
+				Scheme: tt.reconciler.Scheme,
+				Config: tt.reconciler.Config,
+			}
+			got := r.getReclaimPolicy(tt.args.fragmentKey)
+			if got != tt.want {
+				t.Errorf("getReclaimPolicy() got = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
 	type mockReconciler struct {
@@ -243,6 +389,9 @@ func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
 }
 
 var testConfig = []byte(`
+    defaultMasterPort: 5432
+    defaultMasterUsername: root
+    defaultSslMode: require
     sample-connection:
       Username: postgres
       Host: db-controller-postgresql
@@ -251,6 +400,7 @@ var testConfig = []byte(`
       PasswordSecretRef: sample-master-secret
 `)
 
+// TODO - Write additional tests for dynamic host allocation
 func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 	type mockReconciler struct {
 		Client client.Client
@@ -308,6 +458,26 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				},
 				{
 					fragmentKey: "sample-connection",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{},
+					}},
+				{
+					fragmentKey: "",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{},
+					},
+				},
+				{
+					fragmentKey: "",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{},
+					},
+				},
+				{
+					fragmentKey: "",
+					dbClaim: &persistancev1.DatabaseClaim{
+						Spec: persistancev1.DatabaseClaimSpec{},
+					},
 				},
 			},
 			[]string{
@@ -316,9 +486,13 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				"5432",
 				"1234",
 				"postgres",
+				"root",
+				"5432",
+				"require",
 			},
 		},
 	}
+	// TODO - Make this more DRY and put under a for loop.
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
@@ -351,22 +525,45 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 			}
 			t.Log("getMasterPort() Port overridden by DB claim PASS")
 
-			if got := r.getMasterUser(tt.args[4].fragmentKey); got != tt.want[4] {
+			if got := r.getMasterUser(tt.args[4].fragmentKey, tt.args[4].dbClaim); got != tt.want[4] {
 				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[4])
 			}
 			t.Log("getMasterUser() PASS")
+
+			if got := r.getMasterUser(tt.args[5].fragmentKey, tt.args[5].dbClaim); got != tt.want[5] {
+				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[5])
+			}
+			t.Log("getMasterUser() Username from default value in config PASS")
+
+			if got := r.getMasterPort(tt.args[6].fragmentKey, tt.args[6].dbClaim); got != tt.want[6] {
+				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[6])
+			}
+			t.Log("getMasterPort() Port from default value in config PASS")
+
+			if got := r.getSSLMode(tt.args[7].fragmentKey, tt.args[7].dbClaim); got != tt.want[7] {
+				t.Errorf("getSSLMode() = %v, want %v", got, tt.want[7])
+			}
+			t.Log("getSSLMode() sslMode from default value in config PASS")
 		})
 	}
 }
 
 var sslModeDisabled = []byte(`
     sample-connection:
+      host: some-host
       sslMode: disable
 `)
 
 var sslModeEnabled = []byte(`
     sample-connection:
+      host: some-host
       sslMode: require
+`)
+
+var sslModeDefault = []byte(`
+    defaultSslMode: require
+    sample-connection:
+      sslMode: disable
 `)
 
 func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
@@ -378,6 +575,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 	}
 	type args struct {
 		fragmentKey string
+		dbClaim     *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name       string
@@ -390,7 +588,12 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 			mockReconciler{
 				Config: NewConfig(sslModeDisabled),
 			},
-			args{fragmentKey: "sample-connection"},
+			args{
+				fragmentKey: "sample-connection",
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{},
+				},
+			},
 			"disable",
 		},
 		{
@@ -398,7 +601,25 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 			mockReconciler{
 				Config: NewConfig(sslModeEnabled),
 			},
-			args{fragmentKey: "sample-connection"},
+			args{
+				fragmentKey: "sample-connection",
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{},
+				},
+			},
+			"require",
+		},
+		{
+			"Get SslMode from default Config",
+			mockReconciler{
+				Config: NewConfig(sslModeDefault),
+			},
+			args{
+				fragmentKey: "sample-connection",
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{},
+				},
+			},
 			"require",
 		},
 	}
@@ -410,7 +631,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
 			}
-			if got := r.getSSLMode(tt.args.fragmentKey); got != tt.want {
+			if got := r.getSSLMode(tt.args.fragmentKey, tt.args.dbClaim); got != tt.want {
 				t.Errorf("getSSLMode() = %v, want %v", got, tt.want)
 			}
 			t.Log("getSSLMode() PASS")
