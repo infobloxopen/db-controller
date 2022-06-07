@@ -1,7 +1,16 @@
 domain: atlas.infoblox.com
+layout:
+- go.kubebuilder.io/v3
+projectName: db-controller
 repo: github.com/infobloxopen/db-controller
 resources:
-- group: persistance
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: atlas.infoblox.com
+  group: persistance
   kind: DatabaseClaim
+  path: github.com/infobloxopen/db-controller/api/v1
   version: v1
-version: "2"
+version: "3"

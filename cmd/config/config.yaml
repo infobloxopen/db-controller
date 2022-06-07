@@ -1,0 +1,48 @@
+# master credentials source can be 'aws' or 'secret'
+#authSource: aws
+authSource: secret
+# if aws authorization is used iam role must be provided
+#iamRole: rds-role
+region: us-west-1
+vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
+dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
+dynamicHostWaitTimeMin: 1
+defaultShape: db.t2.small
+defaultMinStorageGB: 20
+defaultEngineVersion: 12.8
+defaultMasterPort: 5432
+defaultSslMode: require
+defaultMasterUsername: root
+defaultReclaimPolicy: retain
+# For Production this should be false and if SnapShot is not taken it will not be deleted
+defaultSkipFinalSnapshotBeforeDeletion: true
+defaultPubliclyAccessible: false
+defaultDeletionPolicy: delete
+
+passwordConfig:
+  passwordComplexity: enabled
+  minPasswordLength: 15
+  passwordRotationPeriod: 60
+sample-connection:
+  username: postgres
+  host: localhost
+  port: 5432
+  sslMode: disable
+  passwordSecretRef: postgres-postgresql
+  passwordSecretKey: postgresql-password
+# host omitted, allocates database dynamically
+dynamic-connection:
+  username: root
+  port: 5432
+  sslMode: require
+  passwordSecretRef: dynamic-connection-secret
+  shape: db.t2.small
+  minStorageGB: 20
+  engineVersion: 12.8
+  reclaimPolicy: delete
+another.connection:
+  username: root
+  host: some.other.service
+  port: 5412
+  sslMode: require
+  passwordSecretRef: another-connection-secret
