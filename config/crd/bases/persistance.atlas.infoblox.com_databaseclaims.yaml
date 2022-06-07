@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: ""
   creationTimestamp: null
   name: databaseclaims.persistance.atlas.infoblox.com
 spec:
@@ -59,6 +59,10 @@ spec:
                 description: The matching fragment key name of the database instance
                   that will host the database.
                 type: string
+              minStorageGB:
+                description: The optional MinStorageGB value requests the minimum
+                  database host storage capacity in GBytes
+                type: integer
               port:
                 description: The optional port to use for connecting to the host.
                   If the value is omitted, then the host value from the matching InstanceLabel
@@ -67,6 +71,10 @@ spec:
               secretName:
                 description: The name of the secret to use for storing the ConnectionInfo.  Must
                   follow a naming convention that ensures it is unique.
+                type: string
+              shape:
+                description: The optional Shape values are arbitrary and help drive
+                  instance selection
                 type: string
               type:
                 description: Specifies the type of database to provision. Only postgres
@@ -128,9 +136,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

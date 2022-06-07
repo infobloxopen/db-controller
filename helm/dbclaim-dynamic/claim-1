@@ -1,0 +1,17 @@
+---
+# Source: dbclaim-sample/templates/dbclaim-sample.yaml
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DatabaseClaim
+metadata:
+  name: databaseclaim-dynamic-1
+  namespace: dbclaim
+spec:
+  appId: sample-app
+  secretName: databaseclaim-dynamic-1
+  type: postgres
+  instanceLabel: dynamic-connection
+  userName: sample_user
+  databaseName: sample_app_claim_1
+  dsnName: dynamic-postgres-dsn
+  shape: db.t2.small
+  minStorageGB: 20
