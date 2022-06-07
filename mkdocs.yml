@@ -17,11 +17,11 @@ nav:
 # TBD
 
 ## DO NOT CHANGE BELOW THIS LINE
-
+# If you have trouble with mermaid annotations try https://mermaid-js.github.io/mermaid-live-editor
 # Javascript Scripts
 extra_javascript:
 #  - https://unpkg.com/mermaid/dist/mermaid.min.js
-  - https://cdnjs.cloudflare.com/ajax/libs/mermaid/8.14.0/mermaid.min.js
+  - https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.0.1/mermaid.min.js
 
 # Theme
 theme:

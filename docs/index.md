@@ -38,8 +38,47 @@ information by the client service.
 | DDCR                   | Establish a pattern (and possible code) for apps to reload connection information from a file |
 | DDCR                   | Establish a pattern for mounting a secret that contains connection information in a secret    |
 | DDCR                   | Support dynamically changing the connection information                                       |
+| DDCR                   | Support labels for sharing of dynamically created databases                                   |
 | DDCR                   | Modify at least one Atlas app to show as an example of implementing this pattern              |
 | Cloud Provider Tagging | Cloud Resource must be tagged so that then can following organization guidelines.             |
+| DB Instance Migration  | CR Change create new database instance and migrate data and delete infrastructure CR          |
+| DB Instance Migration  | Migration should with Canary pattern once tests pass all traffic to the new database          |
+
+## Demo
+
+### Configuration
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+
+flowchart TB
+subgraph shared
+app1-->claim1
+app2-->claim2
+end
+subgraph dedicated
+app3-->claim3
+end
+
+claim1 --> rdsinstance1[(RDS Instance 1)]
+claim2 --> rdsinstance1
+claim3 --> rdsinstance2[(RDS Instance 2)]
+```
+
+### Policy Demo
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+
+flowchart TB
+subgraph shared policy
+reclaim1[shared ReclaimPolicy] --> shared[delete]
+end
+subgraph default policy
+reclaim2[default ReclaimPolicy] --> dedicated[retain]
+end
+
+reclaim1 --> rdsinstance1[(RDS Instance 1)]
+reclaim2 --> rdsinstance2[(RDS Instance 2)]
+```
 
 ## Service Architecture
 The first component is a db-controller service that will be responsible 
@@ -82,6 +121,17 @@ new connection string information provided by the proxy.
     rect rgb(0, 255, 0, .3)
         loop
             K8S->>db-controller: new DBClaim
+            rect rgba(0, 0, 255, .2)
+                Note over db-controller: Check for Dynamic Database Creation 
+                db-controller->>db-controller: Instance exists?
+                db-controller->>infra-operator: No -> CloudDatabaseClaim
+                loop Wait for Database Instance
+                    infra-operator->>infra-operator: provision instance
+                end
+                loop Wait for Database Connection Secret
+                    db-controller->>db-controller: Connection Secret exists?
+                end
+            end
             db-controller->>RDS: DB exists?
             RDS->>db-controller: no
             db-controller->>RDS: create DB
@@ -109,12 +159,90 @@ new connection string information provided by the proxy.
 ```
 
 ## Data Model
-The database proxy will include a DatabaseClaim Custom Resource.  The DatabaseClaim 
-will contain information related to a specific instance of a database.  It will 
+The database proxy will include a DatabaseClaim Custom Resource. In the first
+version of the application the DatabaseClaim contained information related 
+to a specific instance of a database. In the next major release the DatabaseClaim
+has information to help an infrastructure operator select a database for the
+client application. This pattern will allow us to make the database selection be
+pre-provisioned or dynamic on demand. It will also allow the database selction to
+be multi-cloud e.g. AWS or Azure.
+
+DatabaseClaim will 
 include properties such as the name, appID, Type, etc. During startup, 
 the db-controller will read the set of CR’s describing the DatabaseClaim and store 
-them in-memory.  The db-controller will listen for any changes to the CR’s and 
-remain in-sync with the K8 definitions.
+them in-memory. In the case of dynamic database provisioning
+a CR is created to request infrastructure operator to create the database instance.
+db-controller will check the CR satus and to make sure that the database is provisioned
+and information about it is available in a secret refrenced by the CR.
+
+The db-controller will listen for any changes to the DatabaseClaim CR’s and 
+remain in-sync with the K8 definitions. In the case of dynamic database provisioning
+a change will cause a new infrastructure CR to be created, when the new database
+instance is created we should migrate all password, data and connection to it and delete
+the old infrastructure CR. It will be infrastructure operator concern if the cloud
+database instances are deleted immediately or there is a higher level operations
+workflow to reclaim them. We can break the database migration into phases and deliver
+just new infrastructure CR on change, this might be fine for development environments
+and work on the full feature for production. There are also advanced use case like 
+canary where where an new release of the application creates the new database, tests
+the migration and once everything is working all traffic is migrated away from the
+old database and it can be reclaimed.
+
+The following shows the mapping of the DatabaseClaim to a CloudDatabase.
+The CloudDatabaseClaim could be custom or use a infrastructure provider like
+[crossplane resource composition](https://github.com/crossplane/crossplane/blob/master/design/design-doc-composition.md#resource-composition).
+The DatabaseClaim could also be mapped to a Cloud provider like
+[AWS ACK](https://github.com/aws-controllers-k8s/community), providing multi-cloud support by transforming
+DatabaseClaim to a specific cloud provider CR.
+In the case of AWS you would leverage
+[ACK RDS Provider](https://github.com/aws-controllers-k8s/rds-controller).
+
+The ClaimMap is meant to transform between DatabaseClaim and CloudDatabaseClaim.
+We will not use a resource for the ClaimMap, but will use a naming convention to do the
+mapping and will use the existing FragmentKey for the map to group a number of
+DatabaseClaim to share a database instance. If more complex use cases arrive we
+could implement a resource to provide the mapping.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+erDiagram
+    DatabaseClaim ||--o{ ClaimMap : ""
+    DatabaseClaim ||--|| CloudDatabaseClaim : ""
+    CloudDatabaseClaim ||--o{ ClaimMap : ""
+```
+
+This the deploying with the CR scheme:
+**Relationship of a DatabaseClaim to a Secret and a Pod:**
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram
+  direction LR
+  Application --> DatabaseClaim : Manifest
+  DatabaseClaim --> CloudDatabaseClaim : Claim Map
+  CloudDatabaseClaim --> rdsInstance : create instance
+```
+Here is an example of what the CloudDatabaseClaim would look like if we used
+Crossplane. The compositionRef maps our CloudDatabaseClaim to a cloud specific 
+database instance defintion that is managed by Crossplane:
+```yaml
+apiVersion: database.infobloxopen.github.com/v1alpha1
+kind: CloudDatabaseClaim
+metadata:
+  name: db-controller-cloud-claim-database-some-app
+  namespace: db-controller-namespace
+spec:
+  parameters:
+    type: postgres
+    minStorage: 20GB
+  compositionRef:
+    name: cloud.database.infobloxopen.github.com
+  writeConnectionSecretToRef:
+    name: db-controller-postgres-con-some-app
+```
+
+In this example db-controller-postgres-con-some-app Secret that is written by the
+infrastructure operator has the connection string and password information for the 
+db-controller to manage the instance, similar to the pre-provisioned use case.
 
 ### ConfigMap
 The db-controller will consume a configMap that contains global config values.
@@ -134,40 +262,56 @@ data:
       username: root
       host: some.service
       port: 5432
-      useSSL: false
+      sslMode: disable
       passwordSecretRef: atlas-master-password
+      passwordSecretKey: password
     atlas.recyclebin:
       username: root
       host: some.other.service
       port: 5412
-      useSSL: false
+      sslMode: disable
       passwordSecretRef: atlas-recyclebin-password
     athena:
       username=root
       host=some.service
       port=5432
-      useSSL=false
+      sslMode: disable
       passwordSecretRef=athena-master-password
     athena.hostapp:
       username=root
       host=some.service
       port=5432
-      useSSL=false
+      sslMode: require
       passwordSecretRef=athena-hostapp-password
 ```
 
-* passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disabled.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
-
+* authSource: Determines how database host master password is retrieved. The possible values are "secret" and "aws". In the case of "secret" the value from the passwordSecretRef Secret is used for the password. In the case of "aws" the RDS password is retrieved using AWS APIs and db-controller should have IAM credentials to make the necessary calls.
+* region: The region where dynamic database is allocated
+* passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disable.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3rd party section for a sample package that could be used for this.
 * minPasswordLength: Ensures that the generated password is at least this length.  The value is in the range [15, 99].  The default value is 15.  Upper limit is Postgresql max password length limit.
-
-* passwordRotationPeriod defines the period of time (in minutes) before a password is rotated.  The value can be in the range [60, 1440] minutes.  The default value is 60 minutes.
+* passwordRotationPeriod: Defines the period of time (in minutes) before a password is rotated.  The value can be in the range [60, 1440] minutes.  The default value is 60 minutes.
 
 * Fragment Keys: This is the label to use for identifying the master connection information to a DB instance
    - Username: The username for the master/root user of the database instance
    - Host: The host name where the database instance is located
    - Port: The port to use for connecting to the host
-   - useSSL: Indicates of the connection to the DB instance requires secure connection.
+   - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disable"
    - passwordSecretRef: The name of the secret that contains the password for this connection
+   - passwordSecretKey: Optional value for the key value, default value is "password"
+   - shape: The optional value of shape, see DatabaseClaim, specified here when defined by FragmentKey
+   - minStorageGB: The optional value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
+   - engineVersion: The optional version of RDS instance, for now Postgres version, but could be other types
+   - deletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan
+   - reclaimPolicy: Used as value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
+
+* defaultMasterPort: Value of MasterPort if not specified in FragmentKey
+* defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
+* defaultSslMode: Value of sslMode if not specified in FragmentKey
+* defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
+* defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
+* defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
+* defaultDeletionPolicy: The DeletionPolicy for CloudDatabase, possible values: delete, orphan
+* defaultReclaimPolicy: Used as default value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
 
 The configMap and credential secrets must be mounted to volumes within the 
 pod for the db-controller.  This ensures that when the keys are updated, the 
@@ -218,16 +362,19 @@ a database instance.  It includes the following properties:
 DatabaseClaim:
 
    * spec:
-      - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
       - AppID: Application ID used for the application.
       - SecretName: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.  The SecretName is Namespace scoped.
       - Type: The type of the database instance. E.g. Postgres
       - InstanceLabel: The matching fragment key name of the database instance that will host the database. The fragment keys are defined in the db-controller configMap and describe the connection information for the database instance that this DBClaim is associated with. The longest match will win. For example, the database claim can have a label of athena.hostapp but the only available RDS instances have a label of athena, atlas and northstar. So the controller would match the athena instance. If however an instance label has a label of athena.hostapp, then the hostapp claim would match it exactly.
       - Username: The username that the application will use for accessing the database.
-      - [Host]: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - [Port]: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - DatabaseName: The name of the database instance.
-
+      - DatabaseName: The name of the database instance. 
+      - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
+      - DSNName: The key used for the client dsn connection string in the Secret
+      - Host: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Port: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Shape: The optional Shape values are arbitrary and help drive instance selection
+      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity
+      - DeletePolicy: The optional DeletePolicy value defines policy, default delete, possible values: delete, recycle
 
    * status:
       - Error: Any errors related to provisioning this claim.
@@ -286,6 +433,7 @@ spec:
 
 **Relationship of a DatabaseClaim to a Secret and a Pod:**
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 stateDiagram
   direction LR
   Pod --> Secret : references
@@ -297,6 +445,233 @@ stateDiagram
 
 ## Implementation
 
+***TODO***
+***Document full implementation for now focused on claim pattern updates***
+
+This implementation will use the 
+[kubebuilder](https://book.kubebuilder.io/introduction.html) pattern
+for implementation of the db-controller. This implementation starts
+with building a project:
+```bash
+kubebuilder init --domain atlas.infoblox.com --repo github.com/infobloxopen/db-controller
+```
+This project was layed down by kubebuilder which depend on
+*sigs.k8s.io/controller-runtime* and supports an architecture
+[described here](https://book.kubebuilder.io/architecture.html).
+A key part of this architecture is the *Reconciler* that encapsulates
+the custom logic that runs when request are forwarded from Kubernetes
+API Server to this controller. Specifically it the DatabaseClaim
+resources that is served.
+
+There is a go method (class) defined for handling reconcile functions:
+```go
+// DatabaseClaimReconciler reconciles a DatabaseClaim object
+type DatabaseClaimReconciler struct {
+	client.Client
+	Log        logr.Logger
+	Scheme     *runtime.Scheme
+	Config     *viper.Viper
+	MasterAuth *rdsauth.MasterAuth
+}
+```
+Then the reconcile functions that are parts of the method class are
+defined with this signature:
+```go
+func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {...}
+func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {...}
+```
+
+The following is the high level view of the reconcile logic:
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+graph TB
+A((Client)) --o B
+B[K8S API Server] --> C[db-controller]
+C--> D[Reconciler]
+D--> E{claim valid?}
+E -- No --> C
+E -- Yes -->F{Delete?}
+F -- No --> G[UpdateStatus]
+F -- Yes --> H[Clean Up Resources]
+H --> C
+G --> C
+C -->B
+B --> A
+```
+
+The DatabaseClaim
+Status is where keep the state used by the reconciler. The two parts
+of the Status that are important are:
+
+* MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+* ConnectionInfo[]: connection info about the database that is projected into a client accessible secret
+
+There is also a fragmentKey that is the same as the MatchedLabel,
+but not sure there are two items versus one ***TBD***.
+
+In this part we will look at the UpdateStatus function sequence and the
+proposed changes to support dynamic database creation while leaving much of
+the working db-controller to interoperate:
+
+```mermaid
+  sequenceDiagram
+    UpdateStatus->>matchInstanceLabel: Spec.InstanceLabel
+    matchInstanceLabel->>Status: Status.MatchedLabel
+    UpdateStatus->>getClient: Status.MatchedLabel
+      rect rgba(255, 0, 255, .2) 
+        par New Dynamic Database Binding
+          getClient->>getHost: dbClaim
+          getHost->>getHost: Spec.Host && Config::Status.MatchedLabel.Host == "" ?
+          getHost->>getHost: Yes
+          Status->>getHost: Status.CloudDatabase.Host == "" ?
+          getHost->>getHost: Yes        
+          getHost->>createCloudDatabase: dbClaim
+          createCloudDatabase->>createCloudDatabase: Wait for resource ready
+          createCloudDatabase->>getHost: CloudDatabase
+          getHost->>Status: Status.CloudDatabase.{Name, Host, Port, User, Password}
+          getHost->>getClient: {Host, Port, User, Password}
+        end
+      end
+      rect rgba(255, 255, 0, .2) 
+        par Existing Static Database Binding
+          getHost->>getHost: Spec.Host && Config::Status.MatchedLabel.Host == ""
+          getHost->>getHost: No
+          getProvisionedHost->>getHost: {Host, Port, User, Password}
+          getHost->>getClient: {Host, Port, User, Password}
+        end
+    end   
+    getClient->>Status: Status.ConnectionInfo.Host
+    getClient->>Status: Status.ConnectionInfo.Port
+    getClient->>Status: Status.ConnectionInfo.SSLMode
+    getClient->>Status: Status.ConnectionInfo.ConnectionInfoUpdatedAt
+    getClient->>DBClientFactory: host, port, user, password, sslmode
+    DBClientFactory->>getClient: dbClient
+    getClient->>UpdateStatus: dbClient
+    UpdateStatus->>GetDBName: dbClaim
+    GetDBName->>UpdateStatus: Spec.DatabaseName or Spec.DBNameOverride            
+```
+
+### Lifecycle
+***TODO - Document the full lifecycle not just for Dynamic Host***
+
+The dynamic host allocation will have the following lifecycle:
+
+The create and update lifecycles are fairly simple:
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram-v2
+CDH: Create Dynamic Host
+CDU: Update Dynamic Host
+
+[*] --> DbClaim
+state DbClaim {
+    Create --> CDH
+    --
+    Update --> CDU
+}
+```
+
+The delete lifecycle is more complex shown below:
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram-v2
+DCD: Delete CloudDatabase
+DDC: Delete DatabaseClaim
+
+[*] --> DbClaim
+state DbClaim {
+    Delete --> Finalizer
+    state Finalizer {
+        state check_host <<choice>>
+        state check_label <<choice>>
+        [*] --> check_host
+        check_host --> check_label: if Claim.Host == ""
+        check_host --> [*] : if Claim.Host != ""
+        check_label --> DCD: if ReclaimPolicy == Delete &&<br/> DbClaims using CloudDB == 1
+        check_label --> [*] : if ReclaimPolicy == Retain
+        DCD --> [*]
+    }
+    Finalizer --> DDC
+    DDC --> [*]
+}
+```
+
+The sharing of database by multiple applicaitons (Claims) by Crossplane
+[is an open issue](https://github.com/crossplane/provider-gcp/issues/157).
+The db-controller creates the CloudDatabase Claim and the associated
+connection secret is created in the db-controller namespace.
+We can allow sharing of the database using the FragmentKey structure
+by mapping to the FragmentKKey using DatabaseClaim InstanceLabel property.
+
+[Crossplane](https://github.com/crossplane/crossplane-runtime/issues/21) started 
+with the intent of using a similar
+[pattern used by pv and pvc](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaiming)
+in Kubernetes. The ReclaimPolicy had a lot off issues and it
+[got backed out](https://github.com/crossplane/crossplane-runtime/issues/179) and
+it got renamed to DeletionPolicy on just the CloudDatabase resource.
+
+DatabaseClaim resources are namespaced, but the
+CloudDatabase resources are dynamically provisioned as cluster scoped.
+A namespaced resource cannot, by design, own a cluster scoped resource.
+This could be an issue in how we manage lifecycle, see
+[kubernetes](https://github.com/kubernetes/kubernetes/issues/65200) and
+[crossplane](https://github.com/crossplane/provider-gcp/issues/99) references.
+
+Given the Crossplane experience we will retain the FragmentKey allocation
+CloudDatabase cluster resource so that it can be shared. The deletion of
+ClaimDatabase will remove the CloudDatabase directly allocated
+directly by its claim, similar behavior to Crossplane composite behavior 
+
+We need some more research PoC to figure out if
+we can use 
+[Kubernetes Finalizers](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/)
+on DatabaseClaim to honor a ReclaimPolicy with values of delete and retain.
+Then have ReclaimPolicy delete a dynamically allocated database
+that is no longer shared. The reason for the 
+[deprecation of ReclaimPolicy from CrossPlane](https://github.com/crossplane/crossplane-runtime/issues/179#issuecomment-637462056)
+needs to be examined in the light of our requirements and why Crossplane
+does not offer a 
+[Shared Database Pattern](https://github.com/crossplane/provider-gcp/issues/157).
+A argument made [here](https://github.com/crossplane/crossplane/issues/1229#issuecomment-585382715) 
+suggest that in most cases sharing infrastructure within namespace 
+boundaries with a  single claim is valid, as namespace == application 
+team boundary. Does forcing applciations to share namespace for
+database sharing cause any issues, e.g. RBAC?
+
+The initial PoC will manage ReclaimPolicy from the db-controller
+configuration using the InstanceLabels that enable sharing.
+There will be a DatabaseClaim finalizer that will run 
+and if there are no more claims against the InstanceLabel
+then the dynamic database is reclaimed. There will also
+be a global and reclaim policy per InstanceLabel/FragmentKey.
+This will not be exposed to the Applications e.g. ReclaimPolicy 
+in the DatabaseClaim. I don't think we need this complexity
+but could be added if there is a need.
+
+The Crossplane Infrastructure Operator, has a
+resource DeletionPolicy which specifies what will happen 
+to the underlying external cloud resource when this managed resource is 
+deleted - either "Delete" or "Orphan" the external resource. This will
+be managed by defaultDeletionPolicy and deletionPolicy on each FragmentKey.
+
+Another features we have is to share resources like RDS among
+different clusters that are deployed. We don't have a design yet on
+how to best support this requirement.
+Crossplane Infrastructure Operator supports multiple clusters,
+using an admin cluster and then resources like CloudDatabases
+are pushed to the managed clusters,
+[Crossplane workload reference](https://blog.crossplane.io/crossplane-v0-7-schedule-workloads-to-any-kubernetes-cluster-including-bare-metal/).
+Crossplane also have an [observerable pattern](https://github.com/crossplane/provider-gcp/issues/157)
+to deal with this coupling between clusters trying to share resources.
+
+### Deployment
+When API is updated need to update the crd definition
+and helm chart that updates it. The following make target
+is setup to do this:
+```bash
+make update_crds
+```
 ### Authentication
 ### Authorization
 This db-controller service will require access to credentials that have

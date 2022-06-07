@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/armon/go-radix"
@@ -33,7 +34,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
@@ -50,6 +55,7 @@ const (
 	// rotation time in minutes
 	minRotationTime        = 60
 	maxRotationTime        = 1440
+	maxWaitTime            = 10
 	defaultRotationTime    = minRotationTime
 	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
 )
@@ -72,6 +78,41 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// name of our custom finalizer
+	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
+
+	// examine DeletionTimestamp to determine if object is under deletion
+	if dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object. This is equivalent
+		// registering our finalizer.
+		if !controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			controllerutil.AddFinalizer(&dbClaim, dbFinalizerName)
+			if err := r.Update(ctx, &dbClaim); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			// our finalizer is present, so lets handle any external dependency
+			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(&dbClaim, dbFinalizerName)
+			if err := r.Update(ctx, &dbClaim); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+
 	return r.updateStatus(ctx, &dbClaim)
 }
 
@@ -82,13 +123,32 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{}
 	}
 
-	fragmentKey, err := r.matchInstanceLabel(dbClaim)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
+	var fragmentKey string
+	if dbClaim.Spec.InstanceLabel != "" {
+		var err error
+		fragmentKey, err = r.matchInstanceLabel(dbClaim)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+	}
+
+	connInfo := r.getClientConn(fragmentKey, dbClaim)
+	if connInfo.Host == "" {
+		var err error
+		// We will now support dynamic database provisioning
+		// return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
+		connInfo, err = r.getDynamicHost(ctx, fragmentKey, dbClaim)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		if connInfo.Host == "" {
+			// Schedule a new reconciliation after getDynamicHostWaitTime()
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+		}
 	}
 
 	log.Info("creating database client")
-	dbClient, err := r.getClient(ctx, log, fragmentKey, dbClaim)
+	dbClient, err := r.getClient(ctx, log, fragmentKey, dbClaim, &connInfo)
 	if err != nil {
 		log.Error(err, "creating database client error")
 		return r.manageError(ctx, dbClaim, err)
@@ -101,6 +161,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	dbName := GetDBName(dbClaim)
 	created, err := dbClient.CreateDataBase(dbName)
 	if err != nil {
+		postrgresURI := dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, "", dbName, connInfo.SSLMode)
+		msg := fmt.Sprintf("error creating database postgresURI %s", postrgresURI)
+		log.Error(err, msg)
 		return r.manageError(ctx, dbClaim, err)
 	} else if created || dbClaim.Status.ConnectionInfo.DatabaseName == "" {
 		updateDBStatus(dbClaim, dbName)
@@ -183,6 +246,57 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	return r.manageSuccess(ctx, dbClaim)
 }
 
+func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
+	defaultReclaimPolicy := r.Config.GetString("defaultReclaimPolicy")
+
+	if fragmentKey == "" {
+		return defaultReclaimPolicy
+	}
+
+	reclaimPolicy := r.Config.GetString(fmt.Sprintf("%s::reclaimPolicy", fragmentKey))
+
+	if reclaimPolicy == "retain" || (reclaimPolicy == "" && defaultReclaimPolicy == "retain") {
+		// Don't need to delete
+		return "retain"
+	} else {
+		// Assume reclaimPolicy == "delete"
+		return "delete"
+	}
+}
+
+func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	// delete any external resources associated with the dbClaim
+	// Only RDS Instance are managed for now
+
+	if dbClaim.Spec.Host == "" {
+
+		fragmentKey := dbClaim.Spec.InstanceLabel
+		reclaimPolicy := r.getReclaimPolicy(fragmentKey)
+
+		if reclaimPolicy == "delete" {
+			dbHostName := r.getDynamicHostName(fragmentKey, dbClaim)
+			if fragmentKey == "" {
+				// Delete
+				return r.deleteCloudDatabase(dbHostName, ctx)
+			} else {
+				// Check there is no other Claims that use this fragment
+				var dbClaimList persistancev1.DatabaseClaimList
+				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+					return err
+				}
+
+				if len(dbClaimList.Items) == 1 {
+					// Delete
+					return r.deleteCloudDatabase(dbHostName, ctx)
+				}
+			}
+		}
+		// else reclaimPolicy == "retain" nothing to do!
+	}
+
+	return nil
+}
+
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	var pass string
 	var err error
@@ -205,7 +319,21 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
+var (
+	instanceLableKey = ".spec.instanceLabel"
+	apiGVStr         = persistancev1.GroupVersion.String()
+)
+
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &persistancev1.DatabaseClaim{}, instanceLableKey, func(rawObj client.Object) []string {
+		// grab the DatabaseClaim object, extract the InstanceLabel for index...
+		claim := rawObj.(*persistancev1.DatabaseClaim)
+		return []string{claim.Spec.InstanceLabel}
+	}); err != nil {
+		return err
+	}
+
 	pred := predicate.GenerationChangedPredicate{}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DatabaseClaim{}).WithEventFilter(pred).
@@ -221,20 +349,48 @@ func (r *DatabaseClaimReconciler) getMasterHost(fragmentKey string, dbClaim *per
 	return r.Config.GetString(fmt.Sprintf("%s::Host", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getMasterUser(fragmentKey string) string {
+func (r *DatabaseClaimReconciler) getMasterUser(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		return r.Config.GetString("defaultMasterUsername")
+	}
+
+	if dbClaim.Spec.Username != "" {
+		return dbClaim.Spec.Username
+	}
+
+	if fragmentKey == "" {
+		return r.Config.GetString("defaultMasterUsername")
+	}
+
 	return r.Config.GetString(fmt.Sprintf("%s::Username", fragmentKey))
 }
 
 func (r *DatabaseClaimReconciler) getMasterPort(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		return r.Config.GetString("defaultMasterPort")
+	}
+
 	// If config port is overridden by db claims port
 	if dbClaim.Spec.Port != "" {
 		return dbClaim.Spec.Port
 	}
 
+	if fragmentKey == "" {
+		return r.Config.GetString("defaultMasterPort")
+	}
+
 	return r.Config.GetString(fmt.Sprintf("%s::Port", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string) string {
+func (r *DatabaseClaimReconciler) getSSLMode(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		return r.Config.GetString("defaultSslMode")
+	}
+
+	if fragmentKey == "" {
+		return r.Config.GetString("defaultSslMode")
+	}
+
 	return r.Config.GetString(fmt.Sprintf("%s::sslMode", fragmentKey))
 }
 
@@ -262,8 +418,319 @@ func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
 	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
 }
 
+func (r *DatabaseClaimReconciler) getSecretKey(fragmentKey string) string {
+	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretKey", fragmentKey))
+}
+
 func (r *DatabaseClaimReconciler) getAuthSource() string {
 	return r.Config.GetString("authSource")
+}
+
+func (r *DatabaseClaimReconciler) getRegion() string {
+	return r.Config.GetString("region")
+}
+
+func (r *DatabaseClaimReconciler) getVpcSecurityGroupIDRefs() string {
+	return r.Config.GetString("vpcSecurityGroupIDRefs")
+}
+
+func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
+	return r.Config.GetString("dbSubnetGroupNameRef")
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
+	t := r.Config.GetInt("dynamicHostWaitTimeMin")
+	if t > maxWaitTime {
+		msg := "dynamic host wait time is out of range, should be between 1 " + strconv.Itoa(maxWaitTime) + " min"
+		r.Log.Info(msg)
+		return time.Minute
+	}
+
+	return time.Duration(t) * time.Minute
+}
+
+// FindStatusCondition finds the conditionType in conditions.
+func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus) bool {
+	conditions := resourceStatus.Conditions
+	ready := xpv1.TypeReady
+	for i := range conditions {
+		if conditions[i].Type == ready {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
+	rs := &corev1.Secret{}
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+
+	secretName := r.getDynamicHostName(fragmentKey, dbClaim)
+	serviceNS, _ := getServiceNamespace()
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: serviceNS,
+		Name:      secretName,
+	}, rs)
+	if err != nil {
+		return connInfo
+	}
+
+	connInfo.Host = string(rs.Data["endpoint"])
+	connInfo.Port = string(rs.Data["port"])
+	connInfo.Username = string(rs.Data["username"])
+
+	return connInfo
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHostName(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) string {
+	// Make sure dynamic host name is unique used for infrastructure and
+	// secret resources.
+	//
+	// This pattern is picked so if fragmentKey is set the database could be
+	// shared by multiple claims, while if not set it is used exclusively by
+	// a single claim.
+	prefix := "db-controller-"
+
+	if fragmentKey == "" {
+		return prefix + dbClaim.Name
+	}
+
+	return prefix + fragmentKey
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (persistancev1.DatabaseClaimConnectionInfo, error) {
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+
+	// Make sure dbHostName is unique
+	dbHostName := r.getDynamicHostName(fragmentKey, dbClaim)
+
+	rds := &crossplanedb.RDSInstance{}
+
+	// Found a use case where the change in DatabaseClaim updated crossplane RDSInstance resource
+	// the change was rejected but the cache was updated and was out of sync with api server
+	// See https://pkg.go.dev/sigs.k8s.io/controller-runtime#hdr-Clients_and_Caches
+	// "client does not promise to invalidate the cache during writes"
+	// We can use mgr.GetAPIReader() to bypass the cache and read value directly from API Server
+	// Since update does not work I am not going to make this change as it will impact
+	// the performance of the controller.
+	//
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, rds)
+	if err != nil {
+		err = r.createCloudDatabase(dbHostName, ctx, fragmentKey, dbClaim)
+		if err != nil {
+			return connInfo, err
+		}
+		return connInfo, nil
+	}
+
+	// Deletion is long running task check that is not being deleted.
+	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
+		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
+		r.Log.Error(err, "RDSInstance", dbHostName)
+		return connInfo, err
+	}
+	
+	update, err := r.updateCloudDatabase(ctx, fragmentKey, dbClaim, rds)
+	if update {
+		// Reschedule run after update is complete
+		return connInfo, err
+	}
+
+	// Check if resource is ready
+	if !r.isResourceReady(rds.Status.ResourceStatus) {
+		return connInfo, nil
+	}
+
+	// Check database secret
+	connInfo = r.readResourceSecret(ctx, fragmentKey, dbClaim)
+
+	// SSL Mode is always required
+	// TODO connInfo.SSLMode should have types for enums
+	// FIXME - should come from config now that it is defined.
+	connInfo.SSLMode = "require"
+
+	return connInfo, nil
+}
+
+type DynamicHostParms struct {
+	Engine                          string
+	Shape                           string
+	MinStorageGB                    int
+	EngineVersion                   string
+	MasterUsername                  string
+	SkipFinalSnapshotBeforeDeletion bool
+	PubliclyAccessible              bool
+	EnableIAMDatabaseAuthentication bool
+	DeletionPolicy                  xpv1.DeletionPolicy
+}
+
+func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
+	params := DynamicHostParms{}
+
+	// Only Support Postgres right now ignore Claim Type value
+	// Engine: dbClaim.Spec.Type,
+	params.Engine = "postgres"
+
+	// Database Config
+	if fragmentKey == "" {
+		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
+		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
+		params.Shape = dbClaim.Spec.Shape
+		params.MinStorageGB = dbClaim.Spec.MinStorageGB
+	} else {
+		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
+		params.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
+		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
+		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
+	}
+
+	// Set defaults
+
+	if params.MasterUsername == "" {
+		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
+	}
+
+	if params.EngineVersion == "" {
+		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
+	}
+
+	if params.Shape == "" {
+		params.Shape = r.Config.GetString("defaultShape")
+	}
+
+	if params.MinStorageGB == 0 {
+		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
+	}
+
+	// TODO - Implement these for each fragmentKey also
+	params.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool("defaultSkipFinalSnapshotBeforeDeletion")
+	params.PubliclyAccessible = r.Config.GetBool("defaultPubliclyAccessible")
+	if r.Config.GetString("defaultDeletionPolicy") == "delete" {
+		params.DeletionPolicy = xpv1.DeletionDelete
+	} else {
+		params.DeletionPolicy = xpv1.DeletionOrphan
+	}
+
+	// TODO - Enable IAM auth based on authSource config
+	params.EnableIAMDatabaseAuthentication = false
+
+	return params
+}
+
+func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
+	serviceNS, err := getServiceNamespace()
+	if err != nil {
+		return err
+	}
+
+	dbSecret := xpv1.SecretReference{
+		Name:      dbHostName,
+		Namespace: serviceNS,
+	}
+
+	// Infrastructure Config
+	region := r.getRegion()
+	providerConfigReference := xpv1.Reference{
+		Name: "default",
+	}
+
+	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
+
+	rdsInstance := &crossplanedb.RDSInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: dbHostName,
+			// TODO - Figure out the proper labels for resource
+			// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+		},
+		Spec: crossplanedb.RDSInstanceSpec{
+			ForProvider: crossplanedb.RDSInstanceParameters{
+				Region: &region,
+				VPCSecurityGroupIDRefs: []xpv1.Reference{
+					{Name: r.getVpcSecurityGroupIDRefs()},
+				},
+				DBSubnetGroupNameRef: &xpv1.Reference{
+					Name: r.getDbSubnetGroupNameRef(),
+				},
+				// Items from Claim and fragmentKey
+				// Only Support Postgres right now ignore Claim Type value
+				// Engine: dbClaim.Spec.Type,
+				Engine:           params.Engine,
+				DBInstanceClass:  params.Shape,
+				AllocatedStorage: &params.MinStorageGB,
+				// Items from Config
+				MasterUsername:                  &params.MasterUsername,
+				EngineVersion:                   &params.EngineVersion,
+				SkipFinalSnapshotBeforeDeletion: &params.SkipFinalSnapshotBeforeDeletion,
+				PubliclyAccessible:              &params.PubliclyAccessible,
+				EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+			},
+			ResourceSpec: xpv1.ResourceSpec{
+				WriteConnectionSecretToReference: &dbSecret,
+				ProviderConfigReference:          &providerConfigReference,
+				DeletionPolicy:                   params.DeletionPolicy,
+			},
+		},
+	}
+
+	r.Log.Info("creating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+
+	return r.Client.Create(ctx, rdsInstance)
+}
+
+func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
+
+	rds := &crossplanedb.RDSInstance{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, rds)
+	if err != nil {
+		// Nothing to delete
+		return nil
+	}
+
+	// Deletion is long running task check that is not already deleted.
+	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	if err := r.Delete(ctx, rds, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+		r.Log.Info("unable delete crossplane RDSInstance resource", "RDSInstance", dbHostName)
+		return err
+	} else {
+		r.Log.Info("deleted crossplane RDSInstance resource", "RDSInstance", dbHostName)
+	}
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
+	
+	update := false
+	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
+	
+	// Update RDSInstance
+	// Update Shape and MinGibStorage for now
+	if (rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape) {
+		rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
+		update = true
+	}
+	
+	if (*rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB) {
+		rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
+		update = true
+	}
+
+	if update {
+		r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+		return update, r.Client.Update(ctx, rdsInstance)
+	}
+
+	return update, nil
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
@@ -340,9 +807,22 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, namespace string) (string, error) {
+func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, namespace string) (string, error) {
 	gs := &corev1.Secret{}
-	secretName := r.getSecretRef(fragmentKey)
+
+	secretName := ""
+	secretKey := ""
+
+	if r.getMasterHost(fragmentKey, dbClaim) == "" {
+		secretName = r.getDynamicHostName(fragmentKey, dbClaim)
+		secretKey = "password"
+	} else {
+		secretName = r.getSecretRef(fragmentKey)
+		secretKey = r.getSecretKey(fragmentKey)
+		if secretKey == "" {
+			secretKey = "password"
+		}
+	}
 
 	if secretName == "" {
 		return "", fmt.Errorf("an empty password secret reference")
@@ -356,7 +836,7 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, fragme
 		return "", err
 	}
 
-	return string(gs.Data["password"]), nil
+	return string(gs.Data[secretKey]), nil
 }
 
 func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.DatabaseClaim) (string, error) {
@@ -409,22 +889,30 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 	return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 }
 
-func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (dbclient.DBClient, error) {
+func (r *DatabaseClaimReconciler) getClientConn(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+
+	connInfo.Host = r.getMasterHost(fragmentKey, dbClaim)
+	connInfo.Port = r.getMasterPort(fragmentKey, dbClaim)
+	connInfo.Username = r.getMasterUser(fragmentKey, dbClaim)
+	connInfo.SSLMode = r.getSSLMode(fragmentKey, dbClaim)
+
+	return connInfo
+}
+
+func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.DBClient, error) {
 	dbType := dbClaim.Spec.Type
 
-	host := r.getMasterHost(fragmentKey, dbClaim)
-	if host == "" {
-		return nil, fmt.Errorf("cannot get master host for fragment key %s", fragmentKey)
-	}
-
-	port := r.getMasterPort(fragmentKey, dbClaim)
-	if port == "" {
+	if connInfo.Port == "" {
 		return nil, fmt.Errorf("cannot get master port for fragment key %s", fragmentKey)
 	}
 
-	user := r.getMasterUser(fragmentKey)
-	if user == "" {
+	if connInfo.Username == "" {
 		return nil, fmt.Errorf("invalid credentials (username)")
+	}
+
+	if connInfo.SSLMode == "" {
+		return nil, fmt.Errorf("invalid sslMode")
 	}
 
 	serviceNS, err := getServiceNamespace()
@@ -437,14 +925,14 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 	switch authType := r.getAuthSource(); authType {
 	case config.SecretAuthSourceType:
 		r.Log.Info("using credentials from secret")
-		password, err = r.readMasterPassword(ctx, fragmentKey, serviceNS)
+		password, err = r.readMasterPassword(ctx, fragmentKey, dbClaim, serviceNS)
 		if err != nil {
 			return nil, err
 		}
 	case config.AWSAuthSourceType:
 		r.Log.Info("using aws IAM authorization")
 		if r.MasterAuth.IsExpired() {
-			token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", host, port), user)
+			token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", connInfo.Host, connInfo.Port), connInfo.Username)
 			if err != nil {
 				return nil, err
 			}
@@ -460,14 +948,9 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 		return nil, fmt.Errorf("invalid credentials (password)")
 	}
 
-	sslMode := r.getSSLMode(fragmentKey)
-	if sslMode == "" {
-		return nil, fmt.Errorf("invalid sslMode")
-	}
+	updateHostPortStatus(dbClaim, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
-	updateHostPortStatus(dbClaim, host, port, sslMode)
-
-	return dbclient.DBClientFactory(log, dbType, host, port, user, password, sslMode)
+	return dbclient.DBClientFactory(log, dbType, connInfo.Host, connInfo.Port, connInfo.Username, password, connInfo.SSLMode)
 }
 
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
@@ -504,7 +987,7 @@ func updateHostPortStatus(dbClaim *persistancev1.DatabaseClaim, host, port, sslM
 func getServiceNamespace() (string, error) {
 	ns, found := os.LookupEnv(serviceNamespaceEnvVar)
 	if !found {
-		return "", fmt.Errorf("service namespcae env %s must be set", serviceNamespaceEnvVar)
+		return "", fmt.Errorf("service namespace env %s must be set", serviceNamespaceEnvVar)
 	}
 	return ns, nil
 }
