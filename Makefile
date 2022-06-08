@@ -120,6 +120,16 @@ build: generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
+#TODO
+.PHONY: docker-buildx
+docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-arch db-controller container image to the Docker registry
+	@docker buildx build --push \
+		--build-arg api_version=$(API_VERSION) \
+		--build-arg srv_version=$(SRV_VERSION) \
+		-f $(SERVER_DOCKERFILE) \
+		-t $(SERVER_IMAGE):$(IMAGE_VERSION) \
+		-t $(SERVER_IMAGE):latest .
+
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
 	docker build -t ${IMG} .

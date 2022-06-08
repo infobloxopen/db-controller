@@ -139,3 +139,4 @@ controllerConfig:
     port: 5412
     sslMode: require
     passwordSecretRef: another-connection-secret
+
