@@ -9,5 +9,6 @@ metadata:
     strategy.spinnaker.io/versioned: "false"
 data:
   {{- with .Values.controllerConfig }}
-  {{- tpl (toYaml . | trim | nindent 2 ) $ }}
+  "config.yaml": |-
+  {{- toYaml . | trim | nindent 4 }}
   {{ end }}
