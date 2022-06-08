@@ -533,7 +533,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 		r.Log.Error(err, "RDSInstance", dbHostName)
 		return connInfo, err
 	}
-	
+
 	update, err := r.updateCloudDatabase(ctx, fragmentKey, dbClaim, rds)
 	if update {
 		// Reschedule run after update is complete
@@ -709,18 +709,18 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 }
 
 func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
-	
+
 	update := false
 	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
-	
+
 	// Update RDSInstance
 	// Update Shape and MinGibStorage for now
-	if (rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape) {
+	if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
 		rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
 		update = true
 	}
-	
-	if (*rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB) {
+
+	if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
 		rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
 		update = true
 	}
