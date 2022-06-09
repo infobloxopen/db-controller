@@ -3,7 +3,7 @@ REGISTRY ?= infoblox
 # image name
 IMAGE_NAME ?= db-controller
 # commit tag info from git repo
-GIT_COMMIT     := $(shell git describe --dirty=-unsupported --always || echo pre-commit)
+GIT_COMMIT     := $(shell git describe --always || echo pre-commit)
 # image tag
 TAG ?= ${GIT_COMMIT}
 # Image Path to use all building/pushing image targets
