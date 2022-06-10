@@ -192,4 +192,4 @@ endef
 
 # Updates helm chart db-controller-crds to be in sync
 update_crds: manifests
-	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crds/persistance.atlas.infoblox.com_databaseclaims.yaml
+	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_databaseclaims.yaml
