@@ -2,10 +2,12 @@
 REGISTRY ?= infoblox
 # image name
 IMAGE_NAME ?= db-controller
+# commit tag info from git repo
+GIT_COMMIT     := $(shell git describe --always || echo pre-commit)
 # image tag
-TAG ?= latest
-# Image URL to use all building/pushing image targets
-IMG ?= ${REGISTRY}/${IMAGE_NAME}:${TAG}
+TAG ?= ${GIT_COMMIT}
+# Image Path to use all building/pushing image targets
+IMG_PATH ?= ${REGISTRY}/${IMAGE_NAME}
 
 GOBIN := ~/go/bin
 K8S_VERSION := 1.22.1
@@ -132,11 +134,12 @@ docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-a
 
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+	docker push ${IMG_PATH}:${TAG}
+	docker push ${IMG_PATH}:latest
 
 ##@ Deployment
 
@@ -154,7 +157,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:latest
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
 .PHONY: undeploy
