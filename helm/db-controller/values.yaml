@@ -8,7 +8,7 @@ secrets:
   enabled: false
 
 image:
-  repository: ghcr.io/infobloxopen/db-controller:latest
+  repository: ghcr.io/infobloxopen/db-controller
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
