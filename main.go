@@ -17,12 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,12 +34,16 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
+	dbproxy "github.com/infobloxopen/db-controller/webhook"
+
 	//+kubebuilder:scaffold:imports
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+
 	// +kubebuilder:scaffold:imports
 	crossplanedbv1beta1 "github.com/crossplane/provider-aws/apis/database/v1beta1"
 )
@@ -55,6 +62,20 @@ func init() {
 	// Infrastructure provisioning using crossplane
 	utilruntime.Must(crossplanedbv1beta1.SchemeBuilder.AddToScheme(scheme))
 
+}
+
+func parseDBPoxySidecarConfig(configFile string) (*dbproxy.Config, error) {
+	data, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg dbproxy.Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
 }
 
 func main() {
@@ -116,6 +137,21 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	webHookServer := mgr.GetWebhookServer()
+
+	webHookServer.Port = 8443
+	webHookServer.CertDir = "./certs/"
+
+	dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
+	if err != nil {
+		setupLog.Error(err, "could not parse db proxy sidecar configuration")
+	} else {
+		setupLog.Info("Parsed db proxy sidecar config:", "dbproxysidecarconfig", dbProxySidecarConfig)
+	}
+
+	setupLog.Info("registering with webhook server")
+	webHookServer.Register("/mutate", &webhook.Admission{Handler: &dbproxy.DBProxyInjector{Name: "DB Proxy", Client: mgr.GetClient(), DBProxySidecarConfig: dbProxySidecarConfig}})
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
