@@ -164,11 +164,6 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-.PHONY: controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0)
-
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 .PHONY: kustomize
 kustomize: ## Download kustomize locally if necessary.
@@ -196,3 +191,94 @@ endef
 # Updates helm chart db-controller-crds to be in sync
 update_crds: manifests
 	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_databaseclaims.yaml
+
+# find or download controller-gen
+# download controller-gen if necessary
+.PHONY: controller-gen
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	{ \
+	set -e ;\
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONTROLLER_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.0 ;\
+	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	}
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
+export KUBEBUILDER_ASSETS
+
+# find or download kubebuilder
+# download kubebuilder if necessary
+kubebuilder:
+ifeq (, $(shell which kubebuilder))
+	@{ \
+	set -e ;\
+	os=$(shell go env GOOS) ;\
+	arch=$(shell go env GOARCH) ;\
+	sudo mkdir -p /usr/local/kubebuilder/bin/ ; \
+	sudo curl -k -Lo /usr/local/kubebuilder/bin/kubebuilder https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.2.0/kubebuilder_$${os}_$${arch} ; \
+	curl -k -sSLo /tmp/envtest-bins.tar.gz "https://go.kubebuilder.io/test-tools/${K8S_VERSION}/$${os}/$${arch}" ; \
+	sudo tar -C /usr/local/kubebuilder --strip-components=1 -zvxf /tmp/envtest-bins.tar.gz ; \
+	export PATH=$$PATH:/usr/local/kubebuilder/bin ;\
+	}
+endif
+	mkdir -p .build
+	${KUBEBUILDER_ASSETS}/kube-apiserver --version
+	${KUBEBUILDER_ASSETS}/kubectl version || true
+
+create-namespace:
+	kubectl create namespace ${DBCTL_NAMESPACE}
+
+delete-namespace:
+	kubectl delete namespace ${DBCTL_NAMESPACE}
+
+install-crds:
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl apply -f -
+
+uninstall-crds:
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl delete -f -
+
+deploy-controller:
+	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl apply -f -
+
+uninstall-controller:
+	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl delete -f -
+
+deploy-samples:
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl apply -f -
+
+uninstall-samples:
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl delete -f -
+
+deploy-all: create-namespace install-crds deploy-controller
+
+uninstall-all: uninstall-controller uninstall-crds delete-namespace
+
+build-properties:
+	@sed 's/{CHART_FILE}/$(CHART_FILE)/g' build.properties.in > build.properties
+
+build-properties-crd:
+	@sed 's/{CHART_FILE}/$(CHART_FILE_CRD)/g' build.properties.in > crd.build.properties
+
+build-chart:
+	${HELM_ENTRYPOINT} "helm package ${DB_CONTROLLER_CHART} --version ${CHART_VERSION}"
+
+build-chart-crd: update_crds
+	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
+
+push-chart:
+	${HELM} s3 push ${CHART_FILE} infobloxcto
+
+push-chart-crd:
+	${HELM} s3 push ${CHART_FILE_CRD} infobloxcto
+
+clean:
+	@rm -f *build.properties || true
+	@rm -f *.tgz || true
+	sudo rm -rf /usr/local/kubebuilder
