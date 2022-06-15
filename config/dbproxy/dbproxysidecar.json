@@ -1,1 +1,31 @@
-{"containers":[{"image":"docker.io/infobloxcto/sase.cloud.services:dbproxy-latest","imagePullPolicy":"IfNotPresent","name":"dbproxy","volumeMounts":[{"mountPath":"/etc/config/dbproxy","name":"postgresdsn","readOnly":true}]}],"volumes":[{"name":"postgresdsn","secret":{"items":[{"key":"sample-postgres-dsn","path":"db-credential"}],"optional":false,"secretName":"databaseclaim-sample"}}]}
+{
+  "containers": [
+    {
+      "image": "docker.io/infobloxcto/sase.cloud.services:dbproxy-latest",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "dbproxy",
+      "volumeMounts": [
+        {
+          "mountPath": "/etc/config/dbproxy",
+          "name": "postgresdsn",
+          "readOnly": true
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "postgresdsn",
+      "secret": {
+        "items": [
+          {
+            "key": "-postgres-dsn",
+            "path": "db-credential"
+          }
+        ],
+        "optional": false,
+        "secretName": "..."
+      }
+    }
+  ]
+}

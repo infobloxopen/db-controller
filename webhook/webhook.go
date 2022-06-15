@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,24 +30,22 @@ type Config struct {
 	Volumes    []corev1.Volume    `json:"volumes"`
 }
 
-func dbProxySideCardInjectionRequired(pod *corev1.Pod) bool {
-	shouldInjectDBProxy, err := strconv.ParseBool(pod.Annotations["inject-dbproxy"])
+func dbProxySideCardInjectionRequired(pod *corev1.Pod) (bool, string) {
+	dbSecretPath, ok := pod.Annotations["db-secret-path"]
 
-	if err != nil {
-		shouldInjectDBProxy = false
+	if !ok {
+		return false, ""
 	}
 
-	if shouldInjectDBProxy {
-		alreadyUpdated, err := strconv.ParseBool(pod.Annotations["dbproxy-injected"])
+	alreadyInjected, err := strconv.ParseBool(pod.Annotations["dbproxy-injected"])
 
-		if err == nil && alreadyUpdated {
-			shouldInjectDBProxy = false
-		}
+	if err == nil && alreadyInjected {
+		return false, dbSecretPath
 	}
 
-	dbProxyLog.Info("Should Inject: ", pod.Name, shouldInjectDBProxy)
+	dbProxyLog.Info("Should Inject: ", pod.Name, dbSecretPath)
 
-	return shouldInjectDBProxy
+	return true, dbSecretPath
 }
 
 // DBProxyInjector adds an annotation to every incoming pods.
@@ -64,19 +63,33 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 		pod.Annotations = map[string]string{}
 	}
 
-	shoudInjectSidecar := dbProxySideCardInjectionRequired(pod)
+	shoudInjectSidecar, dbSecretPath := dbProxySideCardInjectionRequired(pod)
 
 	if shoudInjectSidecar {
 		dbProxyLog.Info("Injecting sidecar...")
 
-		//dbpi.DBProxySidecarConfig.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
+		f := func(c rune) bool {
+			return c == '/'
+		}
 
-		pod.Spec.Volumes = append(pod.Spec.Volumes, dbpi.DBProxySidecarConfig.Volumes...)
-		pod.Spec.Containers = append(pod.Spec.Containers, dbpi.DBProxySidecarConfig.Containers...)
+		dbSecretFields := strings.FieldsFunc(dbSecretPath, f)
 
-		pod.Annotations["dbproxy-injected"] = "true"
+		if len(dbSecretFields) == 2 {
+			dbSecretRef := dbSecretFields[0]
+			dbSecretItem := dbSecretFields[1]
 
-		dbProxyLog.Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
+			dbpi.DBProxySidecarConfig.Volumes[0].Secret.SecretName = dbSecretRef
+			dbpi.DBProxySidecarConfig.Volumes[0].Secret.Items[0].Key = dbSecretItem
+
+			pod.Spec.Volumes = append(pod.Spec.Volumes, dbpi.DBProxySidecarConfig.Volumes...)
+			pod.Spec.Containers = append(pod.Spec.Containers, dbpi.DBProxySidecarConfig.Containers...)
+
+			pod.Annotations["dbproxy-injected"] = "true"
+
+			dbProxyLog.Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
+		} else {
+			dbProxyLog.Error(nil, "could not parse db secret path", "db-secret-path", dbSecretPath)
+		}
 	} else {
 		dbProxyLog.Info("DB Proxy sidecar not needed.", pod.Name, pod.APIVersion)
 	}
