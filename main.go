@@ -146,6 +146,7 @@ func main() {
 	dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
 	if err != nil {
 		setupLog.Error(err, "could not parse db proxy sidecar configuration")
+		os.Exit(1)
 	} else {
 		setupLog.Info("Parsed db proxy sidecar config:", "dbproxysidecarconfig", dbProxySidecarConfig)
 	}

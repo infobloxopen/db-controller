@@ -50,7 +50,7 @@ func dbProxySideCardInjectionRequired(pod *corev1.Pod) (bool, string) {
 
 // DBProxyInjector adds an annotation to every incoming pods.
 func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) admission.Response {
-	dbProxyLog.Info("Sidecar config", "parsed:", dbpi.DBProxySidecarConfig)
+	//dbProxyLog.Info("Sidecar config", "parsed:", dbpi.DBProxySidecarConfig)
 	pod := &corev1.Pod{}
 
 	err := dbpi.decoder.Decode(req, pod)
@@ -96,7 +96,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 
 	marshaledPod, err := json.Marshal(pod)
 
-	dbProxyLog.Info("pod definition:", "pod", marshaledPod)
+	// dbProxyLog.Info("pod definition:", "pod", marshaledPod)
 
 	if err != nil {
 		dbProxyLog.Info("DB Proxy sidecar injection: cannot marshal")

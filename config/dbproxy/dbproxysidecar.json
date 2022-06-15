@@ -19,7 +19,7 @@
       "secret": {
         "items": [
           {
-            "key": "-postgres-dsn",
+            "key": "...",
             "path": "db-credential"
           }
         ],
