@@ -108,8 +108,6 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 }
 
 // DBProxyInjector implements admission.DecoderInjector.
-// A decoder will be automatically inj1ected.
-
 // InjectDecoder injects the decoder.
 func (dbpi *DBProxyInjector) InjectDecoder(d *admission.Decoder) error {
 	dbpi.decoder = d
