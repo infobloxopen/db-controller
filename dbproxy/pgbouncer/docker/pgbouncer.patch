@@ -1,0 +1,52 @@
+diff -uNr pgbouncer/include/bouncer.h pgbouncer.cxvisa/include/bouncer.h
+--- pgbouncer.a/include/bouncer.h	2022-06-13 16:56:19.178005042 -0700
++++ pgbouncer.b/include/bouncer.h	2022-06-13 16:57:54.619119705 -0700
+@@ -517,6 +517,7 @@
+ extern char *cf_ignore_startup_params;
+ 
+ extern char *cf_admin_users;
++extern char *cf_remote_user_override;
+ extern char *cf_stats_users;
+ extern int cf_stats_period;
+ extern int cf_log_stats;
+diff -uNr pgbouncer/src/client.c pgbouncer.cxvisa/src/client.c
+--- pgbouncer.a/src/client.c	2022-06-13 16:56:19.181005014 -0700
++++ pgbouncer.b/src/client.c	2022-06-13 16:58:18.773895641 -0700
+@@ -538,6 +538,10 @@
+ 		} else if (strcmp(key, "user") == 0) {
+ 			slog_debug(client, "got var: %s=%s", key, val);
+ 			username = val;
++                        if (strcmp(cf_remote_user_override, "") != 0) {
++                                username = cf_remote_user_override;
++			}
++			slog_debug(client, "updated user: %s", username);
+ 		} else if (strcmp(key, "application_name") == 0) {
+ 			set_appname(client, val);
+ 			appname_found = true;
+diff -uNr pgbouncer/src/main.c pgbouncer.cxvisa/src/main.c
+--- pgbouncer.a/src/main.c	2022-06-13 16:56:19.182005005 -0700
++++ pgbouncer.b/src/main.c	2022-06-13 16:58:34.373750935 -0700
+@@ -159,6 +159,7 @@
+ char *cf_jobname;
+ 
+ char *cf_admin_users;
++char *cf_remote_user_override;
+ char *cf_stats_users;
+ int cf_stats_period;
+ int cf_log_stats;
+@@ -227,6 +228,7 @@
+  */
+ static const struct CfKey bouncer_params [] = {
+ CF_ABS("admin_users", CF_STR, cf_admin_users, 0, ""),
++CF_ABS("remote_user_override", CF_STR, cf_remote_user_override, 0, ""),
+ CF_ABS("application_name_add_host", CF_INT, cf_application_name_add_host, 0, "0"),
+ CF_ABS("auth_file", CF_STR, cf_auth_file, 0, NULL),
+ CF_ABS("auth_hba_file", CF_STR, cf_auth_hba_file, 0, ""),
+@@ -840,6 +842,7 @@
+ 	xfree(&cf_autodb_connstr);
+ 	xfree(&cf_jobname);
+ 	xfree(&cf_admin_users);
++	xfree(&cf_remote_user_override);
+ 	xfree(&cf_stats_users);
+ 	xfree(&cf_client_tls_protocols);
+ 	xfree(&cf_client_tls_ca_file);

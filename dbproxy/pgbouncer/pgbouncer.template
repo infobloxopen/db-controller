@@ -1,0 +1,12 @@
+[databases]
+{{.LocalDbName}} = host={{.RemoteHost}} port={{.RemotePort}} dbname={{.LocalDbName}}
+
+[pgbouncer]
+listen_port = {{.LocalPort}}
+listen_addr = {{.LocalHost}}
+auth_type = trust
+auth_file = userlist.txt
+logfile = pgbouncer.log
+pidfile = pgbouncer.pid
+admin_users = {{.UserName}}
+remote_user_override = {{.UserName}}

@@ -2,13 +2,14 @@
 REGISTRY ?= infoblox
 # image name
 IMAGE_NAME ?= db-controller
+DBPROXY_IMAGE_NAME ?= dbproxy
 # commit tag info from git repo
 GIT_COMMIT     := $(shell git describe --always || echo pre-commit)
 # image tag
 TAG ?= ${GIT_COMMIT}
 # Image Path to use all building/pushing image targets
 IMG_PATH ?= ${REGISTRY}/${IMAGE_NAME}
-
+DBPROXY_IMG_PATH ?= ${REGISTRY}/${DBPROXY_IMAGE_NAME}
 GOBIN := ~/go/bin
 K8S_VERSION := 1.22.1
 ACK_GINKGO_DEPRECATIONS := 1.16.5
@@ -117,6 +118,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 .PHONY: build
 build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
+	cd dbproxy && go build -o ../bin/dbproxy
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -135,11 +137,14 @@ docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-a
 .PHONY: docker-build
 docker-build: test ## Build docker image with the manager.
 	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
+	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} -t ${DBPROXY_IMG_PATH}:latest .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG_PATH}:${TAG}
 	docker push ${IMG_PATH}:latest
+	docker push ${DBPROXY_IMG_PATH}:${TAG}
+	docker push ${DBPROXY_IMG_PATH}:latest
 
 ##@ Deployment
 
