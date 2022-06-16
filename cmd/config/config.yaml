@@ -25,7 +25,7 @@ passwordConfig:
   passwordRotationPeriod: 60
 sample-connection:
   username: postgres
-  host: 192.168.1.40
+  host: localhost
   port: 5432
   sslMode: disable
   passwordSecretRef: postgres-postgresql
