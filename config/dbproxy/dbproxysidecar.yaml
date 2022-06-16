@@ -1,0 +1,17 @@
+containers:
+- name: dbproxy
+  image: docker.io/infobloxcto/sase.cloud.services:dbproxy-latest
+  imagePullPolicy: IfNotPresent
+  volumeMounts:
+  - name: postgresdsn
+    mountPath: "/etc/config/dbproxy"
+    readOnly: true
+volumes:
+- name: postgresdsn
+  secret:
+    secretName: databaseclaim-sample
+    optional: false
+    items:
+    - key: sample-postgres-dsn
+      path: db-credential
+

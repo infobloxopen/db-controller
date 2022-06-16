@@ -17,12 +17,15 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,12 +34,16 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
+	dbproxy "github.com/infobloxopen/db-controller/webhook"
+
 	//+kubebuilder:scaffold:imports
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+
 	// +kubebuilder:scaffold:imports
 	crossplanedbv1beta1 "github.com/crossplane/provider-aws/apis/database/v1beta1"
 )
@@ -57,6 +64,20 @@ func init() {
 
 }
 
+func parseDBPoxySidecarConfig(configFile string) (*dbproxy.Config, error) {
+	data, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg dbproxy.Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
 func main() {
 	var metricsAddr string
 	var metricsPort int
@@ -64,6 +85,8 @@ func main() {
 	var configFile string
 	var probeAddr string
 	var probePort int
+	var enableDBProxyWebhook bool
+
 	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
 	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-address", "", "The address the probe endpoint binds to.")
@@ -73,6 +96,10 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
 		"Database connection string to with root credentials.")
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
+		"Enable DB PRoxy webhook. "+
+			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
+			"with the infoblox.com/db-secret-path annotation set.")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -115,6 +142,24 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
+	}
+
+	if enableDBProxyWebhook {
+		webHookServer := mgr.GetWebhookServer()
+
+		webHookServer.Port = 8443
+		webHookServer.CertDir = "./certs/"
+
+		dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
+		if err != nil {
+			setupLog.Error(err, "could not parse db proxy sidecar configuration")
+			os.Exit(1)
+		} else {
+			setupLog.Info("Parsed db proxy sidecar config:", "dbproxysidecarconfig", dbProxySidecarConfig)
+		}
+
+		setupLog.Info("registering with webhook server")
+		webHookServer.Register("/mutate", &webhook.Admission{Handler: &dbproxy.DBProxyInjector{Name: "DB Proxy", Client: mgr.GetClient(), DBProxySidecarConfig: dbProxySidecarConfig}})
 	}
 
 	setupLog.Info("starting manager")
