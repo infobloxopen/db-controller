@@ -31,19 +31,20 @@ type Config struct {
 }
 
 func dbProxySideCardInjectionRequired(pod *corev1.Pod) (bool, string) {
-	dbSecretPath, ok := pod.Annotations["db-secret-path"]
+	dbSecretPath, ok := pod.Annotations["infoblox.com/db-secret-path"]
 
 	if !ok {
 		return false, ""
 	}
 
-	alreadyInjected, err := strconv.ParseBool(pod.Annotations["dbproxy-injected"])
+	alreadyInjected, err := strconv.ParseBool(pod.Annotations["infoblox.com/dbproxy-injected"])
 
 	if err == nil && alreadyInjected {
+		dbProxyLog.Info("DB Proxy sidecar already injected: ", pod.Name, dbSecretPath)
 		return false, dbSecretPath
 	}
 
-	dbProxyLog.Info("Should Inject: ", pod.Name, dbSecretPath)
+	dbProxyLog.Info("DB Proxy sidecar Injection required: ", pod.Name, dbSecretPath)
 
 	return true, dbSecretPath
 }
@@ -63,9 +64,9 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 		pod.Annotations = map[string]string{}
 	}
 
-	shoudInjectSidecar, dbSecretPath := dbProxySideCardInjectionRequired(pod)
+	shoudInjectDBProxy, dbSecretPath := dbProxySideCardInjectionRequired(pod)
 
-	if shoudInjectSidecar {
+	if shoudInjectDBProxy {
 		dbProxyLog.Info("Injecting sidecar...")
 
 		f := func(c rune) bool {
@@ -84,11 +85,11 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 			pod.Spec.Volumes = append(pod.Spec.Volumes, dbpi.DBProxySidecarConfig.Volumes...)
 			pod.Spec.Containers = append(pod.Spec.Containers, dbpi.DBProxySidecarConfig.Containers...)
 
-			pod.Annotations["dbproxy-injected"] = "true"
+			pod.Annotations["infoblox.com/dbproxy-injected"] = "true"
 
 			dbProxyLog.Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
 		} else {
-			dbProxyLog.Error(nil, "could not parse db secret path", "db-secret-path", dbSecretPath)
+			dbProxyLog.Error(nil, "could not parse db secret path", "infoblox.com/db-secret-path", dbSecretPath)
 		}
 	} else {
 		dbProxyLog.Info("DB Proxy sidecar not needed.", pod.Name, pod.APIVersion)

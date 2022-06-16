@@ -85,6 +85,8 @@ func main() {
 	var configFile string
 	var probeAddr string
 	var probePort int
+	var enableDBProxyWebhook bool
+
 	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
 	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-address", "", "The address the probe endpoint binds to.")
@@ -94,6 +96,10 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
 		"Database connection string to with root credentials.")
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
+		"Enable DB PRoxy webhook. "+
+			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
+			"with the infoblox.com/db-secret-path annotation set.")
 	opts := zap.Options{
 		Development: false,
 	}
@@ -138,21 +144,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	webHookServer := mgr.GetWebhookServer()
+	if enableDBProxyWebhook {
+		webHookServer := mgr.GetWebhookServer()
 
-	webHookServer.Port = 8443
-	webHookServer.CertDir = "./certs/"
+		webHookServer.Port = 8443
+		webHookServer.CertDir = "./certs/"
 
-	dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
-	if err != nil {
-		setupLog.Error(err, "could not parse db proxy sidecar configuration")
-		os.Exit(1)
-	} else {
-		setupLog.Info("Parsed db proxy sidecar config:", "dbproxysidecarconfig", dbProxySidecarConfig)
+		dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
+		if err != nil {
+			setupLog.Error(err, "could not parse db proxy sidecar configuration")
+			os.Exit(1)
+		} else {
+			setupLog.Info("Parsed db proxy sidecar config:", "dbproxysidecarconfig", dbProxySidecarConfig)
+		}
+
+		setupLog.Info("registering with webhook server")
+		webHookServer.Register("/mutate", &webhook.Admission{Handler: &dbproxy.DBProxyInjector{Name: "DB Proxy", Client: mgr.GetClient(), DBProxySidecarConfig: dbProxySidecarConfig}})
 	}
-
-	setupLog.Info("registering with webhook server")
-	webHookServer.Register("/mutate", &webhook.Admission{Handler: &dbproxy.DBProxyInjector{Name: "DB Proxy", Client: mgr.GetClient(), DBProxySidecarConfig: dbProxySidecarConfig}})
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
