@@ -1,0 +1,22 @@
+{{- if .Values.dbproxy.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "db-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "db-controller.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: {{ include "db-controller.fullname" . }}
+  dnsNames:
+    - {{ include "db-controller.fullname" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "db-controller.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ include "db-controller.fullname" . }}
+{{- end }}
