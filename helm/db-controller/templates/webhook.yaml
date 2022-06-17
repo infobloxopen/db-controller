@@ -1,0 +1,31 @@
+{{ if .Values.dbproxy.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: dbproxy-injector-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/db-controller-webhook-cert
+webhooks:
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: {{ include "db-controller.fullname" . }}
+      path: /mutate
+      port: 8443
+      namespace: {{ .Release.Namespace }}
+  sideEffects: None
+  admissionReviewVersions: ["v1"]
+  failurePolicy: Fail
+  name: dbproxy-injector.infoblox.com
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+    scope: "Namespaced"
+{{ end }}

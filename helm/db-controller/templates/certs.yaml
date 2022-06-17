@@ -1,0 +1,22 @@
+{{ if .Values.dbproxy.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: dbproxy-selfsigned-issuer
+  namespace: {{ .Release.namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: db-controller-webhook-cert
+  namespace: {{ .Release.namespace }}
+spec:
+  secretName: dbproxy-injector-webhook-cert
+  dnsNames:
+    - {{ include "db-controller.fullname" . }}.{{ .Release.namespace }}.svc
+    - {{ include "db-controller.fullname" . }}.{{ .Release.namespace }}.svc.cluster.local
+  issuerRef:
+    name: dbproxy-selfsigned-issuer
+{{ end }}

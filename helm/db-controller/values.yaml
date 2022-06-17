@@ -89,6 +89,9 @@ pdb:
 postgresql:
   enabled: false
 
+dbproxy:
+  enabled: false
+
 zapLogger:
   develMode: false
   level: info
