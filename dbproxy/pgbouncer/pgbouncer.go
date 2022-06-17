@@ -38,7 +38,7 @@ func ParseDBCredentials(path *string) (*DBCredential, error) {
 		return nil, err
 	}
 
-	fields := strings.Fields(string(content))
+	fields := strings.Split(string(content), "' ")
 
 	f := func(c rune) bool {
 		return (c == '=')
@@ -48,6 +48,7 @@ func ParseDBCredentials(path *string) (*DBCredential, error) {
 
 	for _, field := range fields {
 		fieldPair := strings.FieldsFunc(field, f)
+		fieldPair = strings.SplitN(field, "=", 2)
 		if len(fieldPair) == 2 {
 			unquotedString := strings.Trim(fieldPair[1], `'`)
 			m[fieldPair[0]] = &unquotedString
@@ -83,7 +84,7 @@ func ParseDBCredentials(path *string) (*DBCredential, error) {
 	dbc.User = m["user"]
 	dbc.Password = m["password"]
 
-	fmt.Println(*dbc.Host, dbc.Port, *dbc.DBName, *dbc.User)
+	// fmt.Println(*dbc.Host, dbc.Port, *dbc.DBName, *dbc.User, *dbc.Password)
 
 	return &dbc, nil
 }
@@ -116,7 +117,7 @@ func WritePGBouncerConfig(path *string, config *PGBouncerConfig) error {
 		return err
 	}
 
-	userLine := "\"" + *config.UserName + "\" \"" + *config.Password + "\""
+	userLine := strconv.Quote(*config.UserName) + " \"" + strings.Replace(*config.Password, "\"", "\"\"", -1) + "\""
 
 	userFile.Write([]byte(userLine))
 
