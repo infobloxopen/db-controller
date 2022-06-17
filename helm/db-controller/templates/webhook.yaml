@@ -1,8 +1,8 @@
-{{ if .Values.dbproxy.enabled }}
+{{- if .Values.dbproxy.enabled }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: dbproxy-injector-webhook
+  name: {{ include "db-controller.fullname" . }}
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/db-controller-webhook-cert
 webhooks:
@@ -28,4 +28,4 @@ webhooks:
     resources:
     - pods
     scope: "Namespaced"
-{{ end }}
+{{- end }}

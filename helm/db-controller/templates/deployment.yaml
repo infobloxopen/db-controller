@@ -86,26 +86,26 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
-            {{ if .Values.dbproxy.enabled }}
+            {{- if .Values.dbproxy.enabled }}
             - name: dbproxycert
               mountPath: /certs
               readOnly: true
-            {{ end }}
+            {{- end }}
       volumes:
       - name: config-volume
         configMap:
           name: {{ include "db-controller.name" . }}-config
-      {{ if .Values.dbproxy.enabled }}
+      {{- if .Values.dbproxy.enabled }}
       - name: dbproxycert
         secret:
-          secretName: dbproxy-injector-webhook-cert
+          secretName: {{ include "db-controller.fullname" . }}
           optional: false
           items:
           - key: tls.crt
             path: tls.crt
           - key: tls.key
             path: tls.key
-      {{ end }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
