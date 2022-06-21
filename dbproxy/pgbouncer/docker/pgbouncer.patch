@@ -1,52 +1,66 @@
-diff -uNr pgbouncer/include/bouncer.h pgbouncer.cxvisa/include/bouncer.h
---- pgbouncer.a/include/bouncer.h	2022-06-13 16:56:19.178005042 -0700
-+++ pgbouncer.b/include/bouncer.h	2022-06-13 16:57:54.619119705 -0700
-@@ -517,6 +517,7 @@
+diff --git a/include/bouncer.h b/include/bouncer.h
+index ea25551..222ce6d 100644
+--- a/include/bouncer.h
++++ b/include/bouncer.h
+@@ -517,6 +517,8 @@ extern char *cf_pidfile;
  extern char *cf_ignore_startup_params;
  
  extern char *cf_admin_users;
 +extern char *cf_remote_user_override;
++extern char *cf_remote_db_override;
  extern char *cf_stats_users;
  extern int cf_stats_period;
  extern int cf_log_stats;
-diff -uNr pgbouncer/src/client.c pgbouncer.cxvisa/src/client.c
---- pgbouncer.a/src/client.c	2022-06-13 16:56:19.181005014 -0700
-+++ pgbouncer.b/src/client.c	2022-06-13 16:58:18.773895641 -0700
-@@ -538,6 +538,10 @@
+diff --git a/src/client.c b/src/client.c
+index 8ffbbcd..8b97ffe 100644
+--- a/src/client.c
++++ b/src/client.c
+@@ -535,9 +535,17 @@ static bool decide_startup_pool(PgSocket *client, PktHdr *pkt)
+ 		if (strcmp(key, "database") == 0) {
+ 			slog_debug(client, "got var: %s=%s", key, val);
+ 			dbname = val;
++            if (strcmp(cf_remote_db_override, "") != 0) {
++                dbname = cf_remote_db_override;
++			}
++            slog_debug(client, "updated db: %s", dbname);
  		} else if (strcmp(key, "user") == 0) {
  			slog_debug(client, "got var: %s=%s", key, val);
  			username = val;
-+                        if (strcmp(cf_remote_user_override, "") != 0) {
-+                                username = cf_remote_user_override;
++            if (strcmp(cf_remote_user_override, "") != 0) {
++                username = cf_remote_user_override;
 +			}
-+			slog_debug(client, "updated user: %s", username);
++            slog_debug(client, "updated user: %s", username);
  		} else if (strcmp(key, "application_name") == 0) {
  			set_appname(client, val);
  			appname_found = true;
-diff -uNr pgbouncer/src/main.c pgbouncer.cxvisa/src/main.c
---- pgbouncer.a/src/main.c	2022-06-13 16:56:19.182005005 -0700
-+++ pgbouncer.b/src/main.c	2022-06-13 16:58:34.373750935 -0700
-@@ -159,6 +159,7 @@
+diff --git a/src/main.c b/src/main.c
+index fb76a56..b023cf1 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -159,6 +159,8 @@ char *cf_pidfile;
  char *cf_jobname;
  
  char *cf_admin_users;
 +char *cf_remote_user_override;
++char *cf_remote_db_override;
  char *cf_stats_users;
  int cf_stats_period;
  int cf_log_stats;
-@@ -227,6 +228,7 @@
+@@ -227,6 +229,8 @@ const struct CfLookup sslmode_map[] = {
   */
  static const struct CfKey bouncer_params [] = {
  CF_ABS("admin_users", CF_STR, cf_admin_users, 0, ""),
 +CF_ABS("remote_user_override", CF_STR, cf_remote_user_override, 0, ""),
++CF_ABS("remote_db_override", CF_STR, cf_remote_db_override, 0, ""),
  CF_ABS("application_name_add_host", CF_INT, cf_application_name_add_host, 0, "0"),
  CF_ABS("auth_file", CF_STR, cf_auth_file, 0, NULL),
  CF_ABS("auth_hba_file", CF_STR, cf_auth_hba_file, 0, ""),
-@@ -840,6 +842,7 @@
+@@ -840,6 +844,8 @@ static void cleanup(void)
  	xfree(&cf_autodb_connstr);
  	xfree(&cf_jobname);
  	xfree(&cf_admin_users);
 +	xfree(&cf_remote_user_override);
++	xfree(&cf_remote_db_override);
  	xfree(&cf_stats_users);
  	xfree(&cf_client_tls_protocols);
  	xfree(&cf_client_tls_ca_file);
