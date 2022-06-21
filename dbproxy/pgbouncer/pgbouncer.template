@@ -10,3 +10,4 @@ logfile = pgbouncer.log
 pidfile = pgbouncer.pid
 admin_users = {{.UserName}}
 remote_user_override = {{.UserName}}
+remote_db_override = {{.LocalDbName}}
