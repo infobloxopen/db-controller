@@ -15,7 +15,7 @@ webhooks:
       namespace: {{ .Release.Namespace }}
   sideEffects: None
   admissionReviewVersions: ["v1"]
-  failurePolicy: Fail
+  failurePolicy: Ignore
   name: dbproxy-injector.infoblox.com
   rules:
   - apiGroups:
