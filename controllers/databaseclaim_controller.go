@@ -530,7 +530,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 	// Deletion is long running task check that is not being deleted.
 	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
 		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
-		r.Log.Error(err, "RDSInstance", dbHostName)
+		r.Log.Error(err, "RDSInstance", "dbHostName", dbHostName)
 		return connInfo, err
 	}
 
