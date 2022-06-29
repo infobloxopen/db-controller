@@ -96,8 +96,8 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
 		"Database connection string to with root credentials.")
-	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
-		"Enable DB PRoxy webhook. "+
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", true,
+		"Enable DB Proxy webhook. "+
 			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
 			"with the infoblox.com/db-secret-path annotation set.")
 	opts := zap.Options{
