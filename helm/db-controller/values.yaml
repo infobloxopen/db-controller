@@ -90,7 +90,7 @@ postgresql:
   enabled: false
 
 dbproxy:
-  enabled: false
+  enabled: true
 
 zapLogger:
   develMode: false
