@@ -733,10 +733,14 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragm
 	return update, nil
 }
 
-func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
+func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dbDetails map[string]string) error {
 	secretName := dbClaim.Spec.SecretName
 	truePtr := true
-	dsnName := dbClaim.Spec.DSNName
+
+	data := make(map[string][]byte)
+	for key, val := range dbDetails {
+		data[key] = []byte(val)
+	}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
@@ -753,19 +757,18 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 				},
 			},
 		},
-		Data: map[string][]byte{
-			dsnName:          []byte(dsn),
-			"uri_" + dsnName: []byte(dbURI),
-		},
+		Data: data,
 	}
 	r.Log.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
 
 	return r.Client.Create(ctx, secret)
 }
 
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, exSecret *corev1.Secret) error {
-	exSecret.Data[dsnName] = []byte(dsn)
-	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName string, dbDetails map[string]string, exSecret *corev1.Secret) error {
+	exSecret.Data[dsnName] = []byte(dbDetails["dsn"])
+	for key, value := range dbDetails {
+		exSecret.Data[key] = []byte(value)
+	}
 	r.Log.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
@@ -792,6 +795,10 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Namespace: dbClaim.Namespace,
 		Name:      secretName,
 	}, gs)
+
+	dbDetails := make(map[string]string)
+	dbDetails[dbClaim.Spec.DSNName] = dsn
+	dbDetails["uri_"+dbClaim.Spec.DSNName] = dbURI
 
 	if err != nil {
 		if !errors.IsNotFound(err) {
