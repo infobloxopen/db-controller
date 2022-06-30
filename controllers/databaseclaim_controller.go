@@ -799,6 +799,11 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	dbDetails := make(map[string]string)
 	dbDetails[dbClaim.Spec.DSNName] = dsn
 	dbDetails["uri_"+dbClaim.Spec.DSNName] = dbURI
+	dbDetails["database_name"] = connInfo.DatabaseName
+	dbDetails["host"] = connInfo.Host
+	dbDetails["port"] = connInfo.Port
+	dbDetails["password"] = connInfo.Password
+	dbDetails["sslmode"] = connInfo.SSLMode
 
 	if err != nil {
 		if !errors.IsNotFound(err) {
