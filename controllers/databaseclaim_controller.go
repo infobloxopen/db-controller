@@ -733,7 +733,7 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragm
 	return update, nil
 }
 
-func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string) error {
+func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo) error {
 	secretName := dbClaim.Spec.SecretName
 	truePtr := true
 	dsnName := dbClaim.Spec.DSNName
@@ -756,6 +756,12 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 		Data: map[string][]byte{
 			dsnName:          []byte(dsn),
 			"uri_" + dsnName: []byte(dbURI),
+			"hostname":       []byte(connInfo.Host),
+			"port":           []byte(connInfo.Port),
+			"database":       []byte(connInfo.DatabaseName),
+			"username":       []byte(connInfo.Username),
+			"password":       []byte(connInfo.Password),
+			"sslmode":        []byte(connInfo.SSLMode),
 		},
 	}
 	r.Log.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
@@ -763,9 +769,14 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 	return r.Client.Create(ctx, secret)
 }
 
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, exSecret *corev1.Secret) error {
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
 	exSecret.Data[dsnName] = []byte(dsn)
 	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
+	exSecret.Data["hostname"] = []byte(connInfo.DatabaseName)
+	exSecret.Data["port"] = []byte(connInfo.Port)
+	exSecret.Data["username"] = []byte(connInfo.Username)
+	exSecret.Data["password"] = []byte(connInfo.Password)
+	exSecret.Data["sslmode"] = []byte(connInfo.SSLMode)
 	r.Log.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
@@ -797,10 +808,10 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		if !errors.IsNotFound(err) {
 			return err
 		}
-		if err := r.createSecret(ctx, dbClaim, dsn, dbURI); err != nil {
+		if err := r.createSecret(ctx, dbClaim, dsn, dbURI, connInfo); err != nil {
 			return err
 		}
-	} else if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, gs); err != nil {
+	} else if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, connInfo, gs); err != nil {
 		return err
 	}
 

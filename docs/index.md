@@ -395,6 +395,15 @@ connection info and also create a secret with the relevant information. The secr
 will have the same name as the DatabaseClaim, and contain keys that match the 
 values of the properties under the DatabaseClaim *status.connectionInfo* property.
 
+The keys in the secret are shown below:
+* dsn : postgres dsn string value specified by DatabaseClaim
+* "uri_" + dsn : url path value is "uri_" prefix added to dsn
+* "hostname" : postgres host of dsn
+* "port" : port used for connecting to the database
+* "database" : postgres database created on host
+* "username" : username to access the database
+* "password" : password to access the database
+* "sslmode" : SSL Mode value as specified by dsn spec
 
 ### Using Secrets as Files
 Modify the Pod definition, for the service that you will add the proxy package, to 
