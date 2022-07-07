@@ -117,9 +117,9 @@ func TestPostgresClientOperations(t *testing.T) {
 			args{
 				"test_db",
 				"test_role",
-				"test_user",
+				"test-user",
 				"test_password",
-				"new_test_user",
+				"new-test-user",
 				"new_test_password",
 			},
 			true,
