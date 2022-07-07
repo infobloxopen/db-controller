@@ -147,7 +147,7 @@ func main() {
 	if enableDBProxyWebhook {
 		webHookServer := mgr.GetWebhookServer()
 
-		webHookServer.Port = 8443
+		webHookServer.Port = 7443
 		webHookServer.CertDir = "./certs/"
 
 		dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
