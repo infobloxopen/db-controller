@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 
 	"github.com/infobloxopen/db-controller/pkg/metrics"
 )
@@ -61,8 +61,8 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 }
 
 func PostgresConnectionString(host, port, user, password, dbname, sslmode string) string {
-	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
-		port, user, escapeValue(password), dbname, sslmode)
+       return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
+               port, escapeValue(user), escapeValue(password), escapeValue(dbname), sslmode)
 }
 
 func PostgresURI(host, port, user, password, dbname, sslmode string) string {
@@ -119,14 +119,14 @@ func (pc *PostgresClient) CreateGroup(dbName, rolename string) (bool, error) {
 
 	if !exists {
 		pc.log.Info("creating a ROLE", "role", rolename)
-		_, err = pc.DB.Exec("CREATE ROLE" + fmt.Sprintf("%q", rolename) + "WITH NOLOGIN")
+		_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
 		if err != nil {
 			pc.log.Error(err, "could not create role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
 			return created, err
 		}
 
-		if _, err := db.Exec("GRANT ALL PRIVILEGES ON DATABASE " + fmt.Sprintf("%q", dbName) + " TO " + fmt.Sprintf("%q", rolename)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename))); err != nil {
 			pc.log.Error(err, "could not set permissions to role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 			return created, err
@@ -143,7 +143,7 @@ func (pc *PostgresClient) CreateGroup(dbName, rolename string) (bool, error) {
 
 func (pc *PostgresClient) setGroup(username, rolename string) error {
 	db := pc.DB
-	if _, err := db.Exec("ALTER ROLE " + fmt.Sprintf("%q", username) + " SET ROLE TO " + fmt.Sprintf("%q", rolename)); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {
 		return err
 	}
 
@@ -166,7 +166,8 @@ func (pc *PostgresClient) CreateUser(username, rolename, userPassword string) (b
 	if !exists {
 		pc.log.Info("creating a user", "user", username)
 
-		_, err = pc.DB.Exec("CREATE ROLE " + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "' LOGIN IN ROLE " + rolename)
+		s := fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword),  pq.QuoteIdentifier(rolename))
+		_, err = pc.DB.Exec(s)
 		if err != nil {
 			pc.log.Error(err, "could not create user "+username)
 			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
@@ -202,9 +203,9 @@ func (pc *PostgresClient) RenameUser(oldUsername string, newUsername string) err
 	}
 
 	if exists {
-		pc.log.Info(fmt.Sprintf("renaming user %s to %s", oldUsername, newUsername))
+		pc.log.Info(fmt.Sprintf("renaming user %v to %v", oldUsername, newUsername))
 
-		_, err = db.Exec("ALTER USER" + fmt.Sprintf("%q", oldUsername) + " RENAME TO  " + fmt.Sprintf("%q", newUsername))
+		_, err = db.Exec(fmt.Sprintf("ALTER USER %s RENAME TO %s", pq.QuoteIdentifier(oldUsername), pq.QuoteIdentifier(newUsername)))
 		if err != nil {
 			pc.log.Error(err, "could not rename user "+oldUsername)
 			return err
@@ -263,7 +264,7 @@ func (pc *PostgresClient) UpdatePassword(username string, userPassword string) e
 	}
 
 	pc.log.Info("update user password", "user:", username)
-	_, err := db.Exec("ALTER ROLE" + fmt.Sprintf("%q", username) + " with encrypted password '" + userPassword + "'")
+	_, err := db.Exec(fmt.Sprintf("ALTER ROLE %s with encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword)))
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			pc.log.Error(err, "could not alter user "+username)
@@ -287,11 +288,22 @@ func (pc *PostgresClient) Close() error {
 }
 
 func escapeValue(in string) string {
-	// if we surround values to single quotes we must escape a single quote sign and backslash
-	toEscape := []string{`\`, `'`}
-	for _, e := range toEscape {
-		in = strings.ReplaceAll(in, e, "\\"+e)
-	}
 
-	return in
+	encoded := make([]rune, 0)
+	for _, c := range in {
+		switch c {
+		case ' ':
+			encoded = append(encoded, '\\')
+			encoded = append(encoded, ' ')
+		case '\\':
+			encoded = append(encoded, '\\')
+			encoded = append(encoded, '\\')
+		case '\'':
+			encoded = append(encoded, '\\')
+			encoded = append(encoded, '\'')
+		default:
+			encoded = append(encoded, c)
+		}
+	}
+	return string(encoded)
 }
