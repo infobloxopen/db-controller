@@ -57,6 +57,9 @@ service:
   type: ClusterIP
   port: 8443
 
+webhook:
+  port: 7443
+
 resources:
   limits:
     cpu: 100m
