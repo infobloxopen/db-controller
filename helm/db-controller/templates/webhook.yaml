@@ -11,7 +11,7 @@ webhooks:
     service:
       name: {{ include "db-controller.fullname" . }}
       path: /mutate
-      port: 8443
+      port: 7443
       namespace: {{ .Release.Namespace }}
   sideEffects: None
   admissionReviewVersions: ["v1"]
