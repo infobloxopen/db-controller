@@ -17,6 +17,8 @@ const (
 	PostgresType = "postgres"
 )
 
+var extensions = []string{"citext", "uuid-ossp"}
+
 type DBClient interface {
 	CreateDataBase(dbName string) (bool, error)
 	CreateUser(username, role, userPassword string) (bool, error)
@@ -61,8 +63,8 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 }
 
 func PostgresConnectionString(host, port, user, password, dbname, sslmode string) string {
-       return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
-               port, escapeValue(user), escapeValue(password), escapeValue(dbname), sslmode)
+	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
+		port, escapeValue(user), escapeValue(password), escapeValue(dbname), sslmode)
 }
 
 func PostgresURI(host, port, user, password, dbname, sslmode string) string {
@@ -91,7 +93,7 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 	if !exists {
 		pc.log.Info("creating DB:", "database name", dbName)
 		// create the database
-		if _, err := db.Exec(fmt.Sprintf("create database %q", dbName)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("create database %s", pq.QuoteIdentifier(dbName))); err != nil {
 			pc.log.Error(err, "could not create database")
 			metrics.DBProvisioningErrors.WithLabelValues("create error")
 			return created, err
@@ -100,8 +102,14 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 		pc.log.Info("database has been created", "DB", dbName)
 		metrics.DBCreated.Inc()
 	}
-
-	return created, nil
+	pc.log.Info("creating extensions in %s", "database_name", dbName)
+	for _, s := range extensions {
+		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
+			pc.log.Error(err, "could not create extension", "database_name", dbName)
+			return created, fmt.Errorf("could not create extension %s: %s", s, err)
+		}
+	}
+	return created, err
 }
 
 func (pc *PostgresClient) CreateGroup(dbName, rolename string) (bool, error) {
@@ -166,7 +174,7 @@ func (pc *PostgresClient) CreateUser(username, rolename, userPassword string) (b
 	if !exists {
 		pc.log.Info("creating a user", "user", username)
 
-		s := fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword),  pq.QuoteIdentifier(rolename))
+		s := fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword), pq.QuoteIdentifier(rolename))
 		_, err = pc.DB.Exec(s)
 		if err != nil {
 			pc.log.Error(err, "could not create user "+username)
