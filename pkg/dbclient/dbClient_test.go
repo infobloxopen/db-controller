@@ -3,6 +3,7 @@ package dbclient
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strconv"
 	"testing"
 
@@ -21,8 +22,23 @@ var sqlDB *sql.DB
 type testDB struct {
 	t        *testing.T
 	port     int
+	username string
+	password string
 	resource *dockertest.Resource
 	pool     *dockertest.Pool
+}
+
+func (t *testDB) URL() string {
+	u := url.URL{
+		Scheme: "postgres",
+		Host:   fmt.Sprintf("localhost:%d", t.port),
+		User:   url.UserPassword(t.username, t.password),
+		Path:   "/postgres",
+	}
+	q := u.Query()
+	q.Set("sslmode", "disable")
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (t *testDB) Close() {
@@ -32,9 +48,12 @@ func (t *testDB) Close() {
 	}
 }
 
-func (t *testDB) OpenUser(username, password string) (*sql.DB, error) {
-	dbConnStr := fmt.Sprintf("host=localhost port=%d user=%s dbname=postgres password=%s sslmode=disable",
-		t.port, username, password)
+func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
+	if dbname == "" {
+		dbname = "postgres"
+	}
+	dbConnStr := fmt.Sprintf("host=localhost port=%d user=%s dbname=%s password=%s sslmode=disable",
+		t.port, username, dbname, password)
 	return sql.Open("postgres", dbConnStr)
 }
 
@@ -94,6 +113,8 @@ func setupSqlDB(t *testing.T) *testDB {
 	}
 	return &testDB{
 		t:        t,
+		username: user,
+		password: pass,
 		port:     port,
 		resource: resource,
 		pool:     pool,
@@ -148,6 +169,7 @@ func TestPostgresClientOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pc := &PostgresClient{
 				dbType: tt.fields.dbType,
+				dbURL:  testDB.URL(),
 				DB:     tt.fields.DB,
 				log:    tt.fields.log,
 			}
@@ -257,7 +279,7 @@ func TestPostgresClientOperations(t *testing.T) {
 			t.Logf("\t%s UpdatePassword() is passed", succeed)
 
 			// login as user
-			db, err := testDB.OpenUser(tt.args.newUsername, tt.args.newPassword)
+			db, err := testDB.OpenUser(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
 			if err != nil {
 				t.Errorf("could not login with updated password %s", err)
 			}
