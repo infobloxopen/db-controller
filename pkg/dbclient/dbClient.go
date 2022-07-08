@@ -36,8 +36,18 @@ type DBCloser interface {
 
 type PostgresClient struct {
 	dbType string
+	dbURL  string
 	DB     *sql.DB
 	log    logr.Logger
+}
+
+func (p *PostgresClient) getDB(dbname string) (*sql.DB, error) {
+	u, err := url.Parse(p.dbURL)
+	if err != nil {
+		return nil, err
+	}
+	u.Path = "/" + dbname
+	return sql.Open("postgres", u.String())
 }
 
 func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmode string) (DBClient, error) {
@@ -59,6 +69,7 @@ func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslm
 		dbType: dbType,
 		DB:     db,
 		log:    log,
+		dbURL:  PostgresURI(host, port, user, password, "", sslmode),
 	}, nil
 }
 
@@ -102,12 +113,20 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 		pc.log.Info("database has been created", "DB", dbName)
 		metrics.DBCreated.Inc()
 	}
-	pc.log.Info("creating extensions in %s", "database_name", dbName)
+	// db is now database specific connection
+	db, err = pc.getDB(dbName)
+	pc.log.Info("connected to " + dbName)
+	if err != nil {
+		pc.log.Error(err, "could not connect to db", "database", dbName)
+		return created, err
+	}
+	defer db.Close()
 	for _, s := range extensions {
 		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
 			pc.log.Error(err, "could not create extension", "database_name", dbName)
 			return created, fmt.Errorf("could not create extension %s: %s", s, err)
 		}
+		pc.log.Info("created extension " + s)
 	}
 	return created, err
 }
