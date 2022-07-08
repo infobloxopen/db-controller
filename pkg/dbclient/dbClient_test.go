@@ -18,7 +18,27 @@ const failed = "\u2717"
 
 var sqlDB *sql.DB
 
-func setupSqlDB(t *testing.T) func(t *testing.T) {
+type testDB struct {
+	t        *testing.T
+	port     int
+	resource *dockertest.Resource
+	pool     *dockertest.Pool
+}
+
+func (t *testDB) Close() {
+	t.t.Log("Tearing down dockertest resource of PostgreSQL DB")
+	if err := t.pool.Purge(t.resource); err != nil {
+		t.t.Errorf("Could not purge resource: %s", err)
+	}
+}
+
+func (t *testDB) OpenUser(username, password string) (*sql.DB, error) {
+	dbConnStr := fmt.Sprintf("host=localhost port=%d user=%s dbname=postgres password=%s sslmode=disable",
+		t.port, username, password)
+	return sql.Open("postgres", dbConnStr)
+}
+
+func setupSqlDB(t *testing.T) *testDB {
 	t.Log("Setting up an instance of PostgreSQL DB with dockertest")
 
 	host := "localhost"
@@ -72,21 +92,19 @@ func setupSqlDB(t *testing.T) func(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Could not connect to docker: %s", err)
 	}
-
-	return func(t *testing.T) {
-		t.Log("Tearing down dockertest resource of PostgreSQL DB")
-		if err := pool.Purge(resource); err != nil {
-			t.Errorf("Could not purge resource: %s", err)
-		}
+	return &testDB{
+		t:        t,
+		port:     port,
+		resource: resource,
+		pool:     pool,
 	}
 }
 
 var logger = zap.New(zap.UseDevMode(true))
 
 func TestPostgresClientOperations(t *testing.T) {
-	teardownSqlDB := setupSqlDB(t)
-	defer teardownSqlDB(t)
-
+	testDB := setupSqlDB(t)
+	defer testDB.Close()
 	type mockClient struct {
 		dbType string
 		DB     *sql.DB
@@ -238,6 +256,15 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s UpdatePassword() is passed", succeed)
 
+			// login as user
+			db, err := testDB.OpenUser(tt.args.newUsername, tt.args.newPassword)
+			if err != nil {
+				t.Errorf("could not login with updated password %s", err)
+			}
+			defer db.Close()
+			if _, err := db.Exec("CREATE EXTENSION IF NOT EXISTS citext"); err != nil {
+				t.Errorf("citext is not created: %s", err)
+			}
 		})
 	}
 }
