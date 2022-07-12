@@ -772,7 +772,7 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
 	exSecret.Data[dsnName] = []byte(dsn)
 	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
-	exSecret.Data["hostname"] = []byte(connInfo.DatabaseName)
+	exSecret.Data["hostname"] = []byte(connInfo.Host)
 	exSecret.Data["port"] = []byte(connInfo.Port)
 	exSecret.Data["username"] = []byte(connInfo.Username)
 	exSecret.Data["password"] = []byte(connInfo.Password)
