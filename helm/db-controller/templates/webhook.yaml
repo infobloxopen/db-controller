@@ -4,7 +4,7 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: {{ include "db-controller.fullname" . }}
   annotations:
-    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/db-controller-webhook-cert
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}
 webhooks:
 - clientConfig:
     caBundle: Cg==
