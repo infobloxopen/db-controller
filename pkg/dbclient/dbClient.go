@@ -17,7 +17,7 @@ const (
 	PostgresType = "postgres"
 )
 
-var extensions = []string{"citext", "uuid-ossp"}
+var extensions = []string{"citext", "uuid-ossp", "pgcrypto"}
 
 type DBClient interface {
 	CreateDataBase(dbName string) (bool, error)
