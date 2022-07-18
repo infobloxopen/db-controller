@@ -23,7 +23,10 @@ CWD=$(shell pwd)
 KUBECONFIG ?= ${HOME}/.kube/config
 HELM_IMAGE := infoblox/helm:3.2.4-5b243a2
 CHART_VERSION ?= $(TAG)
+APP_VERSION ?= ${TAG}
 DB_CONTROLLER_CHART := helm/${IMAGE_NAME}
+DB_CONTROLLER_CHART_VALUES_YAML := ${DB_CONTROLLER_CHART}/values.yaml
+DB_CONTROLLER_CHART_VALUES_IN := ${DB_CONTROLLER_CHART}/values.in
 CRDS_CHART := helm/${IMAGE_NAME}-crds
 CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
 CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
@@ -272,7 +275,8 @@ build-properties-crd:
 	@sed 's/{CHART_FILE}/$(CHART_FILE_CRD)/g' build.properties.in > crd.build.properties
 
 build-chart:
-	${HELM_ENTRYPOINT} "helm package ${DB_CONTROLLER_CHART} --version ${CHART_VERSION}"
+	sed "s/  tag: \"TAG\"/  tag: \"${TAG}\"/g" ${DB_CONTROLLER_CHART_VALUES_IN} > ${DB_CONTROLLER_CHART_VALUES_YAML}
+	${HELM_ENTRYPOINT} "helm package ${DB_CONTROLLER_CHART} --version ${CHART_VERSION} --app-version ${APP_VERSION}"
 
 build-chart-crd: update_crds
 	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
