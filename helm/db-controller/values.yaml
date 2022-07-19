@@ -11,7 +11,7 @@ image:
   repository: ghcr.io/infobloxopen/db-controller
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  # tag: "TAG"
 
 imagePullSecrets: []
 nameOverride: ""
