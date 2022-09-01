@@ -744,8 +744,8 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         "databaseclaims.persistance.atlas.infoblox.com/v1",
-					Kind:               "CustomResourceDefinition",
+					APIVersion:         "persistance.atlas.infoblox.com/v1",
+					Kind:               "DatabaseClaim",
 					Name:               dbClaim.Name,
 					UID:                dbClaim.UID,
 					Controller:         &truePtr,
