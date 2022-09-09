@@ -571,15 +571,12 @@ type DynamicHostParms struct {
 func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
 	params := DynamicHostParms{}
 
-	// Only Support Postgres right now ignore Claim Type value
-	// Engine: dbClaim.Spec.Type,
-	params.Engine = "postgres"
-
 	// Database Config
 	if fragmentKey == "" {
 		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
 		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
 		params.Shape = dbClaim.Spec.Shape
+		params.Engine = dbClaim.Spec.Type
 		params.MinStorageGB = dbClaim.Spec.MinStorageGB
 	} else {
 		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
@@ -600,6 +597,10 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 
 	if params.Shape == "" {
 		params.Shape = r.Config.GetString("defaultShape")
+	}
+
+	if params.Engine == "" {
+		params.Engine = r.Config.GetString("defaultEngine")
 	}
 
 	if params.MinStorageGB == 0 {
@@ -656,8 +657,6 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 					Name: r.getDbSubnetGroupNameRef(),
 				},
 				// Items from Claim and fragmentKey
-				// Only Support Postgres right now ignore Claim Type value
-				// Engine: dbClaim.Spec.Type,
 				Engine:           params.Engine,
 				DBInstanceClass:  params.Shape,
 				AllocatedStorage: &params.MinStorageGB,
