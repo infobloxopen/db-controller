@@ -710,24 +710,28 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
 
 	update := false
-	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
-	// Update RDSInstance
-	// Update Shape and MinGibStorage for now
-	if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
-		rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
-		update = true
-	}
+	// TODO:currently ignoring changes to shape and minStorage if an RDSInstance CR already exists.
+	/*
+		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
-	if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
-		rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
-		update = true
-	}
+		// Update RDSInstance
+		// Update Shape and MinGibStorage for now
+		if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
+			rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
+			update = true
+		}
 
-	if update {
-		r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-		return update, r.Client.Update(ctx, rdsInstance)
-	}
+		if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
+			rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
+			update = true
+		}
+
+		if update {
+			r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+			return update, r.Client.Update(ctx, rdsInstance)
+		}
+	*/
 
 	return update, nil
 }
