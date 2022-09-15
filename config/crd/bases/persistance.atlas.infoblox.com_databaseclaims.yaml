@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.9.0
+    controller-gen.kubebuilder.io/version: v0.8.0
   creationTimestamp: null
   name: databaseclaims.persistance.atlas.infoblox.com
 spec:
@@ -38,10 +38,9 @@ spec:
               appId:
                 description: Specifies an indentifier for the application using the
                   database.
-                minLength: 1
                 type: string
               databaseName:
-                description: The name of the database instance.
+                description: The name of the database within InstanceLabel.
                 type: string
               dbNameOverride:
                 description: In most cases the AppID will match the database name.
@@ -76,11 +75,94 @@ spec:
                 description: The optional Shape values are arbitrary and help drive
                   instance selection
                 type: string
+              source:
+                description: Source specifies an existing postgres database or backup
+                  to use when initially provisioning the database.  If it already
+                  exists, this field is ignored
+                properties:
+                  postgresDatabase:
+                    description: PostgresDatabase defines the connection information
+                      to an existing postgres db
+                    properties:
+                      dsn:
+                        description: DSN is the connection string used to reach the
+                          postgres database
+                        type: string
+                      secretRef:
+                        description: SecretRef specifies a secret to use for connecting
+                          to the postgresdb (should be master/root)
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                  s3Bucket:
+                    description: S3Bucket defines the location of a DB backup in an
+                      S3 bucket
+                    properties:
+                      bucket:
+                        type: string
+                      databaseType:
+                        description: ImportType specifies what type of database that
+                          the bucket contains
+                        type: string
+                      path:
+                        type: string
+                      region:
+                        type: string
+                      secretRef:
+                        description: AWSCredentials specifies a secret to use for
+                          connecting to the s3 bucket via AWS client
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - bucket
+                    - databaseType
+                    - path
+                    - region
+                    type: object
+                  type:
+                    description: Type specifies the type of source
+                    type: string
+                required:
+                - type
+                type: object
+              tags:
+                description: Tags
+                items:
+                  description: Tag
+                  properties:
+                    key:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - key
+                  - value
+                  type: object
+                type: array
               type:
                 description: Specifies the type of database to provision. Only postgres
                   is supported.
-                minLength: 0
                 type: string
+              useExistingSource:
+                description: UseExistingSource instructs the controller to perform
+                  user management on the database currently defined in the Source
+                  field. If source is empty, this is ignored If this is set, .source.Type
+                  and .type must match to use an existing source (since they must
+                  be the same) If this field was set and becomes unset, migration
+                  of data will commence
+                type: boolean
               userName:
                 description: The username that the application will use for accessing
                   the database.

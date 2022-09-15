@@ -23,16 +23,92 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type DatabaseType string
+
+const (
+	Postgres DatabaseType = "postgres"
+	MySQL    DatabaseType = "mysql"
+)
+
+type ImportType string
+
+const (
+	PostgresImport ImportType = "postgres"
+	MySQLImport    ImportType = "mysql"
+)
+
+type SourceType string
+
+const (
+	PostgresSource SourceType = "postgres"
+	S3BucketSource SourceType = "s3Bucket"
+)
+
+// Source is a union object for specifying the initial state of a DB that should be used when provisioning a DatabaseClaim
+type Source struct {
+	// Type specifies the type of source
+	// +required
+	Type string `json:"type"`
+
+	// PostgresDatabase defines the connection information to an existing postgres db
+	// +optional
+	PostgresDatabase *PostgresDatabase `json:"postgresDatabase,omitempty"`
+
+	// S3Bucket defines the location of a DB backup in an S3 bucket
+	// +optional
+	S3Bucket *S3Bucket `json:"s3Bucket,omitempty"`
+}
+
+type S3Bucket struct {
+	// ImportType specifies what type of database that the bucket contains
+	// +required
+	ImportType ImportType `json:"databaseType"`
+
+	// +required
+	Region string `json:"region"`
+
+	// +required
+	Bucket string `json:"bucket"`
+	// +required
+	Path string `json:"path"`
+
+	// AWSCredentials specifies a secret to use for connecting to the s3 bucket via AWS client
+	// +optional
+	AWSCredentials *SecretRef `json:"secretRef,omitempty"`
+}
+
+type PostgresDatabase struct {
+	// DSN is the connection string used to reach the postgres database
+	DSN string `json:"dsn,omitempty"`
+
+	// SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
+	SecretRef *SecretRef `json:"secretRef,omitempty"`
+}
+
+type SecretRef struct {
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name"`
+}
+
 // DatabaseClaimSpec defines the desired state of DatabaseClaim
 type DatabaseClaimSpec struct {
-	// +kubebuilder:validation:MinLength=1
+	// Source specifies an existing postgres database or backup to use when initially provisioning the database.  If it already exists, this field is ignored
+	// +optional
+	Source *Source `json:"source,omitempty"`
+
+	// UseExistingSource instructs the controller to perform user management on the database currently defined in the Source field.
+	// If source is empty, this is ignored
+	// If this is set, .source.Type and .type must match to use an existing source (since they must be the same)
+	// If this field was set and becomes unset, migration of data will commence
+	// +optional
+	UseExistingSource *bool `json:"useExistingSource,omitempty"`
 
 	// Specifies an indentifier for the application using the database.
 	AppID string `json:"appId"`
-	// +kubebuilder:validation:MinLength=0
 
 	// Specifies the type of database to provision. Only postgres is supported.
-	Type string `json:"type"`
+	// +required
+	Type DatabaseType `json:"type"`
 
 	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
 	DBNameOverride string `json:"dbNameOverride,omitempty"`
@@ -56,7 +132,7 @@ type DatabaseClaimSpec struct {
 	// +optional
 	Port string `json:"port,omitempty"`
 
-	// The name of the database instance.
+	// The name of the database within InstanceLabel.
 	DatabaseName string `json:"databaseName,omitempty"`
 
 	// DSN key name.
@@ -69,6 +145,15 @@ type DatabaseClaimSpec struct {
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	// +optional
 	MinStorageGB int `json:"minStorageGB"`
+
+	// Tags
+	Tags []Tag `json:"tags,omitempty"`
+}
+
+// Tag
+type Tag struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // DatabaseClaimStatus defines the observed state of DatabaseClaim
