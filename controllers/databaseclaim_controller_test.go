@@ -67,10 +67,11 @@ var secretNoHostFragmentRetainRef = []byte(`
 
 func TestDatabaseClaimReconcilerGeneratePassword(t *testing.T) {
 	type reconciler struct {
-		Client client.Client
-		Log    logr.Logger
-		Scheme *runtime.Scheme
-		Config *viper.Viper
+		Client             client.Client
+		Log                logr.Logger
+		Scheme             *runtime.Scheme
+		Config             *viper.Viper
+		DbIdentifierPrefix string
 	}
 	tests := []struct {
 		name    string
@@ -130,8 +131,18 @@ type mockClient struct {
 func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	_ = ctx
 	if (key.Namespace == "testNamespace") &&
-		(key.Name == "sample-master-secret" || key.Name == "db-controller-sample-connection" ||
-			key.Name == "db-controller-sample-claim") {
+		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" ||
+			key.Name == "dbc-sample-claim") {
+		sec, ok := obj.(*corev1.Secret)
+		if !ok {
+			return fmt.Errorf("can't assert type")
+		}
+		sec.Data = map[string][]byte{
+			"password": []byte("masterpassword"),
+		}
+		return nil
+	} else if (key.Namespace == "testNamespaceWithDbIdentifierPrefix") &&
+		(key.Name == "dbc-box-sample-claim") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")
@@ -147,10 +158,11 @@ func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 
 func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 	type mockReconciler struct {
-		Client client.Client
-		Log    logr.Logger
-		Scheme *runtime.Scheme
-		Config *viper.Viper
+		Client             client.Client
+		Log                logr.Logger
+		Scheme             *runtime.Scheme
+		Config             *viper.Viper
+		DbIdentifierPrefix string
 	}
 	type args struct {
 		ctx         context.Context
@@ -206,6 +218,22 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			false,
 		},
 		{
+			"Get dynamic database master password no fragment, with env Name",
+			mockReconciler{
+				Client:             &mockClient{},
+				Config:             NewConfig(secretRef),
+				DbIdentifierPrefix: "box",
+			},
+			args{
+				fragmentKey: "",
+				namespace:   "testNamespaceWithDbIdentifierPrefix",
+				dbclaim:     persistancev1.DatabaseClaim{ObjectMeta: metav1.ObjectMeta{Name: "sample-claim"}},
+			},
+			"masterpassword",
+			false,
+		},
+
+		{
 			"Get dynamic database master password no fragment host",
 			mockReconciler{
 				Client: &mockClient{},
@@ -235,10 +263,11 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				Client:             tt.reconciler.Client,
+				Log:                tt.reconciler.Log,
+				Scheme:             tt.reconciler.Scheme,
+				Config:             tt.reconciler.Config,
+				DbIdentifierPrefix: tt.reconciler.DbIdentifierPrefix,
 			}
 			got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, &tt.args.dbclaim, tt.args.namespace)
 			if (err != nil) != tt.wantErr {
