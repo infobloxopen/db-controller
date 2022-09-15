@@ -63,10 +63,11 @@ const (
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
-	Log        logr.Logger
-	Scheme     *runtime.Scheme
-	Config     *viper.Viper
-	MasterAuth *rdsauth.MasterAuth
+	Log                logr.Logger
+	Scheme             *runtime.Scheme
+	Config             *viper.Viper
+	MasterAuth         *rdsauth.MasterAuth
+	DbIdentifierPrefix string
 }
 
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -491,7 +492,11 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(fragmentKey string, dbClaim
 	// This pattern is picked so if fragmentKey is set the database could be
 	// shared by multiple claims, while if not set it is used exclusively by
 	// a single claim.
-	prefix := "db-controller-"
+	prefix := "dbc-"
+
+	if r.DbIdentifierPrefix != "" {
+		prefix = prefix + r.DbIdentifierPrefix + "-"
+	}
 
 	if fragmentKey == "" {
 		return prefix + dbClaim.Name
@@ -529,7 +534,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 
 	// Deletion is long running task check that is not being deleted.
 	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
-		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
+		err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostName)
 		r.Log.Error(err, "RDSInstance", "dbHostName", dbHostName)
 		return connInfo, err
 	}
