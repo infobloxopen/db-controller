@@ -1,4 +1,4 @@
-package pgutil
+package pgctl
 
 import (
 	"fmt"
@@ -25,7 +25,8 @@ func NewRestore(DsnUri string) *Restore {
 
 func (x *Restore) Exec(filename string, opts ExecOptions) Result {
 	result := Result{}
-	options := []string{x.DsnUri, fmt.Sprintf("--file=%s%s", x.Path, filename)}
+	options := []string{x.DsnUri, "-vON_ERROR_STOP=ON",
+		fmt.Sprintf("--file=%s%s", x.Path, filename)}
 	options = append(options, x.restoreOptions()...)
 	result.FullCommand = strings.Join(options, " ")
 	cmd := exec.Command(PSQL, options...)

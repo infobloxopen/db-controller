@@ -1,4 +1,4 @@
-package pgutil
+package pgctl
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ type Results struct {
 
 type Result struct {
 	Mine        string
-	File        string
+	FileName    string
 	Output      string
 	Error       *ResultError
 	FullCommand string
@@ -49,8 +49,8 @@ func NewDump(DsnUri string) *Dump {
 
 func (x *Dump) Exec(opts ExecOptions) Result {
 	result := Result{Mine: "application/x-tar"}
-	result.File = x.GetFileName()
-	options := append(x.dumpOptions(), fmt.Sprintf(`-f%s%v`, x.Path, result.File))
+	result.FileName = x.GetFileName()
+	options := append(x.dumpOptions(), fmt.Sprintf(`-f%s%v`, x.Path, result.FileName))
 	result.FullCommand = strings.Join(options, " ")
 	cmd := exec.Command(PGDump, options...)
 	// cmd.Env = append(os.Environ(), x.EnvPassword)
