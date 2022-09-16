@@ -86,6 +86,7 @@ func main() {
 	var probeAddr string
 	var probePort int
 	var enableDBProxyWebhook bool
+	var dbIdentifierPrefix string
 
 	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
 	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
@@ -124,11 +125,12 @@ func main() {
 	}
 
 	if err = (&controllers.DatabaseClaimReconciler{
-		Client:     mgr.GetClient(),
-		Log:        ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
-		Scheme:     mgr.GetScheme(),
-		Config:     ctlConfig,
-		MasterAuth: rdsauth.NewMasterAuth(),
+		Client:             mgr.GetClient(),
+		Log:                ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
+		Scheme:             mgr.GetScheme(),
+		Config:             ctlConfig,
+		MasterAuth:         rdsauth.NewMasterAuth(),
+		DbIdentifierPrefix: dbIdentifierPrefix,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
