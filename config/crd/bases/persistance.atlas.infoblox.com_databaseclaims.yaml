@@ -76,6 +76,21 @@ spec:
                 description: The optional Shape values are arbitrary and help drive
                   instance selection
                 type: string
+              tags:
+                description: Tags
+                items:
+                  description: Tag
+                  properties:
+                    key:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - key
+                  - value
+                  type: object
+                nullable: true
+                type: array
               type:
                 description: Specifies the type of database to provision. Only postgres
                   is supported.
@@ -136,9 +151,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

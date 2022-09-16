@@ -665,6 +665,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 				Engine:           params.Engine,
 				DBInstanceClass:  params.Shape,
 				AllocatedStorage: &params.MinStorageGB,
+				Tags:             DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags(),
 				// Items from Config
 				MasterUsername:                  &params.MasterUsername,
 				EngineVersion:                   &params.EngineVersion,
@@ -713,14 +714,17 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 }
 
 func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
+	// Create a patch snapshot from current RDSInstance
+	patch := client.MergeFrom(rdsInstance.DeepCopy())
 
-	update := false
+	// Update RDSInstance
+
+	rdsInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags()
 
 	// TODO:currently ignoring changes to shape and minStorage if an RDSInstance CR already exists.
 	/*
 		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
-		// Update RDSInstance
 		// Update Shape and MinGibStorage for now
 		if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
 			rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
@@ -731,14 +735,20 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragm
 			rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
 			update = true
 		}
-
-		if update {
-			r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-			return update, r.Client.Update(ctx, rdsInstance)
-		}
 	*/
 
-	return update, nil
+	// Compute a json patch based on the changed RDSInstance
+	data, err := patch.Data(rdsInstance)
+	if err != nil {
+		return false, err
+	}
+	// an empty json patch will be {}, we can assert that no update is required if len == 2
+	// we could also just apply the empty patch if additional call to apiserver isn't an issue
+	if len(data) == 2 {
+		return false, nil
+	}
+	r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+	return true, r.Client.Patch(ctx, rdsInstance, patch)
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo) error {

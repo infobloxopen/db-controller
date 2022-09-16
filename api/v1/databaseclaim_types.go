@@ -69,6 +69,17 @@ type DatabaseClaimSpec struct {
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	// +optional
 	MinStorageGB int `json:"minStorageGB"`
+
+	// Tags
+	// +optional
+	// +nullable
+	Tags []Tag `json:"tags,omitempty"`
+}
+
+// Tag
+type Tag struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // DatabaseClaimStatus defines the observed state of DatabaseClaim
