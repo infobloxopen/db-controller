@@ -63,10 +63,11 @@ const (
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
-	Log        logr.Logger
-	Scheme     *runtime.Scheme
-	Config     *viper.Viper
-	MasterAuth *rdsauth.MasterAuth
+	Log                logr.Logger
+	Scheme             *runtime.Scheme
+	Config             *viper.Viper
+	MasterAuth         *rdsauth.MasterAuth
+	DbIdentifierPrefix string
 }
 
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -491,7 +492,11 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(fragmentKey string, dbClaim
 	// This pattern is picked so if fragmentKey is set the database could be
 	// shared by multiple claims, while if not set it is used exclusively by
 	// a single claim.
-	prefix := "db-controller-"
+	prefix := "dbc-"
+
+	if r.DbIdentifierPrefix != "" {
+		prefix = prefix + r.DbIdentifierPrefix + "-"
+	}
 
 	if fragmentKey == "" {
 		return prefix + dbClaim.Name
@@ -529,7 +534,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 
 	// Deletion is long running task check that is not being deleted.
 	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
-		err = fmt.Errorf("can not create Cloud Database %s it is being deleted.", dbHostName)
+		err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostName)
 		r.Log.Error(err, "RDSInstance", "dbHostName", dbHostName)
 		return connInfo, err
 	}
@@ -571,15 +576,12 @@ type DynamicHostParms struct {
 func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
 	params := DynamicHostParms{}
 
-	// Only Support Postgres right now ignore Claim Type value
-	// Engine: dbClaim.Spec.Type,
-	params.Engine = "postgres"
-
 	// Database Config
 	if fragmentKey == "" {
 		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
 		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
 		params.Shape = dbClaim.Spec.Shape
+		params.Engine = dbClaim.Spec.Type
 		params.MinStorageGB = dbClaim.Spec.MinStorageGB
 	} else {
 		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
@@ -600,6 +602,10 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 
 	if params.Shape == "" {
 		params.Shape = r.Config.GetString("defaultShape")
+	}
+
+	if params.Engine == "" {
+		params.Engine = r.Config.GetString("defaultEngine")
 	}
 
 	if params.MinStorageGB == 0 {
@@ -656,8 +662,6 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 					Name: r.getDbSubnetGroupNameRef(),
 				},
 				// Items from Claim and fragmentKey
-				// Only Support Postgres right now ignore Claim Type value
-				// Engine: dbClaim.Spec.Type,
 				Engine:           params.Engine,
 				DBInstanceClass:  params.Shape,
 				AllocatedStorage: &params.MinStorageGB,
@@ -711,24 +715,28 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
 
 	update := false
-	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
-	// Update RDSInstance
-	// Update Shape and MinGibStorage for now
-	if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
-		rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
-		update = true
-	}
+	// TODO:currently ignoring changes to shape and minStorage if an RDSInstance CR already exists.
+	/*
+		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
-	if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
-		rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
-		update = true
-	}
+		// Update RDSInstance
+		// Update Shape and MinGibStorage for now
+		if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
+			rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
+			update = true
+		}
 
-	if update {
-		r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-		return update, r.Client.Update(ctx, rdsInstance)
-	}
+		if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
+			rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
+			update = true
+		}
+
+		if update {
+			r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+			return update, r.Client.Update(ctx, rdsInstance)
+		}
+	*/
 
 	return update, nil
 }

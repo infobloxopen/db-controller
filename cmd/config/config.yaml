@@ -7,8 +7,9 @@ region: us-west-1
 vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
 dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
 dynamicHostWaitTimeMin: 1
-defaultShape: db.t2.small
+defaultShape: db.t4g.medium
 defaultMinStorageGB: 20
+defaultEngine: postgres
 defaultEngineVersion: 12.8
 defaultMasterPort: 5432
 defaultSslMode: require
@@ -36,8 +37,9 @@ dynamic-connection:
   port: 5432
   sslMode: require
   passwordSecretRef: dynamic-connection-secret
-  shape: db.t2.small
+  shape: db.t4g.medium
   minStorageGB: 20
+  engine: postgres
   engineVersion: 12.8
   reclaimPolicy: delete
 another.connection:
