@@ -162,6 +162,8 @@ type DatabaseClaimSpec struct {
 	MinStorageGB int `json:"minStorageGB"`
 
 	// Tags
+	// +optional
+	// +nullable
 	Tags []Tag `json:"tags,omitempty"`
 }
 

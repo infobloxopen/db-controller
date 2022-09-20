@@ -191,7 +191,7 @@ func (in *S3BackupConfiguration) DeepCopyInto(out *S3BackupConfiguration) {
 	}
 	if in.SourceEngine != nil {
 		in, out := &in.SourceEngine, &out.SourceEngine
-		*out = new(string)
+		*out = new(SQLEngine)
 		**out = **in
 	}
 	if in.SourceEngineVersion != nil {
