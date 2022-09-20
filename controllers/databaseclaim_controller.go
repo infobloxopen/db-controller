@@ -581,7 +581,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
 		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
 		params.Shape = dbClaim.Spec.Shape
-		params.Engine = dbClaim.Spec.Type
+		params.Engine = string(dbClaim.Spec.Type)
 		params.MinStorageGB = dbClaim.Spec.MinStorageGB
 	} else {
 		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
@@ -969,7 +969,7 @@ func (r *DatabaseClaimReconciler) getClient(ctx context.Context, log logr.Logger
 
 	updateHostPortStatus(dbClaim, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
-	return dbclient.DBClientFactory(log, dbType, connInfo.Host, connInfo.Port, connInfo.Username, password, connInfo.SSLMode)
+	return dbclient.DBClientFactory(log, string(dbType), connInfo.Host, connInfo.Port, connInfo.Username, password, connInfo.SSLMode)
 }
 
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {

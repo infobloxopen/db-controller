@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1 contains API Schema definitions for the persistance v1 API group
-//+kubebuilder:object:generate=true
-//+groupName=persistance.atlas.infoblox.com
+// +kubebuilder:object:generate=true
+// +groupName=persistance.atlas.infoblox.com
 package v1
 
 import (
