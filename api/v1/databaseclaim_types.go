@@ -74,8 +74,7 @@ type S3BackupConfiguration struct {
 	Prefix *string `json:"prefix,omitempty"`
 
 	// SourceEngine is the engine used to create the backup.
-	// Must be "mysql".
-	SourceEngine *string `json:"sourceEngine"`
+	SourceEngine *SQLEngine `json:"sourceEngine"`
 
 	// SourceEngineVersion is the version of the engine used to create the backup.
 	// Example: "5.7.30"
