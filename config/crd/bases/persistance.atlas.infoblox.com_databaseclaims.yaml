@@ -129,7 +129,7 @@ spec:
                         type: object
                       sourceEngine:
                         description: SourceEngine is the engine used to create the
-                          backup. Must be "mysql".
+                          backup.
                         type: string
                       sourceEngineVersion:
                         description: 'SourceEngineVersion is the version of the engine
