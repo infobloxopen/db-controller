@@ -14,7 +14,8 @@ pipeline {
     DIRECTORY = "src/github.com/infobloxopen/db-controller"
     GIT_VERSION = sh(script: "cd ${DIRECTORY} && git describe --always --long --tags",
                        returnStdout: true).trim()
-    TAG = "${env.GIT_VERSION}-j${env.BUILD_NUMBER}"
+    CHART_VERSION = "${env.GIT_VERSION}-j${env.BUILD_NUMBER}"
+    TAG = "${env.GIT_VERSION}"
     GOPATH = "$WORKSPACE"
   }
   stages {
