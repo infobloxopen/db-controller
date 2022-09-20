@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.8.0
+    controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
   name: databaseclaims.persistance.atlas.infoblox.com
 spec:
@@ -75,48 +75,24 @@ spec:
                 description: The optional Shape values are arbitrary and help drive
                   instance selection
                 type: string
-              source:
-                description: Source specifies an existing postgres database or backup
-                  to use when initially provisioning the database.  If it already
-                  exists, this field is ignored
+              sourceDataFrom:
+                description: SourceDataFrom specifies an existing database or backup
+                  to use when initially provisioning the database. if the dbclaim
+                  has already provisioned a database, this field is ignored
                 properties:
-                  postgresDatabase:
-                    description: PostgresDatabase defines the connection information
-                      to an existing postgres db
+                  database:
+                    description: Database defines the connection information to an
+                      existing db
                     properties:
                       dsn:
-                        description: DSN is the connection string used to reach the
-                          postgres database
+                        description: 'DSN is the connection string used to reach the
+                          postgres database must have protocol specifier at beginning
+                          (example: mysql://  postgres:// )'
                         type: string
                       secretRef:
-                        description: SecretRef specifies a secret to use for connecting
-                          to the postgresdb (should be master/root)
-                        properties:
-                          name:
-                            type: string
-                          namespace:
-                            type: string
-                        required:
-                        - name
-                        type: object
-                    type: object
-                  s3Bucket:
-                    description: S3Bucket defines the location of a DB backup in an
-                      S3 bucket
-                    properties:
-                      bucket:
-                        type: string
-                      databaseType:
-                        description: ImportType specifies what type of database that
-                          the bucket contains
-                        type: string
-                      path:
-                        type: string
-                      region:
-                        type: string
-                      secretRef:
-                        description: AWSCredentials specifies a secret to use for
-                          connecting to the s3 bucket via AWS client
+                        description: 'SecretRef specifies a secret to use for connecting
+                          to the postgresdb (should be master/root) TODO: document/validate
+                          the secret format required'
                         properties:
                           name:
                             type: string
@@ -126,10 +102,44 @@ spec:
                         - name
                         type: object
                     required:
+                    - dsn
+                    type: object
+                  s3:
+                    description: S3 defines the location of a DB backup in an S3 bucket
+                    properties:
+                      bucket:
+                        type: string
+                      prefix:
+                        description: Prefix is the path prefix of the S3 bucket within
+                          which the backup to restore is located.
+                        type: string
+                      region:
+                        type: string
+                      secretRef:
+                        description: 'SecretRef specifies a secret to use for connecting
+                          to the s3 bucket via AWS client TODO: document/validate
+                          the secret format required'
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      sourceEngine:
+                        description: SourceEngine is the engine used to create the
+                          backup. Must be "mysql".
+                        type: string
+                      sourceEngineVersion:
+                        description: 'SourceEngineVersion is the version of the engine
+                          used to create the backup. Example: "5.7.30"'
+                        type: string
+                    required:
                     - bucket
-                    - databaseType
-                    - path
                     - region
+                    - sourceEngine
+                    - sourceEngineVersion
                     type: object
                   type:
                     description: Type specifies the type of source
@@ -157,11 +167,11 @@ spec:
                 type: string
               useExistingSource:
                 description: UseExistingSource instructs the controller to perform
-                  user management on the database currently defined in the Source
-                  field. If source is empty, this is ignored If this is set, .source.Type
-                  and .type must match to use an existing source (since they must
-                  be the same) If this field was set and becomes unset, migration
-                  of data will commence
+                  user management on the database currently defined in the SourceDataFrom
+                  field. If sourceDataFrom is empty, this is ignored If this is set,
+                  .sourceDataFrom.Type and .type must match to use an existing source
+                  (since they must be the same) If this field was set and becomes
+                  unset, migration of data will commence
                 type: boolean
               userName:
                 description: The username that the application will use for accessing
@@ -218,9 +228,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

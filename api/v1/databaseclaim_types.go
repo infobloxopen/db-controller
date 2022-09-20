@@ -28,63 +28,78 @@ type DatabaseType string
 const (
 	Postgres DatabaseType = "postgres"
 	MySQL    DatabaseType = "mysql"
+	Aurora   DatabaseType = "aurora"
 )
 
-type ImportType string
+type SQLEngine string
+
+// SQL database engines.
+const (
+	MysqlEngine      SQLEngine = "mysql"
+	PostgresqlEngine SQLEngine = "postgres"
+)
+
+type SourceDataType string
 
 const (
-	PostgresImport ImportType = "postgres"
-	MySQLImport    ImportType = "mysql"
+	DatabaseSource SourceDataType = "database"
+	S3Source       SourceDataType = "s3"
 )
 
-type SourceType string
-
-const (
-	PostgresSource SourceType = "postgres"
-	S3BucketSource SourceType = "s3Bucket"
-)
-
-// Source is a union object for specifying the initial state of a DB that should be used when provisioning a DatabaseClaim
-type Source struct {
+// SourceDataFrom is a union object for specifying the initial state of a DB that should be used when provisioning a DatabaseClaim
+type SourceDataFrom struct {
 	// Type specifies the type of source
 	// +required
-	Type string `json:"type"`
+	Type SourceDataType `json:"type"`
 
-	// PostgresDatabase defines the connection information to an existing postgres db
+	// Database defines the connection information to an existing db
 	// +optional
-	PostgresDatabase *PostgresDatabase `json:"postgresDatabase,omitempty"`
+	Database *Database `json:"database,omitempty"`
 
-	// S3Bucket defines the location of a DB backup in an S3 bucket
+	// S3 defines the location of a DB backup in an S3 bucket
 	// +optional
-	S3Bucket *S3Bucket `json:"s3Bucket,omitempty"`
+	S3 *S3BackupConfiguration `json:"s3,omitempty"`
 }
 
-type S3Bucket struct {
-	// ImportType specifies what type of database that the bucket contains
-	// +required
-	ImportType ImportType `json:"databaseType"`
-
+// S3BackupConfiguration defines the details of the S3 backup to restore from.
+type S3BackupConfiguration struct {
 	// +required
 	Region string `json:"region"`
 
 	// +required
 	Bucket string `json:"bucket"`
-	// +required
-	Path string `json:"path"`
 
-	// AWSCredentials specifies a secret to use for connecting to the s3 bucket via AWS client
+	// Prefix is the path prefix of the S3 bucket within which the backup to restore is located.
 	// +optional
-	AWSCredentials *SecretRef `json:"secretRef,omitempty"`
-}
+	Prefix *string `json:"prefix,omitempty"`
 
-type PostgresDatabase struct {
-	// DSN is the connection string used to reach the postgres database
-	DSN string `json:"dsn,omitempty"`
+	// SourceEngine is the engine used to create the backup.
+	// Must be "mysql".
+	SourceEngine *string `json:"sourceEngine"`
 
-	// SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
+	// SourceEngineVersion is the version of the engine used to create the backup.
+	// Example: "5.7.30"
+	SourceEngineVersion *string `json:"sourceEngineVersion"`
+
+	// SecretRef specifies a secret to use for connecting to the s3 bucket via AWS client
+	// TODO: document/validate the secret format required
+	// +optional
 	SecretRef *SecretRef `json:"secretRef,omitempty"`
 }
 
+// Database defines the details of an existing database to use as a backup restoration source
+type Database struct {
+	// DSN is the connection string used to reach the postgres database
+	// must have protocol specifier at beginning (example: mysql://  postgres:// )
+	DSN string `json:"dsn"`
+
+	// SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
+	// TODO: document/validate the secret format required
+	// +optional
+	SecretRef *SecretRef `json:"secretRef,omitempty"`
+}
+
+// SecretRef provides the information necessary to reference a Kubernetes Secret
 type SecretRef struct {
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name"`
@@ -92,13 +107,14 @@ type SecretRef struct {
 
 // DatabaseClaimSpec defines the desired state of DatabaseClaim
 type DatabaseClaimSpec struct {
-	// Source specifies an existing postgres database or backup to use when initially provisioning the database.  If it already exists, this field is ignored
+	// SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+	// if the dbclaim has already provisioned a database, this field is ignored
 	// +optional
-	Source *Source `json:"source,omitempty"`
+	SourceDataFrom *SourceDataFrom `json:"sourceDataFrom,omitempty"`
 
-	// UseExistingSource instructs the controller to perform user management on the database currently defined in the Source field.
-	// If source is empty, this is ignored
-	// If this is set, .source.Type and .type must match to use an existing source (since they must be the same)
+	// UseExistingSource instructs the controller to perform user management on the database currently defined in the SourceDataFrom field.
+	// If sourceDataFrom is empty, this is ignored
+	// If this is set, .sourceDataFrom.Type and .type must match to use an existing source (since they must be the same)
 	// If this field was set and becomes unset, migration of data will commence
 	// +optional
 	UseExistingSource *bool `json:"useExistingSource,omitempty"`

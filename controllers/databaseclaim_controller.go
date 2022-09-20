@@ -581,7 +581,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
 		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
 		params.Shape = dbClaim.Spec.Shape
-		params.Engine = dbClaim.Spec.Type
+		params.Engine = string(dbClaim.Spec.Type)
 		params.MinStorageGB = dbClaim.Spec.MinStorageGB
 	} else {
 		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
