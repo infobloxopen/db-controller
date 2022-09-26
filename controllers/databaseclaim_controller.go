@@ -160,7 +160,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	log.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	dbName := GetDBName(dbClaim)
-	created, err := dbClient.CreateDataBase(dbName)
+	created, err := dbClient.CreateDatabase(dbName)
 	if err != nil {
 		postrgresURI := dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, "", dbName, connInfo.SSLMode)
 		msg := fmt.Sprintf("error creating database postgresURI %s", postrgresURI)
