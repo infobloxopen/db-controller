@@ -1,7 +1,9 @@
 package dbclient
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -19,29 +21,14 @@ const (
 
 var extensions = []string{"citext", "uuid-ossp", "pgcrypto"}
 
-type DBClient interface {
-	CreateDataBase(dbName string) (bool, error)
-	CreateUser(username, role, userPassword string) (bool, error)
-	CreateGroup(dbName, username string) (bool, error)
-	RenameUser(oldUsername string, newUsername string) error
-	UpdateUser(oldUsername, newUsername, rolename, password string) error
-	UpdatePassword(username string, userPassword string) error
-
-	DBCloser
-}
-
-type DBCloser interface {
-	Close() error
-}
-
-type PostgresClient struct {
+type client struct {
 	dbType string
 	dbURL  string
 	DB     *sql.DB
 	log    logr.Logger
 }
 
-func (p *PostgresClient) getDB(dbname string) (*sql.DB, error) {
+func (p *client) getDB(dbname string) (*sql.DB, error) {
 	u, err := url.Parse(p.dbURL)
 	if err != nil {
 		return nil, err
@@ -50,26 +37,40 @@ func (p *PostgresClient) getDB(dbname string) (*sql.DB, error) {
 	return sql.Open("postgres", u.String())
 }
 
+type Config struct {
+	Log    logr.Logger
+	DBType string // type of DB, only postgres
+	// connection string to connect to DB ie. postgres://username:password@1.2.3.4:5432/mydb?sslmode=verify-full
+	// If username is blank, IRSA/instance principles are used to connect to Database
+	DSN string
+}
+
+func New(config Config) (DBClient, error) {
+
+	return newPostgresClient(context.TODO(), config.Log, config.DSN)
+}
+
+// DBClientFactory, deprecated don't use
+// Unable to pass database name here, so database name is always "postgres"
 func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmode string) (DBClient, error) {
+	log.Error(errors.New("db_client_factory"), "DBClientFactory is deprecated, use New() instead")
 	switch dbType {
 	case PostgresType:
-		return NewPostgresClient(log, dbType, host, port, user, password, sslmode)
-	default:
-		return NewPostgresClient(log, dbType, host, port, user, password, sslmode)
 	}
+	return newPostgresClient(context.TODO(), log, PostgresConnectionString(host, port, user, password, "postgres", sslmode))
 }
 
 // creates postgres client
-func NewPostgresClient(log logr.Logger, dbType, host, port, user, password, sslmode string) (*PostgresClient, error) {
-	db, err := sql.Open(PostgresType, PostgresConnectionString(host, port, user, password, "postgres", sslmode))
+func newPostgresClient(ctx context.Context, log logr.Logger, DSN string) (*client, error) {
+	db, err := sql.Open(PostgresType, DSN)
 	if err != nil {
 		return nil, err
 	}
-	return &PostgresClient{
-		dbType: dbType,
+	return &client{
+		dbType: PostgresType,
 		DB:     db,
 		log:    log,
-		dbURL:  PostgresURI(host, port, user, password, "", sslmode),
+		dbURL:  DSN,
 	}, nil
 }
 
@@ -90,7 +91,13 @@ func PostgresURI(host, port, user, password, dbname, sslmode string) string {
 	return connURL.String()
 }
 
-func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
+// CreateDataBase implements typo func name incase anybody is using it
+func (pc *client) CreateDataBase(name string) (bool, error) {
+	pc.log.Error(errors.New("CreateDataBase called, use CreateDatabase"), "old_interface_called")
+	return pc.CreateDatabase(name)
+}
+
+func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	var exists bool
 	created := false
 	db := pc.DB
@@ -131,7 +138,7 @@ func (pc *PostgresClient) CreateDataBase(dbName string) (bool, error) {
 	return created, err
 }
 
-func (pc *PostgresClient) CreateGroup(dbName, rolename string) (bool, error) {
+func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 	start := time.Now()
 	var exists bool
 	db := pc.DB
@@ -168,7 +175,7 @@ func (pc *PostgresClient) CreateGroup(dbName, rolename string) (bool, error) {
 	return created, nil
 }
 
-func (pc *PostgresClient) setGroup(username, rolename string) error {
+func (pc *client) setGroup(username, rolename string) error {
 	db := pc.DB
 	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {
 		return err
@@ -177,7 +184,7 @@ func (pc *PostgresClient) setGroup(username, rolename string) error {
 	return nil
 }
 
-func (pc *PostgresClient) CreateUser(username, rolename, userPassword string) (bool, error) {
+func (pc *client) CreateUser(username, rolename, userPassword string) (bool, error) {
 	start := time.Now()
 	var exists bool
 	db := pc.DB
@@ -218,7 +225,7 @@ func (pc *PostgresClient) CreateUser(username, rolename, userPassword string) (b
 	return created, nil
 }
 
-func (pc *PostgresClient) RenameUser(oldUsername string, newUsername string) error {
+func (pc *client) RenameUser(oldUsername string, newUsername string) error {
 	var exists bool
 	db := pc.DB
 
@@ -242,7 +249,7 @@ func (pc *PostgresClient) RenameUser(oldUsername string, newUsername string) err
 	return nil
 }
 
-func (pc *PostgresClient) UpdateUser(oldUsername, newUsername, rolename, password string) error {
+func (pc *client) UpdateUser(oldUsername, newUsername, rolename, password string) error {
 	start := time.Now()
 	var exists bool
 	db := pc.DB
@@ -280,7 +287,7 @@ func (pc *PostgresClient) UpdateUser(oldUsername, newUsername, rolename, passwor
 	return nil
 }
 
-func (pc *PostgresClient) UpdatePassword(username string, userPassword string) error {
+func (pc *client) UpdatePassword(username string, userPassword string) error {
 	start := time.Now()
 	db := pc.DB
 	if userPassword == "" {
@@ -306,7 +313,7 @@ func (pc *PostgresClient) UpdatePassword(username string, userPassword string) e
 	return nil
 }
 
-func (pc *PostgresClient) Close() error {
+func (pc *client) Close() error {
 	if pc.DB != nil {
 		return pc.DB.Close()
 	}
