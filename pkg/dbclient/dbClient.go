@@ -45,7 +45,7 @@ type Config struct {
 	DSN string
 }
 
-func New(config Config) (DBClient, error) {
+func New(config Config) (Client, error) {
 
 	return newPostgresClient(context.TODO(), config.Log, config.DSN)
 }

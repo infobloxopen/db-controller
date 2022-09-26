@@ -1,6 +1,6 @@
 package dbclient
 
-type Clienter interface {
+type Client interface {
 	CreateDatabase(dbName string) (bool, error)
 	CreateUser(username, role, userPassword string) (bool, error)
 	CreateGroup(dbName, username string) (bool, error)
@@ -13,7 +13,7 @@ type Clienter interface {
 
 // DBClient is retired interface, use Client
 type DBClient interface {
-	Clienter
+	Client
 	CreateDataBase(name string) (bool, error)
 }
 
