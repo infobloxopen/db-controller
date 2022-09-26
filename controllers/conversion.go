@@ -3,7 +3,7 @@ package controllers
 import (
 	"sort"
 
-	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
+	crossplanedb "github.com/crossplane-contrib/provider-aws/apis/database/v1beta1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 

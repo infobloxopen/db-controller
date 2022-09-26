@@ -37,8 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	crossplanedb "github.com/crossplane-contrib/provider-aws/apis/database/v1beta1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"

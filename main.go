@@ -45,7 +45,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 
 	// +kubebuilder:scaffold:imports
-	crossplanedbv1beta1 "github.com/crossplane/provider-aws/apis/database/v1beta1"
+	crossplanedbv1beta1 "github.com/crossplane-contrib/provider-aws/apis/database/v1beta1"
 )
 
 var (
