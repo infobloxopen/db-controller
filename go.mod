@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/crossplane-contrib/provider-aws v0.31.0
-	github.com/crossplane/crossplane-runtime v0.17.0-rc.0.0.20220616115400-a520b60f1661
+	github.com/crossplane/crossplane-runtime v0.17.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
 	github.com/ory/dockertest/v3 v3.8.1
