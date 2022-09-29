@@ -167,7 +167,7 @@ func TestPostgresClientOperations(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pc := &PostgresClient{
+			pc := &client{
 				dbType: tt.fields.dbType,
 				dbURL:  testDB.URL(),
 				DB:     tt.fields.DB,

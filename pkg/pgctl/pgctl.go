@@ -270,6 +270,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 	dump.EnableVerbose()
 
 	dump.SetOptions([]string{"--schema-only", "--no-publication", "--no-subscriptions"})
+
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
 	log.Info("executing", "full command", dumpExec.FullCommand)
 

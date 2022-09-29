@@ -42,6 +42,12 @@ type PgInfo struct {
 var logger logr.Logger
 
 func TestMain(m *testing.M) {
+	//need to do this trick to avoid os.Exit bypassing defer logic
+	//with this silly setup, defer is called in realTestMain before the exit is called in this func
+	os.Exit(realTestMain(m))
+}
+
+func realTestMain(m *testing.M) int {
 
 	var targetResource, sourceResource *dockertest.Resource
 
@@ -54,42 +60,58 @@ func TestMain(m *testing.M) {
 	pool, err := dockertest.NewPool("")
 	if err != nil {
 		fmt.Println(err)
-		return
+		return 1
 	}
+
+	//validate that no other network is lingering around from a prev test
+	networks, err := pool.NetworksByName(testDBNetwork)
+	if err != nil {
+		fmt.Println(err)
+		return 1
+	}
+	if len(networks) != 0 {
+		fmt.Printf("Expected 0 but got %v networks\n", len(networks))
+		return 1
+	}
+
 	network, err := pool.CreateNetwork(testDBNetwork)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return 1
 	}
 	defer pool.RemoveNetwork(network)
+
 	pool.MaxWait = 300 * time.Second
 	if err != nil {
 		logger.Error(err, "Could not connect to docker")
-		os.Exit(1)
+		return 1
 	}
 
-	if TargetDBAdminDsn, targetResource, err = setUpTargetDatabase(pool); err != nil {
-		fmt.Println(err)
-		return
-	}
-	TargetDBUserDsn = TargetDBAdminDsn
+	TargetDBAdminDsn, targetResource, err = setUpTargetDatabase(pool)
 	defer pool.Purge(targetResource)
-
-	if SourceDBAdminDsn, sourceResource, err = setUpSourceDatabase(pool); err != nil {
+	if err != nil {
 		fmt.Println(err)
-		return
+		return 1
+	}
+
+	TargetDBUserDsn = TargetDBAdminDsn
+
+	SourceDBAdminDsn, sourceResource, err = setUpSourceDatabase(pool)
+	defer pool.Purge(sourceResource)
+	if err != nil {
+		fmt.Println(err)
+		return 1
 	}
 	SourceDBUserDsn = fmt.Sprintf("postgres://appuser:secret@localhost:%s/pub?sslmode=disable", sourcePort)
-	defer pool.Purge(sourceResource)
 
 	if err = setWalLevel(repository, sourceVersion, sourcePort); err != nil {
 		fmt.Println(err)
-		return
+		return 1
 	}
 
 	if err = loadSourceTestData(SourceDBAdminDsn); err != nil {
 		fmt.Println(err)
-		return
+		return 1
 	}
 
 	rc := m.Run()
@@ -107,7 +129,8 @@ func TestMain(m *testing.M) {
 		rc = 4
 	}
 
-	os.Exit(rc)
+	return rc
+
 }
 
 func setUpTargetDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, error) {
@@ -129,7 +152,7 @@ func setUpTargetDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, e
 	)
 
 	if dsn, resource, err = setUpDatabase(pool, &pgInfo); err != nil {
-		return "", nil, err
+		return "", resource, err
 	}
 
 	return dsn, resource, nil
@@ -154,7 +177,7 @@ func setUpSourceDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, e
 	)
 
 	if dsn, resource, err = setUpDatabase(pool, &pgInfo); err != nil {
-		return "", nil, err
+		return "", resource, err
 	}
 
 	return dsn, resource, nil
@@ -191,8 +214,8 @@ func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.R
 
 	resource, err := pool.RunWithOptions(&opts)
 	if err != nil {
-		logger.Error(err, "Could not start resource")
-		os.Exit(1)
+		logger.Error(err, "could not start resource")
+		return "", resource, err
 	}
 	var dbc *sql.DB
 	pgInfo.dsn = fmt.Sprintf(pgInfo.dsn, pgInfo.user, pgInfo.password, pgInfo.port, pgInfo.db)
@@ -206,13 +229,13 @@ func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.R
 		}
 		return dbc.Ping()
 	}); err != nil {
-		return "", nil, fmt.Errorf("Could not connect to docker: %s", err)
+		return "", resource, fmt.Errorf("Could not connect to docker: %s", err)
 	}
 	return pgInfo.dsn, resource, nil
 }
 
 func loadSourceTestData(dsn string) error {
-	_, err := Exec("psql", dsn, "-f", "./test/pgctl_test.sql", "-v", "end=500000")
+	_, err := Exec("psql", dsn, "-f", "./test/pgctl_test.sql", "-v", "end=50")
 	if err != nil {
 		return err
 	}
@@ -243,7 +266,7 @@ func TestWrapper(t *testing.T) {
 	test_delete_subscription_state_Execute(t)
 	test_delete_publication_state_Execute(t)
 }
-func TestEndToEnd(t *testing.T) {
+func testEndToEnd(t *testing.T) {
 
 	config := Config{
 		log:              logger,
@@ -308,6 +331,7 @@ func testInitalState(t *testing.T) {
 		{name: "testInitalState_empty", expectedErr: true, args: Config{}},
 		{name: "target Admin empty", expectedErr: true,
 			args: Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -315,6 +339,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_target User empty", expectedErr: true,
 			args: Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
@@ -322,6 +347,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_Source Admin empty", expectedErr: true,
 			args: Config{
+				log:              logger,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -329,6 +355,8 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_Source User empty", expectedErr: true,
 			args: Config{
+				log: logger,
+
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -336,6 +364,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_ok", expectedErr: false, expectedState: S_ValidateConnection,
 			args: Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -373,8 +402,18 @@ func test_validate_connection_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
+		{name: "test_validate_connection_state_Execute_no_admin_access", wantErr: true,
+			fields: fields{Config{
+				log:              logger,
+				SourceDBAdminDsn: "postgres://invalid:secret@localhost:%s/pub?sslmode=disable",
+				SourceDBUserDsn:  SourceDBUserDsn,
+				TargetDBUserDsn:  TargetDBUserDsn,
+				TargetDBAdminDsn: TargetDBAdminDsn,
+			}},
+		},
 		{name: "test_validate_connection_state_Execute_ok", wantErr: false, want: S_CreatePublication,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -391,6 +430,9 @@ func test_validate_connection_state_Execute(t *testing.T) {
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validate_connection_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && err != nil {
 				return
 			}
 			if !reflect.DeepEqual(got.Id(), tt.want) {
@@ -412,6 +454,7 @@ func test_create_publication_state_Execute(t *testing.T) {
 	}{
 		{name: "test_create_publication_state_Execute_ok", wantErr: false, want: S_CopySchema,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -449,6 +492,7 @@ func test_copy_schema_state_Execute(t *testing.T) {
 	}{
 		{name: "test_copy_schema_state_Execute_ok", wantErr: false, want: S_CreateSubscription,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -486,6 +530,7 @@ func test_create_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_create_subscription_state_Execute_ok", wantErr: false, want: S_EnableSubscription,
 			fields: fields{Config{
+				log: logger,
 				// During subscription creation, SourceDBAdminDsn is used to configure subscription in the target database to connect to source
 				// pub postgres db. In the unit test scenario, since the docker is setup with bridge network (during pool setup time), the SourceDBAdminDsn is set with the docker host name and port.
 				// In a real scenario - the regular DSN will be good enough
@@ -525,6 +570,7 @@ func test_enable_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_enable_subscription_state_Execute_ok", wantErr: false, want: S_CutOverReadinessCheck,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -559,8 +605,9 @@ func test_cut_over_readiness_check_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
-		{name: "_test_cut_over_readiness_check_state_Executeok", wantErr: false, want: S_ResetTargetSequence,
+		{name: "_test_cut_over_readiness_check_state_Executeok", wantErr: false, want: S_Retry,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -597,6 +644,7 @@ func test_reset_target_sequence_state_Execute(t *testing.T) {
 	}{
 		{name: "test_reset_target_sequence_state_Execute_ok", wantErr: false, want: S_RerouteTargetSecret,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -633,6 +681,7 @@ func test_reroute_target_secret_state_Execute(t *testing.T) {
 	}{
 		{name: "test_reroute_target_secret_state_Execute_ok", wantErr: false, want: S_ValidateMigrationStatus,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -669,6 +718,7 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 	}{
 		{name: "test_validate_migration_status_state_ok", wantErr: false, want: S_DisableSourceAccess,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -705,6 +755,7 @@ func test_disable_source_access_state_Execute(t *testing.T) {
 	}{
 		{name: "test_disable_source_access_state_ok", wantErr: false, want: S_DisableSubscription,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -741,6 +792,7 @@ func test_disable_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_disable_subscription_state_Execute_ok", wantErr: false, want: S_DeleteSubscription,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -777,6 +829,7 @@ func test_delete_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_delete_subscription_state_Execute_ok", wantErr: false, want: S_DeletePublication,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -813,6 +866,7 @@ func test_delete_publication_state_Execute(t *testing.T) {
 	}{
 		{name: "test_delete_publication_state_Execute_ok", wantErr: false, want: S_Completed,
 			fields: fields{Config{
+				log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,

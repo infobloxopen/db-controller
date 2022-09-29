@@ -2,7 +2,7 @@
 
 pipeline {
   agent {
-    label 'ubuntu_docker_label'
+    label 'ubuntu_20_04_label'
   }
   tools {
     go "Go 1.17"
@@ -14,7 +14,8 @@ pipeline {
     DIRECTORY = "src/github.com/infobloxopen/db-controller"
     GIT_VERSION = sh(script: "cd ${DIRECTORY} && git describe --always --long --tags",
                        returnStdout: true).trim()
-    TAG = "${env.GIT_VERSION}-j${env.BUILD_NUMBER}"
+    CHART_VERSION = "${env.GIT_VERSION}-j${env.BUILD_NUMBER}"
+    TAG = "${env.GIT_VERSION}"
     GOPATH = "$WORKSPACE"
   }
   stages {
@@ -26,7 +27,10 @@ pipeline {
     stage("Run tests") {
       steps {
         dir("$DIRECTORY") {
+          sh "sudo apt-get update"
+          sh "sudo apt-get -y install postgresql-client"
           sh "make test"
+          sh "sudo apt-get -y remove postgresql-client"
         }
       }
     }
