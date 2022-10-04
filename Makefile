@@ -57,7 +57,7 @@ HELM_ENTRYPOINT ?= docker run \
 
 
 .id:
-		git config user.email | awk -F@ '{print $$1}' > .id
+	git config user.email | awk -F@ '{print $$1}' > .id
 
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
