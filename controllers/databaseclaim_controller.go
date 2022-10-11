@@ -53,11 +53,13 @@ const (
 	defaultNumDig  = 10
 	defaultNumSimb = 10
 	// rotation time in minutes
-	minRotationTime        = 60
-	maxRotationTime        = 1440
-	maxWaitTime            = 10
-	defaultRotationTime    = minRotationTime
-	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
+	minRotationTime          = 60
+	maxRotationTime          = 1440
+	maxWaitTime              = 10
+	defaultRotationTime      = minRotationTime
+	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
+	defaultPostgresStr       = "postgres"
+	defaultAuroraPostgresStr = "aurora-postgresql"
 )
 
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
@@ -511,8 +513,6 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 	// Make sure dbHostName is unique
 	dbHostName := r.getDynamicHostName(fragmentKey, dbClaim)
 
-	//rds := &crossplanedb.RDSInstance{}
-
 	dbInstance := &crossplanerds.DBInstance{}
 	dbCluster := &crossplanerds.DBCluster{}
 
@@ -535,14 +535,38 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 		return connInfo, nil
 	}
 
-	// Deletion is long running task check that is not being deleted.
-	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
-		err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostName)
-		r.Log.Error(err, "RDSInstance", "dbHostName", dbHostName)
+	auroraPostgres := defaultAuroraPostgresStr
+	dbClusterRequired := false
+	if dbInstance.Spec.ForProvider.Engine == &auroraPostgres {
+		dbClusterRequired = true
+	}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbCluster)
+	if errors.IsNotFound(err) {
+		if dbClusterRequired {
+			return connInfo, err
+		}
+	} else if err != nil {
 		return connInfo, err
 	}
 
-	update, err := r.updateCloudDatabase(ctx, fragmentKey, dbClaim, dbInstance, dbCluster)
+	// Deletion is long running task check that is not being deleted.
+	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostName)
+		r.Log.Error(err, "DBInstance", "dbHostName", dbHostName)
+		return connInfo, err
+	}
+
+	if dbClusterRequired {
+		if !dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+			err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostName)
+			r.Log.Error(err, "DBCluster", "dbHostName", dbHostName)
+			return connInfo, err
+		}
+	}
+
+	update, err := r.updateCloudDatabase(ctx, fragmentKey, dbClaim, dbInstance, dbCluster, dbClusterRequired)
 	if update {
 		// Reschedule run after update is complete
 		return connInfo, err
@@ -551,6 +575,11 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 	// Check if resource is ready
 	if !r.isResourceReady(dbInstance.Status.ResourceStatus) {
 		return connInfo, nil
+	}
+	if dbClusterRequired {
+		if !r.isResourceReady(dbCluster.Status.ResourceStatus) {
+			return connInfo, nil
+		}
 	}
 
 	// Check database secret
@@ -567,7 +596,7 @@ func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKe
 type DynamicHostParms struct {
 	Engine                          string
 	Shape                           string
-	MinStorageGB                    int64
+	MinStorageGB                    int
 	EngineVersion                   string
 	MasterUsername                  string
 	SkipFinalSnapshotBeforeDeletion bool
@@ -585,12 +614,12 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
 		params.Shape = dbClaim.Spec.Shape
 		params.Engine = string(dbClaim.Spec.Type)
-		params.MinStorageGB = int64(dbClaim.Spec.MinStorageGB)
+		params.MinStorageGB = dbClaim.Spec.MinStorageGB
 	} else {
 		params.MasterUsername = r.getMasterUser(fragmentKey, dbClaim)
 		params.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
 		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
-		params.MinStorageGB = int64(r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey)))
+		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
 	}
 
 	// Set defaults
@@ -612,7 +641,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, frag
 	}
 
 	if params.MinStorageGB == 0 {
-		params.MinStorageGB = int64(r.Config.GetInt("defaultMinStorageGB"))
+		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
 	}
 
 	// TODO - Implement these for each fragmentKey also
@@ -672,46 +701,9 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 	dbCluster := &crossplanerds.DBCluster{}
 
 	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
+	ms64 := int64(params.MinStorageGB)
 
-	//-----------OLD WORKFLOW-----------//
-	/*
-		rdsInstance := &crossplanedb.RDSInstance{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: dbHostName,
-				// TODO - Figure out the proper labels for resource
-				// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-			},
-			Spec: crossplanedb.RDSInstanceSpec{
-				ForProvider: crossplanedb.RDSInstanceParameters{
-					Region: &region,
-					VPCSecurityGroupIDRefs: []xpv1.Reference{
-						{Name: r.getVpcSecurityGroupIDRefs()},
-					},
-					DBSubnetGroupNameRef: &xpv1.Reference{
-						Name: r.getDbSubnetGroupNameRef(),
-					},
-					// Items from Claim and fragmentKey
-					Engine:           params.Engine,
-					DBInstanceClass:  params.Shape,
-					AllocatedStorage: &params.MinStorageGB,
-					Tags:             DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags(),
-					// Items from Config
-					MasterUsername:                  &params.MasterUsername,
-					EngineVersion:                   &params.EngineVersion,
-					SkipFinalSnapshotBeforeDeletion: &params.SkipFinalSnapshotBeforeDeletion,
-					PubliclyAccessible:              &params.PubliclyAccessible,
-					EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-				},
-				ResourceSpec: xpv1.ResourceSpec{
-					WriteConnectionSecretToReference: &dbSecret,
-					ProviderConfigReference:          &providerConfigReference,
-					DeletionPolicy:                   params.DeletionPolicy,
-				},
-			},
-		}
-	*/
-
-	if dbClaim.Spec.Type == "postgres" {
+	if dbClaim.Spec.Type == defaultPostgresStr {
 		dbInstance = &crossplanerds.DBInstance{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: dbHostName,
@@ -735,7 +727,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 					// Items from Claim and fragmentKey
 					Engine:           &params.Engine,
 					DBInstanceClass:  &params.Shape,
-					AllocatedStorage: &params.MinStorageGB,
+					AllocatedStorage: &ms64,
 					Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 					// Items from Config
 					MasterUsername:                  &params.MasterUsername,
@@ -751,7 +743,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 			},
 		}
 
-	} else if dbClaim.Spec.Type == "aurora-postgresql" {
+	} else if dbClaim.Spec.Type == defaultAuroraPostgresStr {
 		err := r.Client.Get(ctx, client.ObjectKey{
 			Name: dbHostName,
 		}, dbCluster)
@@ -815,7 +807,7 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 					// Items from Claim and fragmentKey
 					Engine:           &params.Engine,
 					DBInstanceClass:  &params.Shape,
-					AllocatedStorage: &params.MinStorageGB,
+					AllocatedStorage: &ms64,
 					Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 					// Items from Config
 					MasterUsername:                  &params.MasterUsername,
@@ -837,33 +829,6 @@ func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx con
 }
 
 func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
-
-	//-----------OLD WORKFLOW-----------//
-	/*
-		rds := &crossplanedb.RDSInstance{}
-
-		err := r.Client.Get(ctx, client.ObjectKey{
-			Name: dbHostName,
-		}, rds)
-		if err != nil {
-			// Nothing to delete
-			return nil
-		}
-
-		// Deletion is long running task check that is not already deleted.
-		if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
-			return nil
-		}
-
-		if err := r.Delete(ctx, rds, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-			r.Log.Info("unable delete crossplane RDSInstance resource", "RDSInstance", dbHostName)
-			return err
-		} else {
-			r.Log.Info("deleted crossplane RDSInstance resource", "RDSInstance", dbHostName)
-		}
-
-		return nil
-	*/
 
 	dbInstance := &crossplanerds.DBInstance{}
 	dbCluster := &crossplanerds.DBCluster{}
@@ -906,31 +871,7 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, dbInstance *crossplanerds.DBInstance, dbCluster *crossplanerds.DBCluster) (bool, error) {
-
-	//-----------OLD WORKFLOW-----------//
-	/*
-		// Create a patch snapshot from current RDSInstance
-		patch := client.MergeFrom(rdsInstance.DeepCopy())
-
-		// Update RDSInstance
-
-		rdsInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags()
-
-
-		// Compute a json patch based on the changed RDSInstance
-		data, err := patch.Data(rdsInstance)
-		if err != nil {
-			return false, err
-		}
-		// an empty json patch will be {}, we can assert that no update is required if len == 2
-		// we could also just apply the empty patch if additional call to apiserver isn't an issue
-		if len(data) == 2 {
-			return false, nil
-		}
-		r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-		return true, r.Client.Patch(ctx, rdsInstance, patch)
-	*/
+func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, dbInstance *crossplanerds.DBInstance, dbCluster *crossplanerds.DBCluster, dbClusterRequired bool) (bool, error) {
 
 	// Create a patch snapshot from current DBInstance
 	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
@@ -939,14 +880,7 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragm
 
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
 
-	// Create a patch snapshot from current DBInstance
-	patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
-
-	// Update DBInstance
-
-	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
-
-	// TODO:currently ignoring changes to shape and minStorage if an RDSInstance CR already exists.
+	// TODO:currently ignoring changes to shape and minStorage if a CR already exists.
 	/*
 		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
@@ -962,7 +896,7 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragm
 		}
 	*/
 
-	// Compute a json patch based on the changed RDSInstance
+	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
 	if err != nil {
 		return false, err
@@ -977,21 +911,29 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, fragm
 	if err != nil {
 		return false, err
 	}
+	if dbClusterRequired {
+		// Create a patch snapshot from current DBCluster
+		patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
 
-	// Compute a json patch based on the changed RDSInstance
-	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
-	if err != nil {
-		return false, err
-	}
-	// an empty json patch will be {}, we can assert that no update is required if len == 2
-	// we could also just apply the empty patch if additional call to apiserver isn't an issue
-	if len(dbClusterPatchData) == 2 {
-		return false, nil
-	}
-	r.Log.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
-	r.Client.Patch(ctx, dbCluster, patchDBCluster)
-	if err != nil {
-		return false, err
+		// Update DBCluster
+
+		dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+
+		// Compute a json patch based on the changed RDSInstance
+		dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
+		if err != nil {
+			return false, err
+		}
+		// an empty json patch will be {}, we can assert that no update is required if len == 2
+		// we could also just apply the empty patch if additional call to apiserver isn't an issue
+		if len(dbClusterPatchData) == 2 {
+			return false, nil
+		}
+		r.Log.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
+		r.Client.Patch(ctx, dbCluster, patchDBCluster)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	return true, nil

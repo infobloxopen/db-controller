@@ -45,7 +45,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 
 	// +kubebuilder:scaffold:imports
-	crossplanedbv1beta1 "github.com/crossplane-contrib/provider-aws/apis/database/v1beta1"
+	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 )
 
 var (
@@ -60,7 +60,7 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 
 	// Infrastructure provisioning using crossplane
-	utilruntime.Must(crossplanedbv1beta1.SchemeBuilder.AddToScheme(scheme))
+	utilruntime.Must(crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme))
 
 }
 
