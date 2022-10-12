@@ -25,7 +25,7 @@ type ExportFile struct {
 	Name string
 }
 type Config struct {
-	log              logr.Logger
+	Log              logr.Logger
 	SourceDBAdminDsn string
 	SourceDBUserDsn  string
 	TargetDBAdminDsn string
@@ -68,17 +68,17 @@ var _ State = &delete_publication_state{}
 var _ State = &completed_state{}
 var _ State = &retry_state{}
 
-func GetReplicatorState(log logr.Logger, sourceDBAdminDsn string, sourceDBUserDsn string, targetDBAdminDsn string, targetDBUserDsn string, stateName string) (State, error) {
+// func GetReplicatorState(log logr.Logger, sourceDBAdminDsn string, sourceDBUserDsn string, targetDBAdminDsn string, targetDBUserDsn string, stateName string) (State, error) {
 
-	return getCurrentState(stateName, Config{log: log,
-		SourceDBAdminDsn: sourceDBAdminDsn,
-		SourceDBUserDsn:  sourceDBUserDsn,
-		TargetDBAdminDsn: targetDBAdminDsn,
-		TargetDBUserDsn:  targetDBUserDsn})
-}
+// 	return getCurrentState(stateName, Config{Log: log,
+// 		SourceDBAdminDsn: sourceDBAdminDsn,
+// 		SourceDBUserDsn:  sourceDBUserDsn,
+// 		TargetDBAdminDsn: targetDBAdminDsn,
+// 		TargetDBUserDsn:  targetDBUserDsn})
+// }
 
-func getCurrentState(name string, c Config) (State, error) {
-	log := c.log.WithValues("state", name)
+func GetReplicatorState(name string, c Config) (State, error) {
+	log := c.Log.WithValues("state", name)
 
 	stateEnum, err := getStateEnum(name)
 	if err != nil {
@@ -151,7 +151,7 @@ func (s *initial_state) String() string {
 
 func (s *validate_connection_state) Execute() (State, error) {
 
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 
 	var (
 		err   error
@@ -206,7 +206,7 @@ func (s *validate_connection_state) String() string {
 }
 
 func (s *create_publication_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 
 	var (
 		err           error
@@ -260,7 +260,7 @@ func (s *create_publication_state) String() string {
 }
 
 func (s *copy_schema_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 
 	dump := NewDump(s.config.SourceDBAdminDsn)
 
@@ -308,7 +308,7 @@ var getSourceDbAdminDSNForCreateSubscription = func(c *Config) string {
 }
 
 func (s *create_subscription_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	var exists bool
 
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -357,7 +357,7 @@ func (s *create_subscription_state) String() string {
 }
 
 func (s *enable_subscription_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
 	if err != nil {
 		log.Error(err, "connection test failed for targetDBAdmin")
@@ -404,7 +404,7 @@ func (s *enable_subscription_state) String() string {
 }
 
 func (s *cut_over_readiness_check_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	var exists bool
 	var count int
 
@@ -471,7 +471,7 @@ func (s *cut_over_readiness_check_state) String() string {
 }
 
 func (s *reset_target_sequence_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	type seqCount struct {
 		seqName string
 		lastVal int64
@@ -565,7 +565,7 @@ func (s *validate_migration_status_state) String() string {
 }
 
 func (s *disable_source_access_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	sourceDBAdmin, err := getDB(s.config.SourceDBAdminDsn, nil)
 	if err != nil {
 		log.Error(err, "connection test failed for sourceDBAdmin")
@@ -601,7 +601,7 @@ func (s *disable_source_access_state) String() string {
 }
 
 func (s *disable_subscription_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	var exists bool
 
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -645,7 +645,7 @@ func (s *disable_subscription_state) String() string {
 }
 
 func (s *delete_subscription_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 
 	var exists bool
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -687,7 +687,7 @@ func (s *delete_subscription_state) String() string {
 }
 
 func (s *delete_publication_state) Execute() (State, error) {
-	log := s.config.log.WithValues("state", s.String())
+	log := s.config.Log.WithValues("state", s.String())
 	var exists bool
 
 	sourceDBAdmin, err := getDB(s.config.SourceDBAdminDsn, nil)

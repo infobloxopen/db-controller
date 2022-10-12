@@ -47,7 +47,19 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE EXTENSION IF NOT EXISTS "hstore";
 
-CREATE USER appuser PASSWORD 'secret';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT
+            *
+        FROM
+            pg_user
+        WHERE
+            usename = 'appuser') THEN
+    CREATE USER appuser PASSWORD 'secret';
+END IF;
+END
+$$;
 
 CREATE SEQUENCE IF NOT EXISTS tab_1_seq;
 

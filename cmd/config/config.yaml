@@ -12,19 +12,20 @@ defaultMinStorageGB: 20
 defaultEngine: postgres
 defaultEngineVersion: 12.8
 defaultMasterPort: 5432
-defaultSslMode: require
-defaultMasterUsername: root
+defaultSslMode: disable
+defaultMasterUsername: postgres
 defaultReclaimPolicy: retain
 # For Production this should be false and if SnapShot is not taken it will not be deleted
 defaultSkipFinalSnapshotBeforeDeletion: true
 defaultPubliclyAccessible: false
-defaultDeletionPolicy: delete
+defaultDeletionPolicy: orphan
 
 passwordConfig:
   passwordComplexity: enabled
   minPasswordLength: 15
   passwordRotationPeriod: 60
 sample-connection:
+  masterUsername: root
   username: postgres
   host: localhost
   port: 5432
@@ -33,7 +34,8 @@ sample-connection:
   passwordSecretKey: postgresql-password
 # host omitted, allocates database dynamically
 dynamic-connection:
-  username: root
+  masterUsername: root
+  username: postgres
   port: 5432
   sslMode: require
   passwordSecretRef: dynamic-connection-secret

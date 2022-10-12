@@ -11,7 +11,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -163,6 +162,8 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		Scheme             *runtime.Scheme
 		Config             *viper.Viper
 		DbIdentifierPrefix string
+		Mode               ModeEnum
+		Input              *input
 	}
 	type args struct {
 		ctx         context.Context
@@ -203,35 +204,20 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 			"",
 			true,
 		},
-		{
-			"Get dynamic database master password no fragment, from dbclaim name",
-			mockReconciler{
-				Client: &mockClient{},
-				Config: NewConfig(secretRef),
-			},
-			args{
-				fragmentKey: "",
-				namespace:   "testNamespace",
-				dbclaim:     persistancev1.DatabaseClaim{ObjectMeta: metav1.ObjectMeta{Name: "sample-claim"}},
-			},
-			"masterpassword",
-			false,
-		},
-		{
-			"Get dynamic database master password no fragment, with env Name",
-			mockReconciler{
-				Client:             &mockClient{},
-				Config:             NewConfig(secretRef),
-				DbIdentifierPrefix: "box",
-			},
-			args{
-				fragmentKey: "",
-				namespace:   "testNamespaceWithDbIdentifierPrefix",
-				dbclaim:     persistancev1.DatabaseClaim{ObjectMeta: metav1.ObjectMeta{Name: "sample-claim"}},
-			},
-			"masterpassword",
-			false,
-		},
+		// {
+		// 	"Get dynamic database master password no fragment, with env Name",
+		// 	mockReconciler{
+		// 		Client: &mockClient{},
+		// 		Config: NewConfig(secretRef),
+		// 	},
+		// 	args{
+		// 		fragmentKey: "",
+		// 		namespace:   "testNamespaceWithDbIdentifierPrefix",
+		// 		dbclaim:     persistancev1.DatabaseClaim{ObjectMeta: metav1.ObjectMeta{Name: "sample-claim"}},
+		// 	},
+		// 	"masterpassword",
+		// 	false,
+		// },
 
 		{
 			"Get dynamic database master password no fragment host",
@@ -261,6 +247,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		t.Setenv("SERVICE_NAMESPACE", tt.args.namespace)
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client:             tt.reconciler.Client,
@@ -268,8 +255,10 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 				Scheme:             tt.reconciler.Scheme,
 				Config:             tt.reconciler.Config,
 				DbIdentifierPrefix: tt.reconciler.DbIdentifierPrefix,
+				Input:              &input{FragmentKey: tt.args.fragmentKey},
 			}
-			got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, &tt.args.dbclaim, tt.args.namespace)
+			// got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, &tt.args.dbclaim, tt.args.namespace)
+			got, err := r.readMasterPassword(tt.args.ctx, &tt.args.dbclaim)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("readMasterPassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -514,7 +503,7 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				"overridden-host",
 				"5432",
 				"1234",
-				"postgres",
+				"root",
 				"root",
 				"5432",
 				"require",
@@ -529,50 +518,59 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				Log:    tt.reconciler.Log,
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
+				Input:  &input{FragmentKey: tt.args[0].fragmentKey},
 			}
 			t.Log("getMasterHost() Host from testConfig")
-			if got := r.getMasterHost(tt.args[0].fragmentKey, tt.args[0].dbClaim); got != tt.want[0] {
+			if got := r.getMasterHost(tt.args[0].dbClaim); got != tt.want[0] {
 				t.Errorf("getMasterHost() = %v, want %v", got, tt.want[0])
 			}
 			t.Log("getMasterHost() Host from testConfig PASS")
 
 			t.Log("getMasterHost() Host overridden by DB claim")
-			if got := r.getMasterHost(tt.args[1].fragmentKey, tt.args[1].dbClaim); got != tt.want[1] {
+			if got := r.getMasterHost(tt.args[1].dbClaim); got != tt.want[1] {
 				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[1])
 			}
 			t.Log("getMasterPort() Host overridden by DB claim PASS")
 
 			t.Log("getMasterHost() Port from testConfig")
-			if got := r.getMasterPort(tt.args[2].fragmentKey, tt.args[2].dbClaim); got != tt.want[2] {
+			if got := r.getMasterPort(tt.args[2].dbClaim); got != tt.want[2] {
 				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[2])
 			}
 			t.Log("getMasterPort() Port from testConfig PASS")
 
 			t.Log("getMasterHost() Port overridden by DB claim")
-			if got := r.getMasterPort(tt.args[3].fragmentKey, tt.args[3].dbClaim); got != tt.want[3] {
+			if got := r.getMasterPort(tt.args[3].dbClaim); got != tt.want[3] {
 				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[3])
 			}
 			t.Log("getMasterPort() Port overridden by DB claim PASS")
 
-			if got := r.getMasterUser(tt.args[4].fragmentKey, tt.args[4].dbClaim); got != tt.want[4] {
+			if got := r.getMasterUser(tt.args[4].dbClaim); got != tt.want[4] {
 				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[4])
 			}
 			t.Log("getMasterUser() PASS")
 
-			if got := r.getMasterUser(tt.args[5].fragmentKey, tt.args[5].dbClaim); got != tt.want[5] {
+			r = &DatabaseClaimReconciler{
+				Client: tt.reconciler.Client,
+				Log:    tt.reconciler.Log,
+				Scheme: tt.reconciler.Scheme,
+				Config: tt.reconciler.Config,
+				Input:  &input{FragmentKey: tt.args[5].fragmentKey},
+			}
+
+			if got := r.getMasterUser(tt.args[5].dbClaim); got != tt.want[5] {
 				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[5])
 			}
 			t.Log("getMasterUser() Username from default value in config PASS")
 
-			if got := r.getMasterPort(tt.args[6].fragmentKey, tt.args[6].dbClaim); got != tt.want[6] {
+			if got := r.getMasterPort(tt.args[6].dbClaim); got != tt.want[6] {
 				t.Errorf("getMasterPort() = %v, want %v", got, tt.want[6])
 			}
 			t.Log("getMasterPort() Port from default value in config PASS")
 
-			if got := r.getSSLMode(tt.args[7].fragmentKey, tt.args[7].dbClaim); got != tt.want[7] {
+			if got := r.getSSLMode(tt.args[7].dbClaim); got != tt.want[7] {
 				t.Errorf("getSSLMode() = %v, want %v", got, tt.want[7])
 			}
-			t.Log("getSSLMode() sslMode from default value in config PASS")
+
 		})
 	}
 }
@@ -649,7 +647,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 					Spec: persistancev1.DatabaseClaimSpec{},
 				},
 			},
-			"require",
+			"disable",
 		},
 	}
 	for _, tt := range tests {
@@ -659,8 +657,9 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 				Log:    tt.reconciler.Log,
 				Scheme: tt.reconciler.Scheme,
 				Config: tt.reconciler.Config,
+				Input:  &input{FragmentKey: tt.args.fragmentKey},
 			}
-			if got := r.getSSLMode(tt.args.fragmentKey, tt.args.dbClaim); got != tt.want {
+			if got := r.getSSLMode(tt.args.dbClaim); got != tt.want {
 				t.Errorf("getSSLMode() = %v, want %v", got, tt.want)
 			}
 			t.Log("getSSLMode() PASS")
@@ -705,7 +704,8 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 						InstanceLabel: "sample.connection",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
+						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						NewDB:    &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
 					},
 				},
 			},
@@ -723,7 +723,8 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 						InstanceLabel: "blabla",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
+						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						NewDB:    &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
 					},
 				},
 			},

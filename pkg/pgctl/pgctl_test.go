@@ -269,7 +269,7 @@ func TestWrapper(t *testing.T) {
 func testEndToEnd(t *testing.T) {
 
 	config := Config{
-		log:              logger,
+		Log:              logger,
 		SourceDBAdminDsn: SourceDBAdminDsn,
 		SourceDBUserDsn:  SourceDBUserDsn,
 		TargetDBUserDsn:  TargetDBUserDsn,
@@ -292,7 +292,7 @@ func testEndToEnd(t *testing.T) {
 		return "postgres://postgres:secret@pubHost:5432/pub?sslmode=disable"
 	}
 	//s = &initial_state{config}
-	s, err = getCurrentState("", config)
+	s, err = GetReplicatorState("", config)
 	if err != nil {
 		t.Error(err)
 	}
@@ -331,7 +331,7 @@ func testInitalState(t *testing.T) {
 		{name: "testInitalState_empty", expectedErr: true, args: Config{}},
 		{name: "target Admin empty", expectedErr: true,
 			args: Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -339,7 +339,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_target User empty", expectedErr: true,
 			args: Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
@@ -347,7 +347,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_Source Admin empty", expectedErr: true,
 			args: Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -355,7 +355,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_Source User empty", expectedErr: true,
 			args: Config{
-				log: logger,
+				Log: logger,
 
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
@@ -364,7 +364,7 @@ func testInitalState(t *testing.T) {
 		},
 		{name: "testInitalState_ok", expectedErr: false, expectedState: S_ValidateConnection,
 			args: Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -404,7 +404,7 @@ func test_validate_connection_state_Execute(t *testing.T) {
 	}{
 		{name: "test_validate_connection_state_Execute_no_admin_access", wantErr: true,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: "postgres://invalid:secret@localhost:%s/pub?sslmode=disable",
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -413,7 +413,7 @@ func test_validate_connection_state_Execute(t *testing.T) {
 		},
 		{name: "test_validate_connection_state_Execute_ok", wantErr: false, want: S_CreatePublication,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -454,7 +454,7 @@ func test_create_publication_state_Execute(t *testing.T) {
 	}{
 		{name: "test_create_publication_state_Execute_ok", wantErr: false, want: S_CopySchema,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -492,7 +492,7 @@ func test_copy_schema_state_Execute(t *testing.T) {
 	}{
 		{name: "test_copy_schema_state_Execute_ok", wantErr: false, want: S_CreateSubscription,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -530,7 +530,7 @@ func test_create_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_create_subscription_state_Execute_ok", wantErr: false, want: S_EnableSubscription,
 			fields: fields{Config{
-				log: logger,
+				Log: logger,
 				// During subscription creation, SourceDBAdminDsn is used to configure subscription in the target database to connect to source
 				// pub postgres db. In the unit test scenario, since the docker is setup with bridge network (during pool setup time), the SourceDBAdminDsn is set with the docker host name and port.
 				// In a real scenario - the regular DSN will be good enough
@@ -570,7 +570,7 @@ func test_enable_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_enable_subscription_state_Execute_ok", wantErr: false, want: S_CutOverReadinessCheck,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -607,7 +607,7 @@ func test_cut_over_readiness_check_state_Execute(t *testing.T) {
 	}{
 		{name: "_test_cut_over_readiness_check_state_Executeok", wantErr: false, want: S_Retry,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -644,7 +644,7 @@ func test_reset_target_sequence_state_Execute(t *testing.T) {
 	}{
 		{name: "test_reset_target_sequence_state_Execute_ok", wantErr: false, want: S_RerouteTargetSecret,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -681,7 +681,7 @@ func test_reroute_target_secret_state_Execute(t *testing.T) {
 	}{
 		{name: "test_reroute_target_secret_state_Execute_ok", wantErr: false, want: S_ValidateMigrationStatus,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -718,7 +718,7 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 	}{
 		{name: "test_validate_migration_status_state_ok", wantErr: false, want: S_DisableSourceAccess,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -755,7 +755,7 @@ func test_disable_source_access_state_Execute(t *testing.T) {
 	}{
 		{name: "test_disable_source_access_state_ok", wantErr: false, want: S_DisableSubscription,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -792,7 +792,7 @@ func test_disable_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_disable_subscription_state_Execute_ok", wantErr: false, want: S_DeleteSubscription,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -829,7 +829,7 @@ func test_delete_subscription_state_Execute(t *testing.T) {
 	}{
 		{name: "test_delete_subscription_state_Execute_ok", wantErr: false, want: S_DeletePublication,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
@@ -866,7 +866,7 @@ func test_delete_publication_state_Execute(t *testing.T) {
 	}{
 		{name: "test_delete_publication_state_Execute_ok", wantErr: false, want: S_Completed,
 			fields: fields{Config{
-				log:              logger,
+				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
