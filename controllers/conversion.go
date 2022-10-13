@@ -3,19 +3,19 @@ package controllers
 import (
 	"sort"
 
-	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
+	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
-type RDSInstanceTags []crossplanedb.Tag
+type DBTags []*crossplanerds.Tag
 
 type DBClaimTags []persistancev1.Tag
 
-func (r DBClaimTags) RDSInstanceTags() RDSInstanceTags {
+func (r DBClaimTags) DBTags() DBTags {
 	sort.Sort(r)
-	tags := make(RDSInstanceTags, 0, len(r))
+	tags := make(DBTags, 0, len(r))
 	for _, t := range r {
-		tags = append(tags, crossplanedb.Tag{Key: t.Key, Value: t.Value})
+		tags = append(tags, &crossplanerds.Tag{Key: &t.Key, Value: &t.Value})
 	}
 	return tags
 }
