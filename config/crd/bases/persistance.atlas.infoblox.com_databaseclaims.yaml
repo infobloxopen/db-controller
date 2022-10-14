@@ -187,42 +187,87 @@ spec:
           status:
             description: DatabaseClaimStatus defines the observed state of DatabaseClaim
             properties:
-              connectionInfo:
+              activeDB:
+                description: track the status of the active db being used by the application
                 properties:
-                  databaseName:
+                  connectionInfo:
+                    properties:
+                      databaseName:
+                        type: string
+                      hostName:
+                        type: string
+                      password:
+                        type: string
+                      port:
+                        type: string
+                      sslMode:
+                        type: string
+                      userName:
+                        type: string
+                    type: object
+                  connectionUpdatedAt:
+                    description: Time the connection info was updated/created.
+                    format: date-time
                     type: string
-                  hostName:
+                  dbCreateAt:
+                    description: Time the database was created
+                    format: date-time
                     type: string
-                  password:
+                  matchLabel:
+                    description: The name of the label that was successfully matched
+                      against the fragment key names in the db-controller configMap
                     type: string
-                  port:
+                  userUpdatedAt:
+                    description: Time the user/password was updated/created
+                    format: date-time
                     type: string
-                  sslMode:
-                    type: string
-                  userName:
-                    type: string
+                required:
+                - connectionInfo
                 type: object
-              connectionUpdatedAt:
-                description: Time the connection info was updated/created.
-                format: date-time
-                type: string
-              dbCreateAt:
-                description: Time the database was created
-                format: date-time
-                type: string
               error:
                 description: Any errors related to provisioning this claim.
                 type: string
-              matchLabel:
-                description: The name of the label that was successfully matched against
-                  the fragment key names in the db-controller configMap
+              migrationState:
+                description: tracks status of DB migration. if empty, not started.
+                  non empty denotes migration in progress, unless it is S_Completed
                 type: string
-              userUpdatedAt:
-                description: Time the user/password was updated/created
-                format: date-time
-                type: string
-            required:
-            - connectionInfo
+              newDB:
+                description: track the status of new db in the process of being created
+                properties:
+                  connectionInfo:
+                    properties:
+                      databaseName:
+                        type: string
+                      hostName:
+                        type: string
+                      password:
+                        type: string
+                      port:
+                        type: string
+                      sslMode:
+                        type: string
+                      userName:
+                        type: string
+                    type: object
+                  connectionUpdatedAt:
+                    description: Time the connection info was updated/created.
+                    format: date-time
+                    type: string
+                  dbCreateAt:
+                    description: Time the database was created
+                    format: date-time
+                    type: string
+                  matchLabel:
+                    description: The name of the label that was successfully matched
+                      against the fragment key names in the db-controller configMap
+                    type: string
+                  userUpdatedAt:
+                    description: Time the user/password was updated/created
+                    format: date-time
+                    type: string
+                required:
+                - connectionInfo
+                type: object
             type: object
         type: object
     served: true

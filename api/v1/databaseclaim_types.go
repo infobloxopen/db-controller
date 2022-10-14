@@ -17,6 +17,9 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"net/url"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -177,7 +180,16 @@ type Tag struct {
 type DatabaseClaimStatus struct {
 	// Any errors related to provisioning this claim.
 	Error string `json:"error,omitempty"`
+	//track the status of new db in the process of being created
+	NewDB *Status `json:"newDB,omitempty"`
+	//track the status of the active db being used by the application
+	ActiveDB *Status `json:"activeDB,omitempty"`
+	//tracks status of DB migration. if empty, not started.
+	//non empty denotes migration in progress, unless it is S_Completed
+	MigrationState string `json:"migrationState,omitempty"`
+}
 
+type Status struct {
 	// Time the database was created
 	DbCreatedAt *metav1.Time `json:"dbCreateAt,omitempty"`
 
@@ -225,4 +237,9 @@ type DatabaseClaimList struct {
 
 func init() {
 	SchemeBuilder.Register(&DatabaseClaim{}, &DatabaseClaimList{})
+}
+
+func (c *DatabaseClaimConnectionInfo) Dsn() string {
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
+		c.Username, url.QueryEscape(c.Password), c.Host, c.Port, c.DatabaseName, c.SSLMode)
 }

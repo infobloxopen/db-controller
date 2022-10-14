@@ -1,15 +1,25 @@
+---
+# Source: dbclaim-sample/templates/dbclaim-sample.yaml
 apiVersion: persistance.atlas.infoblox.com/v1
 kind: DatabaseClaim
 metadata:
-  name: databaseclaim-dynamic
-  namespace: {{ .Release.Namespace }}
+  name: databaseclaim-existingdb
 spec:
   appId: sample-app
-  secretName: databaseclaim-dynamic
+  secretName: databaseclaim-existingdb-secret
   type: postgres
-  instanceLabel: dynamic-connection
-  userName: sample_user
-  databaseName: sample_app
-  dsnName: dynamic-postgres-dsn
+  userName: "sample_existing_db_user"
+  host: localhost
+  port: "5433"
+  databaseName: sub
+  dsnName: dsn.txt
   shape: db.t2.small
-  minStorageGB: 20
+  minStorageGB: 200
+  useExistingSource: false
+  sourceDataFrom:
+    database:
+      dsn: postgres://postgres:postgres@localhost:5432/pub?sslmode=disable
+      secretRef:
+        name: databaseclaim-existingdb-root-secret
+        namespace:
+    type: database
