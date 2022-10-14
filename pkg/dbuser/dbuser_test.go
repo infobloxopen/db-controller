@@ -29,8 +29,9 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 							Username: "oldUser",
+						},
 						},
 					},
 				},
@@ -45,8 +46,9 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 							Username: "",
+						},
 						},
 					},
 				},
@@ -64,8 +66,9 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 						Username: "newUser",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 							Username: "oldUser",
+						},
 						},
 					},
 				},
@@ -78,7 +81,7 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 			d := DBUser{
 				rolename: tt.dbuser.role,
 			}
-			if got := d.IsUserChanged(tt.args.dbClaim); got != tt.want {
+			if got := d.IsUserChanged(tt.args.dbClaim.Status.ActiveDB); got != tt.want {
 				t.Errorf("isUserChanged() = %v, want %v", got, tt.want)
 			}
 		})
