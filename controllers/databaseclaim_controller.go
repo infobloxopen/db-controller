@@ -222,7 +222,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 	if r.Mode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
-		err := r.reconcileUseExisitngDB(ctx, dbClaim)
+		err := r.reconcileUseExistingDB(ctx, dbClaim)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -241,7 +241,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 
 			logr.Info("existing db was not reconciled, calling reconcileUseExisitngDB before reconcileUseExisitngDB")
 
-			err := r.reconcileUseExisitngDB(ctx, dbClaim)
+			err := r.reconcileUseExistingDB(ctx, dbClaim)
 			if err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
@@ -522,14 +522,14 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
 	if dbClaim.Spec.Type == defaultPostgresStr {
-		return r.createPostgresDBInstanceCR(ctx, dbHostIdentifier, dbClaim)
+		return r.managePostgresDBInstance(ctx, dbHostIdentifier, dbClaim)
 	} else if dbClaim.Spec.Type == defaultAuroraPostgresStr {
-		ready, err := r.createDBClusterCR(ctx, dbHostIdentifier, dbClaim)
+		ready, err := r.manageDBCluster(ctx, dbHostIdentifier, dbClaim)
 		if err != nil {
 			return false, err
 		}
 		if ready {
-			return r.createAuroraDBInstanceCR(ctx, dbHostIdentifier, dbClaim)
+			return r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim)
 		}
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
@@ -595,7 +595,7 @@ func (r *DatabaseClaimReconciler) getCloudDBHostParams(ctx context.Context, dbCl
 	return params
 }
 
-func (r *DatabaseClaimReconciler) createDBClusterCR(ctx context.Context, dbHostName string,
+func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 
 	serviceNS, err := getServiceNamespace()
@@ -613,7 +613,7 @@ func (r *DatabaseClaimReconciler) createDBClusterCR(ctx context.Context, dbHostN
 			Name:      dbHostName + "-master",
 			Namespace: serviceNS,
 		},
-		Key: "secret",
+		Key: "password",
 	}
 	dbCluster := &crossplanerds.DBCluster{}
 	providerConfigReference := xpv1.Reference{
@@ -668,6 +668,11 @@ func (r *DatabaseClaimReconciler) createDBClusterCR(ctx context.Context, dbHostN
 			return false, err
 		}
 	}
+	if !dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+		err = fmt.Errorf("can not create Cloud DB cluster %s it is being deleted", dbHostName)
+		r.Log.Error(err, "dbCluster", "dbHostIdentifier", dbHostName)
+		return false, err
+	}
 	_, err = r.updateDBCluster(ctx, dbClaim, dbCluster)
 	if err != nil {
 		return false, err
@@ -677,7 +682,7 @@ func (r *DatabaseClaimReconciler) createDBClusterCR(ctx context.Context, dbHostN
 
 }
 
-func (r *DatabaseClaimReconciler) createPostgresDBInstanceCR(ctx context.Context, dbHostName string,
+func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	serviceNS, err := getServiceNamespace()
 	if err != nil {
@@ -693,7 +698,7 @@ func (r *DatabaseClaimReconciler) createPostgresDBInstanceCR(ctx context.Context
 			Name:      dbHostName + "-master",
 			Namespace: serviceNS,
 		},
-		Key: "secret",
+		Key: "password",
 	}
 	// Infrastructure Config
 	region := r.getRegion()
@@ -774,7 +779,7 @@ func (r *DatabaseClaimReconciler) createPostgresDBInstanceCR(ctx context.Context
 	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
 }
 
-func (r *DatabaseClaimReconciler) createAuroraDBInstanceCR(ctx context.Context, dbHostName string,
+func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	// Infrastructure Config
 	region := r.getRegion()
@@ -1214,7 +1219,7 @@ func getServiceNamespace() (string, error) {
 	return ns, nil
 }
 
-func (r *DatabaseClaimReconciler) reconcileUseExisitngDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExisitngDB")
 
 	existingDBConnInfo, err := getConnInfoFromDSN(logr, dbClaim.Spec.SourceDataFrom.Database.DSN)
