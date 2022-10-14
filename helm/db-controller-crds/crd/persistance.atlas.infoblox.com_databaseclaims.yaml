@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: ""
+    controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
   name: databaseclaims.persistance.atlas.infoblox.com
 spec:
@@ -38,10 +38,9 @@ spec:
               appId:
                 description: Specifies an indentifier for the application using the
                   database.
-                minLength: 1
                 type: string
               databaseName:
-                description: The name of the database instance.
+                description: The name of the database within InstanceLabel.
                 type: string
               dbNameOverride:
                 description: In most cases the AppID will match the database name.
@@ -76,11 +75,105 @@ spec:
                 description: The optional Shape values are arbitrary and help drive
                   instance selection
                 type: string
+              sourceDataFrom:
+                description: SourceDataFrom specifies an existing database or backup
+                  to use when initially provisioning the database. if the dbclaim
+                  has already provisioned a database, this field is ignored
+                properties:
+                  database:
+                    description: Database defines the connection information to an
+                      existing db
+                    properties:
+                      dsn:
+                        description: 'DSN is the connection string used to reach the
+                          postgres database must have protocol specifier at beginning
+                          (example: mysql://  postgres:// )'
+                        type: string
+                      secretRef:
+                        description: 'SecretRef specifies a secret to use for connecting
+                          to the postgresdb (should be master/root) TODO: document/validate
+                          the secret format required'
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - dsn
+                    type: object
+                  s3:
+                    description: S3 defines the location of a DB backup in an S3 bucket
+                    properties:
+                      bucket:
+                        type: string
+                      prefix:
+                        description: Prefix is the path prefix of the S3 bucket within
+                          which the backup to restore is located.
+                        type: string
+                      region:
+                        type: string
+                      secretRef:
+                        description: 'SecretRef specifies a secret to use for connecting
+                          to the s3 bucket via AWS client TODO: document/validate
+                          the secret format required'
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      sourceEngine:
+                        description: SourceEngine is the engine used to create the
+                          backup.
+                        type: string
+                      sourceEngineVersion:
+                        description: 'SourceEngineVersion is the version of the engine
+                          used to create the backup. Example: "5.7.30"'
+                        type: string
+                    required:
+                    - bucket
+                    - region
+                    - sourceEngine
+                    - sourceEngineVersion
+                    type: object
+                  type:
+                    description: Type specifies the type of source
+                    type: string
+                required:
+                - type
+                type: object
+              tags:
+                description: Tags
+                items:
+                  description: Tag
+                  properties:
+                    key:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - key
+                  - value
+                  type: object
+                nullable: true
+                type: array
               type:
                 description: Specifies the type of database to provision. Only postgres
                   is supported.
-                minLength: 0
                 type: string
+              useExistingSource:
+                description: UseExistingSource instructs the controller to perform
+                  user management on the database currently defined in the SourceDataFrom
+                  field. If sourceDataFrom is empty, this is ignored If this is set,
+                  .sourceDataFrom.Type and .type must match to use an existing source
+                  (since they must be the same) If this field was set and becomes
+                  unset, migration of data will commence
+                type: boolean
               userName:
                 description: The username that the application will use for accessing
                   the database.
@@ -94,42 +187,87 @@ spec:
           status:
             description: DatabaseClaimStatus defines the observed state of DatabaseClaim
             properties:
-              connectionInfo:
+              activeDB:
+                description: track the status of the active db being used by the application
                 properties:
-                  databaseName:
+                  connectionInfo:
+                    properties:
+                      databaseName:
+                        type: string
+                      hostName:
+                        type: string
+                      password:
+                        type: string
+                      port:
+                        type: string
+                      sslMode:
+                        type: string
+                      userName:
+                        type: string
+                    type: object
+                  connectionUpdatedAt:
+                    description: Time the connection info was updated/created.
+                    format: date-time
                     type: string
-                  hostName:
+                  dbCreateAt:
+                    description: Time the database was created
+                    format: date-time
                     type: string
-                  password:
+                  matchLabel:
+                    description: The name of the label that was successfully matched
+                      against the fragment key names in the db-controller configMap
                     type: string
-                  port:
+                  userUpdatedAt:
+                    description: Time the user/password was updated/created
+                    format: date-time
                     type: string
-                  sslMode:
-                    type: string
-                  userName:
-                    type: string
+                required:
+                - connectionInfo
                 type: object
-              connectionUpdatedAt:
-                description: Time the connection info was updated/created.
-                format: date-time
-                type: string
-              dbCreateAt:
-                description: Time the database was created
-                format: date-time
-                type: string
               error:
                 description: Any errors related to provisioning this claim.
                 type: string
-              matchLabel:
-                description: The name of the label that was successfully matched against
-                  the fragment key names in the db-controller configMap
+              migrationState:
+                description: tracks status of DB migration. if empty, not started.
+                  non empty denotes migration in progress, unless it is S_Completed
                 type: string
-              userUpdatedAt:
-                description: Time the user/password was updated/created
-                format: date-time
-                type: string
-            required:
-            - connectionInfo
+              newDB:
+                description: track the status of new db in the process of being created
+                properties:
+                  connectionInfo:
+                    properties:
+                      databaseName:
+                        type: string
+                      hostName:
+                        type: string
+                      password:
+                        type: string
+                      port:
+                        type: string
+                      sslMode:
+                        type: string
+                      userName:
+                        type: string
+                    type: object
+                  connectionUpdatedAt:
+                    description: Time the connection info was updated/created.
+                    format: date-time
+                    type: string
+                  dbCreateAt:
+                    description: Time the database was created
+                    format: date-time
+                    type: string
+                  matchLabel:
+                    description: The name of the label that was successfully matched
+                      against the fragment key names in the db-controller configMap
+                    type: string
+                  userUpdatedAt:
+                    description: Time the user/password was updated/created
+                    format: date-time
+                    type: string
+                required:
+                - connectionInfo
+                type: object
             type: object
         type: object
     served: true
