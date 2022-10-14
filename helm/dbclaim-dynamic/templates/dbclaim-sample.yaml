@@ -16,10 +16,10 @@ spec:
   shape: db.t2.small
   minStorageGB: 200
   useExistingSource: false
-  # sourceDataFrom:
-  #   database:
-  #     dsn: postgres://postgres:postgres@localhost:5432/pub?sslmode=disable
-  #     secretRef:
-  #       name: databaseclaim-existingdb-root-secret
-  #       namespace:
-  #   type: database
+  sourceDataFrom:
+    database:
+      dsn: postgres://postgres:postgres@localhost:5432/pub?sslmode=disable
+      secretRef:
+        name: databaseclaim-existingdb-root-secret
+        namespace:
+    type: database

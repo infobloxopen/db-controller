@@ -802,10 +802,10 @@ var passwordRotationLess60 = []byte(`
       passwordRotationPeriod: "50"
 `)
 
-var passwordRotationGt1440 = []byte(`
-    passwordConfig:
-      passwordRotationPeriod: "2000"
-`)
+// var passwordRotationGt1440 = []byte(`
+//     passwordConfig:
+//       passwordRotationPeriod: "2000"
+// `)
 
 func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 	type mockReconciler struct {

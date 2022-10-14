@@ -39,11 +39,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	crossplanedb "github.com/crossplane/provider-aws/apis/database/v1beta1"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
@@ -56,11 +55,13 @@ const (
 	defaultNumDig  = 10
 	defaultNumSimb = 10
 	// rotation time in minutes
-	minRotationTime        = 60
-	maxRotationTime        = 1440
-	maxWaitTime            = 10
-	defaultRotationTime    = minRotationTime
-	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
+	minRotationTime          = 60
+	maxRotationTime          = 1440
+	maxWaitTime              = 10
+	defaultRotationTime      = minRotationTime
+	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
+	defaultPostgresStr       = "postgres"
+	defaultAuroraPostgresStr = "aurora-postgresql"
 )
 
 type ModeEnum int
@@ -351,7 +352,7 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 
 var (
 	instanceLableKey = ".spec.instanceLabel"
-	apiGVStr         = persistancev1.GroupVersion.String()
+	// apiGVStr         = persistancev1.GroupVersion.String()
 )
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -439,9 +440,9 @@ func (r *DatabaseClaimReconciler) getSecretKey(fragmentKey string) string {
 	return r.Config.GetString(fmt.Sprintf("%s::PasswordSecretKey", fragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getAuthSource() string {
-	return r.Config.GetString("authSource")
-}
+// func (r *DatabaseClaimReconciler) getAuthSource() string {
+// 	return r.Config.GetString("authSource")
+// }
 
 func (r *DatabaseClaimReconciler) getRegion() string {
 	return r.Config.GetString("region")
@@ -517,86 +518,21 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *persistancev1.Data
 	return prefix + r.Input.FragmentKey
 }
 
-func (r *DatabaseClaimReconciler) getDynamicHost(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (persistancev1.DatabaseClaimConnectionInfo, error) {
-	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
-
-	// Make sure dbHostName is unique
-	dbHostName := r.getDynamicHostName(dbClaim)
-
-	rds := &crossplanedb.RDSInstance{}
-
-	// Found a use case where the change in DatabaseClaim updated crossplane RDSInstance resource
-	// the change was rejected but the cache was updated and was out of sync with api server
-	// See https://pkg.go.dev/sigs.k8s.io/controller-runtime#hdr-Clients_and_Caches
-	// "client does not promise to invalidate the cache during writes"
-	// We can use mgr.GetAPIReader() to bypass the cache and read value directly from API Server
-	// Since update does not work I am not going to make this change as it will impact
-	// the performance of the controller.
-	//
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostName,
-	}, rds)
-	if err != nil {
-		err = r.createCloudDatabase(dbHostName, ctx, fragmentKey, dbClaim)
-		if err != nil {
-			return connInfo, err
-		}
-		return connInfo, nil
-	}
-
-	// Deletion is long running task check that is not being deleted.
-	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
-		err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostName)
-		r.Log.Error(err, "RDSInstance", "dbHostName", dbHostName)
-		return connInfo, err
-	}
-
-	update, err := r.updateCloudDatabase(ctx, dbClaim, rds)
-	if update {
-		// Reschedule run after update is complete
-		return connInfo, err
-	}
-
-	// Check if resource is ready
-	if !r.isResourceReady(rds.Status.ResourceStatus) {
-		return connInfo, nil
-	}
-
-	// Check database secret
-	connInfo, _ = r.readResourceSecret(ctx, dbClaim)
-
-	// SSL Mode is always required
-	// TODO connInfo.SSLMode should have types for enums
-	// FIXME - should come from config now that it is defined.
-	connInfo.SSLMode = "require"
-
-	return connInfo, nil
-}
-
-func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (*crossplanedb.RDSInstance, error) {
+func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
-	rds := &crossplanedb.RDSInstance{}
-
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostIdentifier,
-	}, rds)
-	if err != nil {
-		err = r.createCloudDBHost(dbHostIdentifier, ctx, dbClaim)
+	if dbClaim.Spec.Type == defaultPostgresStr {
+		return r.createPostgresDBInstanceCR(ctx, dbHostIdentifier, dbClaim)
+	} else if dbClaim.Spec.Type == defaultAuroraPostgresStr {
+		ready, err := r.createDBClusterCR(ctx, dbHostIdentifier, dbClaim)
 		if err != nil {
-			return nil, err
+			return false, err
+		}
+		if ready {
+			return r.createAuroraDBInstanceCR(ctx, dbHostIdentifier, dbClaim)
 		}
 	}
-
-	// Deletion is long running task check that is not being deleted.
-	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
-		err = fmt.Errorf("can not create Cloud Database %s it is being deleted", dbHostIdentifier)
-		r.Log.Error(err, "RDSInstance", "dbHostIdentifier", dbHostIdentifier)
-		return rds, err
-	}
-
-	_, err = r.updateCloudDatabase(ctx, dbClaim, rds)
-	return rds, err
+	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
 
 type DynamicHostParms struct {
@@ -611,59 +547,6 @@ type DynamicHostParms struct {
 	DeletionPolicy                  xpv1.DeletionPolicy
 }
 
-func (r *DatabaseClaimReconciler) getDynamicHostParams(ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
-	params := DynamicHostParms{}
-
-	// Database Config
-	if fragmentKey == "" {
-		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
-		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
-		params.Shape = dbClaim.Spec.Shape
-		params.Engine = string(dbClaim.Spec.Type)
-		params.MinStorageGB = dbClaim.Spec.MinStorageGB
-	} else {
-		params.MasterUsername = r.getMasterUser(dbClaim)
-		params.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
-		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
-		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
-	}
-
-	// Set defaults
-
-	if params.MasterUsername == "" {
-		params.MasterUsername = r.Config.GetString("defaultMasterUsername")
-	}
-
-	if params.EngineVersion == "" {
-		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
-	}
-
-	if params.Shape == "" {
-		params.Shape = r.Config.GetString("defaultShape")
-	}
-
-	if params.Engine == "" {
-		params.Engine = r.Config.GetString("defaultEngine")
-	}
-
-	if params.MinStorageGB == 0 {
-		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
-	}
-
-	// TODO - Implement these for each fragmentKey also
-	params.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool("defaultSkipFinalSnapshotBeforeDeletion")
-	params.PubliclyAccessible = r.Config.GetBool("defaultPubliclyAccessible")
-	if r.Config.GetString("defaultDeletionPolicy") == "delete" {
-		params.DeletionPolicy = xpv1.DeletionDelete
-	} else {
-		params.DeletionPolicy = xpv1.DeletionOrphan
-	}
-
-	// TODO - Enable IAM auth based on authSource config
-	params.EnableIAMDatabaseAuthentication = false
-
-	return params
-}
 func (r *DatabaseClaimReconciler) getCloudDBHostParams(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
 	params := DynamicHostParms{}
 
@@ -712,161 +595,318 @@ func (r *DatabaseClaimReconciler) getCloudDBHostParams(ctx context.Context, dbCl
 	return params
 }
 
-func (r *DatabaseClaimReconciler) createCloudDBHost(dbHostName string, ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) createDBClusterCR(ctx context.Context, dbHostName string,
+	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
+
 	serviceNS, err := getServiceNamespace()
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	dbSecret := xpv1.SecretReference{
+	dbSecretCluster := xpv1.SecretReference{
 		Name:      dbHostName,
 		Namespace: serviceNS,
 	}
 
-	// Infrastructure Config
-	region := r.getRegion()
+	dbMasterSecretCluster := xpv1.SecretKeySelector{
+		SecretReference: xpv1.SecretReference{
+			Name:      dbHostName + "-master",
+			Namespace: serviceNS,
+		},
+		Key: "secret",
+	}
+	dbCluster := &crossplanerds.DBCluster{}
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
 
 	params := r.getCloudDBHostParams(ctx, dbClaim)
 
-	rdsInstance := &crossplanedb.RDSInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: dbHostName,
-			// TODO - Figure out the proper labels for resource
-			// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-		},
-		Spec: crossplanedb.RDSInstanceSpec{
-			ForProvider: crossplanedb.RDSInstanceParameters{
-				Region: &region,
-				VPCSecurityGroupIDRefs: []xpv1.Reference{
-					{Name: r.getVpcSecurityGroupIDRefs()},
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbCluster)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			dbCluster = &crossplanerds.DBCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dbHostName,
+					// TODO - Figure out the proper labels for resource
+					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 				},
-				DBSubnetGroupNameRef: &xpv1.Reference{
-					Name: r.getDbSubnetGroupNameRef(),
+				Spec: crossplanerds.DBClusterSpec{
+					ForProvider: crossplanerds.DBClusterParameters{
+						Region: r.getRegion(),
+						CustomDBClusterParameters: crossplanerds.CustomDBClusterParameters{
+							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
+							VPCSecurityGroupIDRefs: []xpv1.Reference{
+								{Name: r.getVpcSecurityGroupIDRefs()},
+							},
+							DBSubnetGroupNameRef: &xpv1.Reference{
+								Name: r.getDbSubnetGroupNameRef(),
+							},
+							AutogeneratePassword:        true,
+							MasterUserPasswordSecretRef: &dbMasterSecretCluster,
+						},
+						// Items from Claim and fragmentKey
+						Engine: &params.Engine,
+						Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						// Items from Config
+						MasterUsername:                  &params.MasterUsername,
+						EngineVersion:                   &params.EngineVersion,
+						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						WriteConnectionSecretToReference: &dbSecretCluster,
+						ProviderConfigReference:          &providerConfigReference,
+						DeletionPolicy:                   params.DeletionPolicy,
+					},
 				},
-				// Items from Claim and fragmentKey
-				Engine:           params.Engine,
-				DBInstanceClass:  params.Shape,
-				AllocatedStorage: &params.MinStorageGB,
-				Tags:             DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags(),
-				// Items from Config
-				MasterUsername:                  &params.MasterUsername,
-				EngineVersion:                   &params.EngineVersion,
-				SkipFinalSnapshotBeforeDeletion: &params.SkipFinalSnapshotBeforeDeletion,
-				PubliclyAccessible:              &params.PubliclyAccessible,
-				EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-			},
-			ResourceSpec: xpv1.ResourceSpec{
-				WriteConnectionSecretToReference: &dbSecret,
-				ProviderConfigReference:          &providerConfigReference,
-				DeletionPolicy:                   params.DeletionPolicy,
-			},
-		},
+			}
+			r.Log.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
+			r.Client.Create(ctx, dbCluster)
+		} else {
+			return false, err
+		}
+	}
+	_, err = r.updateDBCluster(ctx, dbClaim, dbCluster)
+	if err != nil {
+		return false, err
 	}
 
-	r.Log.Info("creating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+	return r.isResourceReady(dbCluster.Status.ResourceStatus), nil
 
-	return r.Client.Create(ctx, rdsInstance)
 }
 
-func (r *DatabaseClaimReconciler) createCloudDatabase(dbHostName string, ctx context.Context, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) createPostgresDBInstanceCR(ctx context.Context, dbHostName string,
+	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	serviceNS, err := getServiceNamespace()
 	if err != nil {
-		return err
+		return false, err
 	}
-
-	dbSecret := xpv1.SecretReference{
+	dbSecretInstance := xpv1.SecretReference{
 		Name:      dbHostName,
 		Namespace: serviceNS,
 	}
 
+	dbMasterSecretInstance := xpv1.SecretKeySelector{
+		SecretReference: xpv1.SecretReference{
+			Name:      dbHostName + "-master",
+			Namespace: serviceNS,
+		},
+		Key: "secret",
+	}
 	// Infrastructure Config
 	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
 
-	params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
+	dbInstance := &crossplanerds.DBInstance{}
 
-	rdsInstance := &crossplanedb.RDSInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: dbHostName,
-			// TODO - Figure out the proper labels for resource
-			// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-		},
-		Spec: crossplanedb.RDSInstanceSpec{
-			ForProvider: crossplanedb.RDSInstanceParameters{
-				Region: &region,
-				VPCSecurityGroupIDRefs: []xpv1.Reference{
-					{Name: r.getVpcSecurityGroupIDRefs()},
+	params := r.getCloudDBHostParams(ctx, dbClaim)
+	ms64 := int64(params.MinStorageGB)
+
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbInstance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			dbInstance = &crossplanerds.DBInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dbHostName,
+					// TODO - Figure out the proper labels for resource
+					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 				},
-				DBSubnetGroupNameRef: &xpv1.Reference{
-					Name: r.getDbSubnetGroupNameRef(),
+				Spec: crossplanerds.DBInstanceSpec{
+					ForProvider: crossplanerds.DBInstanceParameters{
+						Region: region,
+						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
+							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
+							VPCSecurityGroupIDRefs: []xpv1.Reference{
+								{Name: r.getVpcSecurityGroupIDRefs()},
+							},
+							DBSubnetGroupNameRef: &xpv1.Reference{
+								Name: r.getDbSubnetGroupNameRef(),
+							},
+							AutogeneratePassword:        true,
+							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
+						},
+						// Items from Claim and fragmentKey
+						Engine:           &params.Engine,
+						DBInstanceClass:  &params.Shape,
+						AllocatedStorage: &ms64,
+						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						// Items from Config
+						MasterUsername:                  &params.MasterUsername,
+						EngineVersion:                   &params.EngineVersion,
+						PubliclyAccessible:              &params.PubliclyAccessible,
+						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference:          &providerConfigReference,
+						DeletionPolicy:                   params.DeletionPolicy,
+					},
 				},
-				// Items from Claim and fragmentKey
-				Engine:           params.Engine,
-				DBInstanceClass:  params.Shape,
-				AllocatedStorage: &params.MinStorageGB,
-				Tags:             DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags(),
-				// Items from Config
-				MasterUsername:                  &params.MasterUsername,
-				EngineVersion:                   &params.EngineVersion,
-				SkipFinalSnapshotBeforeDeletion: &params.SkipFinalSnapshotBeforeDeletion,
-				PubliclyAccessible:              &params.PubliclyAccessible,
-				EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-			},
-			ResourceSpec: xpv1.ResourceSpec{
-				WriteConnectionSecretToReference: &dbSecret,
-				ProviderConfigReference:          &providerConfigReference,
-				DeletionPolicy:                   params.DeletionPolicy,
-			},
-		},
+			}
+
+			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
+
+			r.Client.Create(ctx, dbInstance)
+		} else {
+			//not errors.IsNotFound(err) {
+			return false, err
+		}
 	}
 
-	r.Log.Info("creating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
+	// Deletion is long running task check that is not being deleted.
+	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		err = fmt.Errorf("can not create Cloud DB instance %s it is being deleted", dbHostName)
+		r.Log.Error(err, "DBInstance", "dbHostIdentifier", dbHostName)
+		return false, err
+	}
 
-	return r.Client.Create(ctx, rdsInstance)
+	_, err = r.updateDBInstance(ctx, dbClaim, dbInstance)
+	if err != nil {
+		return false, err
+	}
+
+	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
+}
+
+func (r *DatabaseClaimReconciler) createAuroraDBInstanceCR(ctx context.Context, dbHostName string,
+	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
+	// Infrastructure Config
+	region := r.getRegion()
+	providerConfigReference := xpv1.Reference{
+		Name: "default",
+	}
+
+	dbInstance := &crossplanerds.DBInstance{}
+
+	params := r.getCloudDBHostParams(ctx, dbClaim)
+	ms64 := int64(params.MinStorageGB)
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbInstance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			dbInstance = &crossplanerds.DBInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dbHostName,
+					// TODO - Figure out the proper labels for resource
+					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+				},
+				Spec: crossplanerds.DBInstanceSpec{
+					ForProvider: crossplanerds.DBInstanceParameters{
+						Region: region,
+						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
+							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
+							VPCSecurityGroupIDRefs: []xpv1.Reference{
+								{Name: r.getVpcSecurityGroupIDRefs()},
+							},
+							DBSubnetGroupNameRef: &xpv1.Reference{
+								Name: r.getDbSubnetGroupNameRef(),
+							},
+						},
+						// Items from Claim and fragmentKey
+						Engine:           &params.Engine,
+						DBInstanceClass:  &params.Shape,
+						AllocatedStorage: &ms64,
+						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						// Items from Config
+						MasterUsername:                  &params.MasterUsername,
+						EngineVersion:                   &params.EngineVersion,
+						PubliclyAccessible:              &params.PubliclyAccessible,
+						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+						DBClusterIdentifier:             &dbHostName,
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
+					},
+				},
+			}
+
+			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
+
+			r.Client.Create(ctx, dbInstance)
+		} else {
+			//not errors.IsNotFound(err) {
+			return false, err
+		}
+	}
+
+	// Deletion is long running task check that is not being deleted.
+	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		err = fmt.Errorf("can not create Cloud DB instance %s it is being deleted", dbHostName)
+		r.Log.Error(err, "DBInstance", "dbHostIdentifier", dbHostName)
+		return false, err
+	}
+
+	_, err = r.updateDBInstance(ctx, dbClaim, dbInstance)
+	if err != nil {
+		return false, err
+	}
+
+	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
 }
 
 func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
 
-	rds := &crossplanedb.RDSInstance{}
+	dbInstance := &crossplanerds.DBInstance{}
+	dbCluster := &crossplanerds.DBCluster{}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
-	}, rds)
+	}, dbInstance)
 	if err != nil {
 		// Nothing to delete
 		return nil
 	}
 
 	// Deletion is long running task check that is not already deleted.
-	if !rds.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
 		return nil
 	}
 
-	if err := r.Delete(ctx, rds, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-		r.Log.Info("unable delete crossplane RDSInstance resource", "RDSInstance", dbHostName)
+	if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+		r.Log.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName)
 		return err
 	} else {
-		r.Log.Info("deleted crossplane RDSInstance resource", "RDSInstance", dbHostName)
+		r.Log.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName)
+	}
+
+	if err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbCluster); err == nil {
+		// Deletion is long running task check that is not already deleted.
+		if !dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+			return nil
+		}
+		if err := r.Delete(ctx, dbCluster, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+			r.Log.Info("unable delete crossplane DBCluster resource", "DBCluster", dbHostName)
+			return err
+		} else {
+			r.Log.Info("deleted crossplane DBCluster resource", "DBCluster", dbHostName)
+		}
 	}
 
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, rdsInstance *crossplanedb.RDSInstance) (bool, error) {
-	// Create a patch snapshot from current RDSInstance
-	patch := client.MergeFrom(rdsInstance.DeepCopy())
-	// fragmentKey := r.Request.fragmentKey
+func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim *persistancev1.DatabaseClaim,
+	dbInstance *crossplanerds.DBInstance) (bool, error) {
 
-	// Update RDSInstance
+	// Create a patch snapshot from current DBInstance
+	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 
-	rdsInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).RDSInstanceTags()
+	// Update DBInstance
 
-	// TODO:currently ignoring changes to shape and minStorage if an RDSInstance CR already exists.
+	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+
+	// TODO:currently ignoring changes to shape and minStorage if a CR already exists.
 	/*
 		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
 
@@ -882,18 +922,52 @@ func (r *DatabaseClaimReconciler) updateCloudDatabase(ctx context.Context, dbCla
 		}
 	*/
 
-	// Compute a json patch based on the changed RDSInstance
-	data, err := patch.Data(rdsInstance)
+	// Compute a json patch based on the changed DBInstance
+	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
 	if err != nil {
 		return false, err
 	}
 	// an empty json patch will be {}, we can assert that no update is required if len == 2
 	// we could also just apply the empty patch if additional call to apiserver isn't an issue
-	if len(data) == 2 {
+	if len(dbInstancePatchData) == 2 {
 		return false, nil
 	}
-	r.Log.Info("updating crossplane RDSInstance resource", "RDSInstance", rdsInstance.Name)
-	return true, r.Client.Patch(ctx, rdsInstance, patch)
+	r.Log.Info("updating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
+	err = r.Client.Patch(ctx, dbInstance, patchDBInstance)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *persistancev1.DatabaseClaim,
+	dbCluster *crossplanerds.DBCluster) (bool, error) {
+
+	// Create a patch snapshot from current DBCluster
+	patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
+
+	// Update DBCluster
+
+	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+
+	// Compute a json patch based on the changed RDSInstance
+	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
+	if err != nil {
+		return false, err
+	}
+	// an empty json patch will be {}, we can assert that no update is required if len == 2
+	// we could also just apply the empty patch if additional call to apiserver isn't an issue
+	if len(dbClusterPatchData) == 2 {
+		return false, nil
+	}
+	r.Log.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
+	r.Client.Patch(ctx, dbCluster, patchDBCluster)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo) error {
@@ -1095,93 +1169,10 @@ func getConnInfoFromDSN(logr logr.Logger, dsn string) (persistancev1.DatabaseCla
 func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseClaim) (dbclient.Client, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
-	//updateHostPortStatus(dbClaim, connInfo.Host, connInfo.Port, connInfo.SSLMode)
-
-	//connInfo := r.Request.masterConnInfo
-
-	//return dbclient.DBClientFactory(r.Log, r.Request.dbType, connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.SSLMode)
 	logr.Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
 	updateHostPortStatus(dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: r.Log, DBType: r.Input.DbType, DSN: r.getMasterDefaultDsn()})
 
-	//revis this if/when IAM access is enabled
-	// var password string
-
-	// switch authType := r.getAuthSource(); authType {
-	// case config.SecretAuthSourceType:
-	// 	r.Log.Info("using credentials from secret")
-	// 	password, err = r.readMasterPassword(ctx, fragmentKey, dbClaim, serviceNS)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// case config.AWSAuthSourceType:
-	// 	r.Log.Info("using aws IAM authorization")
-	// 	if r.MasterAuth.IsExpired() {
-	// 		token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", connInfo.Host, connInfo.Port), connInfo.Username)
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 		r.MasterAuth.Set(token)
-	// 	}
-	// 	password = r.MasterAuth.Get()
-
-	// default:
-	// 	return nil, fmt.Errorf("unknown auth source type")
-	// }
-
-	// if password == "" {
-	// 	return nil, fmt.Errorf("invalid credentials (password)")
-	// }
-
-}
-
-func (r *DatabaseClaimReconciler) getClient(ctx context.Context, logr logr.Logger, fragmentKey string, dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.DBClient, error) {
-	dbType := dbClaim.Spec.Type
-
-	if connInfo.Port == "" {
-		return nil, fmt.Errorf("cannot get master port for fragment key %s", fragmentKey)
-	}
-
-	if connInfo.Username == "" {
-		return nil, fmt.Errorf("invalid credentials (username)")
-	}
-
-	if connInfo.SSLMode == "" {
-		return nil, fmt.Errorf("invalid sslMode")
-	}
-
-	var password string
-	var err error
-
-	switch authType := r.getAuthSource(); authType {
-	case config.SecretAuthSourceType:
-		r.Log.Info("using credentials from secret")
-		password, err = r.readMasterPassword(ctx, dbClaim)
-		if err != nil {
-			return nil, err
-		}
-	case config.AWSAuthSourceType:
-		r.Log.Info("using aws IAM authorization")
-		if r.MasterAuth.IsExpired() {
-			token, err := r.MasterAuth.RetrieveToken(fmt.Sprintf("%s:%s", connInfo.Host, connInfo.Port), connInfo.Username)
-			if err != nil {
-				return nil, err
-			}
-			r.MasterAuth.Set(token)
-		}
-		password = r.MasterAuth.Get()
-
-	default:
-		return nil, fmt.Errorf("unknown auth source type")
-	}
-
-	if password == "" {
-		return nil, fmt.Errorf("invalid credentials (password)")
-	}
-
-	updateHostPortStatus(dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
-
-	return dbclient.DBClientFactory(logr, string(dbType), connInfo.Host, connInfo.Port, connInfo.Username, password, connInfo.SSLMode)
 }
 
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
@@ -1401,11 +1392,11 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 	logr.Info("reconcileMigrateToNewDB", "r.Request", r.Input)
 
 	if r.Input.ManageCloudDB {
-		dbHost, err := r.manageCloudHost(ctx, dbClaim)
+		isReady, err := r.manageCloudHost(ctx, dbClaim)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if !r.isResourceReady(dbHost.Status.ResourceStatus) {
+		if isReady {
 			logr.Info("cloud host %s is in progress. requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
