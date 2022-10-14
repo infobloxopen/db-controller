@@ -2,7 +2,7 @@
 
 pipeline {
   agent {
-    label 'ubuntu_docker_label'
+    label 'ubuntu_20_04_label'
   }
   tools {
     go "Go 1.17"
@@ -27,7 +27,10 @@ pipeline {
     stage("Run tests") {
       steps {
         dir("$DIRECTORY") {
+          sh "sudo apt-get update"
+          sh "sudo apt-get -y install postgresql-client"
           sh "make test"
+          sh "sudo apt-get -y remove postgresql-client"
         }
       }
     }
