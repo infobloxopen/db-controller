@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
 var complexityEnabled = []byte(`
@@ -416,6 +416,9 @@ var testConfig = []byte(`
       Port: 5432
       sslMode: false
       PasswordSecretRef: sample-master-secret
+    namespace:
+      deniedList: authz entit*
+      allowedList: test* identity
 `)
 
 // TODO - Write additional tests for dynamic host allocation
@@ -924,6 +927,104 @@ func Test_getServiceNamespace(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("getServiceNamespace() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDatabaseClaimReconciler_isNamespacePermitted(t *testing.T) {
+	type mockReconciler struct {
+		Config *viper.Viper
+	}
+	type args struct {
+		ns string
+	}
+	tests := []struct {
+		name       string
+		reconciler mockReconciler
+		args       args
+		want       bool
+		wantErr    bool
+	}{
+		{
+			"permitted_ok",
+			mockReconciler{
+				Config: NewConfig(testConfig),
+			},
+			args{
+				ns: "identity",
+			},
+			true,
+			false,
+		},
+		{
+			"denied",
+			mockReconciler{
+				Config: NewConfig(testConfig),
+			},
+			args{
+				ns: "authz",
+			},
+			false,
+			true,
+		},
+		{
+			"denied_regex",
+			mockReconciler{
+				Config: NewConfig(testConfig),
+			},
+			args{
+				ns: "entitlement",
+			},
+			false,
+			true,
+		},
+		{
+			"permitted regex",
+			mockReconciler{
+				Config: NewConfig(testConfig),
+			},
+			args{
+				ns: "testing",
+			},
+			true,
+			false,
+		},
+		{
+			"permitted regex",
+			mockReconciler{
+				Config: NewConfig(testConfig),
+			},
+			args{
+				ns: "test",
+			},
+			true,
+			false,
+		},
+		{
+			"permitted dummy config",
+			mockReconciler{
+				Config: NewConfig(multiConfig),
+			},
+			args{
+				ns: "test",
+			},
+			true,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Config: tt.reconciler.Config,
+			}
+			got, err := r.isNamespacePermitted(tt.args.ns)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DatabaseClaimReconciler.isNamespacePermitted() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("DatabaseClaimReconciler.isNamespacePermitted() = %v, want %v", got, tt.want)
 			}
 		})
 	}

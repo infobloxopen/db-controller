@@ -1,6 +1,9 @@
 # master credentials source can be 'aws' or 'secret'
 #authSource: aws
 authSource: secret
+namespaces:
+  alllowedList: jeevan, test*
+  deniedList: authz identity
 # if aws authorization is used iam role must be provided
 #iamRole: rds-role
 region: us-west-1
@@ -17,7 +20,7 @@ defaultMasterUsername: postgres
 defaultReclaimPolicy: retain
 # For Production this should be false and if SnapShot is not taken it will not be deleted
 defaultSkipFinalSnapshotBeforeDeletion: true
-defaultPubliclyAccessible: false
+defaultPubliclyAccessible: true
 defaultDeletionPolicy: orphan
 
 passwordConfig:
