@@ -81,8 +81,10 @@ pipeline {
   }
   post {
     success {
-      // finalizeBuild is one of the Secure CICD helper methods
-      finalizeBuild('', getFileList("*.properties"))
+      dir("${WORKSPACE}/${DIRECTORY}") {
+        // finalizeBuild is one of the Secure CICD helper methods
+        finalizeBuild('', getFileList("*.properties"))
+      }
     }
     cleanup {
       dir("$DIRECTORY") {
