@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -93,8 +94,38 @@ type DatabaseClaimReconciler struct {
 	Input              *input
 }
 
+func (r *DatabaseClaimReconciler) isNamespacePermitted(ns string) (bool, error) {
+	allowedNamespaces := r.Config.GetStringSlice("namespace::allowedlist")
+	deniedNamespaces := r.Config.GetStringSlice("namespace::deniedlist")
+
+	//r.Log.Info("permitted list", "allowedlist", allowedNamespaces, "deniedList", deniedNamespaces)
+
+	//process denied list
+	for _, s := range deniedNamespaces {
+		s = strings.ReplaceAll(s, "*", ".*")
+		rx, _ := regexp.Compile(fmt.Sprintf("/^%s$/", s))
+		if denied := rx.MatchString(ns); denied {
+			return false, fmt.Errorf("processing of namespace %s denied", ns)
+		}
+	}
+	// process allowed list
+	var allowed bool = true
+	for _, s := range allowedNamespaces {
+		if allowed, _ = regexp.MatchString(s, ns); allowed {
+			break
+		}
+	}
+	if !allowed {
+		return false, fmt.Errorf("processing of namespace %s not allowed", ns)
+	}
+	return true, nil
+}
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", req.NamespacedName)
+
+	if permitted, err := r.isNamespacePermitted(req.NamespacedName.Name); !permitted {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
 	var dbClaim persistancev1.DatabaseClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {

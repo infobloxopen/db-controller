@@ -103,6 +103,8 @@ controllerConfig:
   authSource: secret
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
+  namespace:
+    deniedList: test* bjeevan
   region: us-west-1
   vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
   dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
@@ -147,4 +149,3 @@ controllerConfig:
     port: 5412
     sslMode: require
     passwordSecretRef: another-connection-secret
-
