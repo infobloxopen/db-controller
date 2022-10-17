@@ -79,9 +79,7 @@ pipeline {
   post {
     success {
       // finalizeBuild is one of the Secure CICD helper methods
-      dir("$DIRECTORY") {
-          finalizeBuild()
-      }
+      finalizeBuild('', getFileList("${DIRECTORY}/build/*.properties"))
     }
     cleanup {
       dir("$DIRECTORY") {
