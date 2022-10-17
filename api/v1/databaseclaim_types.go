@@ -119,7 +119,7 @@ type DatabaseClaimSpec struct {
 	// If this is set, .sourceDataFrom.Type and .type must match to use an existing source (since they must be the same)
 	// If this field was set and becomes unset, migration of data will commence
 	// +optional
-	UseExistingSource *bool `json:"useExistingSource,omitempty"`
+	UseExistingSource *bool `json:"useExistingSource"`
 
 	// Specifies an indentifier for the application using the database.
 	AppID string `json:"appId"`
