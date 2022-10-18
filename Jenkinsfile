@@ -82,6 +82,10 @@ pipeline {
   post {
     success {
       dir("${WORKSPACE}/${DIRECTORY}") {
+        // added for debugging chart publishing issue
+        sh "pwd"
+        sh "ls -la"
+        sh "find . -name *.properties"
         // finalizeBuild is one of the Secure CICD helper methods
         finalizeBuild('', getFileList("*.properties"))
       }
