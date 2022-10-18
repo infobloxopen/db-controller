@@ -10,9 +10,11 @@ import (
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -1025,6 +1027,82 @@ func TestDatabaseClaimReconciler_isNamespacePermitted(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.isNamespacePermitted() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
+	type fields struct {
+		Client             client.Client
+		Log                logr.Logger
+		Scheme             *runtime.Scheme
+		Config             *viper.Viper
+		MasterAuth         *rdsauth.MasterAuth
+		DbIdentifierPrefix string
+		Mode               ModeEnum
+		Input              *input
+	}
+	type args struct {
+		dbClaim *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   string
+	}{
+		{
+			"OK",
+			fields{
+				Config:             NewConfig(multiConfig),
+				DbIdentifierPrefix: "boxing-x",
+				Input:              &input{FragmentKey: ""},
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name"},
+					Spec: persistancev1.DatabaseClaimSpec{
+						AppID:        "identity",
+						DatabaseName: "identity",
+					},
+				},
+			},
+			"dbc-boxing-x-identity-dbclaim-name",
+		},
+		{
+			"OK",
+			fields{
+				Config:             NewConfig(multiConfig),
+				DbIdentifierPrefix: "boxing-x",
+				Input:              &input{FragmentKey: "athena"},
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name"},
+					Spec: persistancev1.DatabaseClaimSpec{
+						AppID:        "identity",
+						DatabaseName: "identity",
+					},
+				},
+			},
+			"dbc-boxing-x-athena",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client:             tt.fields.Client,
+				Log:                tt.fields.Log,
+				Scheme:             tt.fields.Scheme,
+				Config:             tt.fields.Config,
+				MasterAuth:         tt.fields.MasterAuth,
+				DbIdentifierPrefix: tt.fields.DbIdentifierPrefix,
+				Mode:               tt.fields.Mode,
+				Input:              tt.fields.Input,
+			}
+			if got := r.getDynamicHostName(tt.args.dbClaim); got != tt.want {
+				t.Errorf("DatabaseClaimReconciler.getDynamicHostName() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -7,6 +7,10 @@ replicaCount: 1
 secrets:
   enabled: false
 
+db:
+  identifier:
+    prefix: local
+
 image:
   repository: ghcr.io/infobloxopen/db-controller
   pullPolicy: Always
