@@ -88,6 +88,7 @@ func main() {
 	var enableDBProxyWebhook bool
 	var dbIdentifierPrefix string
 
+	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "box-1", "The prefix to be added to the DbHost. Ideally this is the env name.")
 	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
 	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-address", "", "The address the probe endpoint binds to.")

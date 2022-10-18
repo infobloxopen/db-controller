@@ -19,6 +19,7 @@ package v1
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -243,4 +244,29 @@ func init() {
 func (c *DatabaseClaimConnectionInfo) Dsn() string {
 	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
 		c.Username, url.QueryEscape(c.Password), c.Host, c.Port, c.DatabaseName, c.SSLMode)
+}
+
+func ParseDsn(dsn string) (*DatabaseClaimConnectionInfo, error) {
+
+	c := DatabaseClaimConnectionInfo{}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	c.Host = u.Hostname()
+	c.Port = u.Port()
+	c.Username = u.User.Username()
+	c.Password, _ = u.User.Password()
+	db := strings.Split(u.Path, "/")
+	if len(db) <= 1 {
+		return &c, err
+	}
+	c.DatabaseName = db[1]
+
+	m, _ := url.ParseQuery(u.RawQuery)
+	c.SSLMode = m.Get("sslmode")
+
+	return &c, nil
 }

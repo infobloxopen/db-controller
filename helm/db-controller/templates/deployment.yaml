@@ -57,6 +57,7 @@ spec:
             - --health-probe-port={{ .Values.healthProbe.port }}
             - --enable-leader-election
             - --config-file=/etc/config/config.yaml
+            - --db-identifier-prefix={{ .Values.db.identifier.prefix }}
             {{ if .Values.zapLogger.develMode }}
             - --zap-devel
             {{ end }}
