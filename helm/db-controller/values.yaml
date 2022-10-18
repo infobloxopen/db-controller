@@ -104,10 +104,13 @@ controllerConfig:
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
   namespace:
-    deniedList: test* bjeevan
-  region: us-west-1
-  vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
-  dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
+    allowedList:
+      - test*
+    deniedList:
+      - bjeevan
+  region: us-east-1
+  vpcSecurityGroupIDRefs:
+  dbSubnetGroupNameRef:
   dynamicHostWaitTimeMin: 1
   defaultShape: db.t4g.medium
   defaultMinStorageGB: 20
@@ -116,11 +119,11 @@ controllerConfig:
   defaultMasterPort: 5432
   defaultSslMode: require
   defaultMasterUsername: root
-  defaultReclaimPolicy: retain
+  defaultReclaimPolicy: delete
   # For Production this should be false and if SnapShot is not taken it will not be deleted
   defaultSkipFinalSnapshotBeforeDeletion: true
   defaultPubliclyAccessible: false
-  defaultDeletionPolicy: delete
+  defaultDeletionPolicy: orphan
   passwordConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
