@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -126,20 +125,13 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	logr := r.Log.WithValues("databaseclaim", req.NamespacedName)
 
 	if permitted, err := r.isNamespacePermitted(req.NamespacedName.Namespace); !permitted {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, err
 	}
 
 	var dbClaim persistancev1.DatabaseClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
 		logr.Error(err, "unable to fetch DatabaseClaim")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	if dbClaim.Status.ActiveDB == nil {
-		dbClaim.Status.ActiveDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-	}
-	if dbClaim.Status.NewDB == nil {
-		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 	}
 
 	r.setReqInfo(&dbClaim)
@@ -207,6 +199,13 @@ func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) 
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
+	if dbClaim.Status.ActiveDB == nil {
+		dbClaim.Status.ActiveDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+	}
+	if dbClaim.Status.NewDB == nil {
+		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+	}
+
 	r.Input = &input{}
 	var (
 		fragmentKey      string
@@ -256,13 +255,6 @@ func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 
-	if dbClaim.Status.ActiveDB == nil {
-		dbClaim.Status.ActiveDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-	}
-	if dbClaim.Status.NewDB == nil {
-		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-	}
-
 	r.setMode(dbClaim)
 
 	if r.Mode == M_UseExistingDB {
@@ -277,7 +269,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	if r.Mode == M_MigrateToNewDB {
 		logr.Info("migrate to new  db reconcile started")
 		//check if existingDB has been already reconciled, else reconcileUseExisitngDB
-		existing_db_conn, err := getConnInfoFromDSN(logr, dbClaim.Spec.SourceDataFrom.Database.DSN)
+		existing_db_conn, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -291,20 +283,20 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 				return r.manageError(ctx, dbClaim, err)
 			}
 		}
-		r.setReqInfo(dbClaim)
+		//r.setReqInfo(dbClaim)
 		// return r.manageSuccess(ctx, dbClaim)
 		return r.reconcileMigrateToNewDB(ctx, dbClaim)
 	}
 	if r.Mode == M_MigrationInProgress {
 		logr.Info("migration in progress")
 		//check if existingDB has been already reconciled, else reconcileUseExisitngDB
-		r.setReqInfo(dbClaim)
+		//r.setReqInfo(dbClaim)
 		// return r.manageSuccess(ctx, dbClaim)
 		return r.reconcileMigrationInProgress(ctx, dbClaim)
 	}
 	if r.Mode == M_UseNewDB {
 		logr.Info("Use new DB")
-		r.setReqInfo(dbClaim)
+		//r.setReqInfo(dbClaim)
 		result, err := r.reconcileNewDB(ctx, dbClaim)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
@@ -1180,32 +1172,6 @@ func (r *DatabaseClaimReconciler) getClientConn(fragmentKey string, dbClaim *per
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
-func getConnInfoFromDSN(logr logr.Logger, dsn string) (persistancev1.DatabaseClaimConnectionInfo, error) {
-
-	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
-
-	u, err := url.Parse(dsn)
-	if err != nil {
-		logr.Error(err, "parsing dsn failed", "dsn", dsn)
-		return connInfo, err
-	}
-
-	connInfo.Host = u.Hostname()
-	connInfo.Port = u.Port()
-	connInfo.Username = u.User.Username()
-	connInfo.Password, _ = u.User.Password()
-	db := strings.Split(u.Path, "/")
-	if len(db) <= 1 {
-		logr.Error(err, "parsing dsn failed. db not specified", "dsn", dsn)
-		return connInfo, err
-	}
-	connInfo.DatabaseName = db[1]
-
-	m, _ := url.ParseQuery(u.RawQuery)
-	connInfo.SSLMode = m.Get("sslmode")
-
-	return connInfo, nil
-}
 
 func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseClaim) (dbclient.Client, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
@@ -1258,13 +1224,13 @@ func getServiceNamespace() (string, error) {
 func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExisitngDB")
 
-	existingDBConnInfo, err := getConnInfoFromDSN(logr, dbClaim.Spec.SourceDataFrom.Database.DSN)
+	existingDBConnInfo, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
 	if err != nil {
 		return err
 	}
 
 	logr.Info("creating database client")
-	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, &existingDBConnInfo)
+	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
 	if err != nil {
 		logr.Error(err, "creating database client error")
 		return err
@@ -1344,7 +1310,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 
 	target_master_dsn := r.Input.MasterConnInfo.Dsn()
 	target_app_conn := dbClaim.Status.NewDB.ConnectionInfo
-	source_master_conn, err := getConnInfoFromDSN(logr, dbClaim.Spec.SourceDataFrom.Database.DSN)
+	source_master_conn, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
 	}
@@ -1430,7 +1396,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 
-	logr.Info("reconcileNewDB", "r.Request", r.Input)
+	logr.Info("reconcileNewDB", "r.Input", r.Input)
 
 	if r.Input.ManageCloudDB {
 		isReady, err := r.manageCloudHost(ctx, dbClaim)
