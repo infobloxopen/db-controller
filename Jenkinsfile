@@ -73,6 +73,7 @@ pipeline {
               sh "make build-properties-crd"
               archiveArtifacts artifacts: '*.tgz'
               archiveArtifacts artifacts: '*build.properties'
+              sh "chmod a+xrw ${WORKSPACE}/${DIRECTORY}"
             }
           }
         }
