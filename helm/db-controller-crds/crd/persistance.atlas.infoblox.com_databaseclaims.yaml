@@ -167,6 +167,7 @@ spec:
                   is supported.
                 type: string
               useExistingSource:
+                default: false
                 description: UseExistingSource instructs the controller to perform
                   user management on the database currently defined in the SourceDataFrom
                   field. If sourceDataFrom is empty, this is ignored If this is set,
