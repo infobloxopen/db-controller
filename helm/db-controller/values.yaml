@@ -105,7 +105,6 @@ controllerConfig:
   #iamRole: rds-role
   namespace:
     allowedList:
-      - test*
     deniedList:
       - bjeevan
   region: us-east-1
