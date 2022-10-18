@@ -1,0 +1,13 @@
+---
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DatabaseClaim
+metadata:
+  name: databaseclaim-aurora
+spec:
+  appId: aurora-app
+  secretName: databaseclaim-aurora
+  type: aurora-postgresql
+  userName: sample_user
+  databaseName: pub-aurora
+  dsnName: dsn.txt
+  useExistingSource: false

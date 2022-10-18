@@ -1,14 +1,17 @@
 # master credentials source can be 'aws' or 'secret'
 #authSource: aws
 authSource: secret
-namespaces:
-  alllowedList: jeevan, test*
-  deniedList: authz identity
+namespace:
+  allowedList:
+    - bjeevan
+  deniedList:
+    - authz
+    - identity
 # if aws authorization is used iam role must be provided
 #iamRole: rds-role
-region: us-west-1
-vpcSecurityGroupIDRefs: seizadi-bloxinabox-rds-sg
-dbSubnetGroupNameRef: seizadi-bloxinabox-rds-subnetgroup
+region: us-east-1
+vpcSecurityGroupIDRefs: demo-box-1
+dbSubnetGroupNameRef: demo-box-1
 dynamicHostWaitTimeMin: 1
 defaultShape: db.t4g.medium
 defaultMinStorageGB: 20
@@ -17,11 +20,11 @@ defaultEngineVersion: 12.8
 defaultMasterPort: 5432
 defaultSslMode: disable
 defaultMasterUsername: postgres
-defaultReclaimPolicy: retain
+defaultReclaimPolicy: delete
 # For Production this should be false and if SnapShot is not taken it will not be deleted
 defaultSkipFinalSnapshotBeforeDeletion: true
-defaultPubliclyAccessible: true
-defaultDeletionPolicy: orphan
+defaultPubliclyAccessible: false
+defaultDeletionPolicy: Orphan
 
 passwordConfig:
   passwordComplexity: enabled
