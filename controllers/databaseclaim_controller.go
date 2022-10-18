@@ -76,7 +76,8 @@ type input struct {
 }
 
 const (
-	M_UseExistingDB ModeEnum = iota
+	M_NotSupported ModeEnum = iota
+	M_UseExistingDB
 	M_MigrateToNewDB
 	M_MigrationInProgress
 	M_UseNewDB
@@ -95,11 +96,12 @@ type DatabaseClaimReconciler struct {
 }
 
 func (r *DatabaseClaimReconciler) isNamespacePermitted(ns string) (bool, error) {
+	//logr := r.Log.WithValues("databaseclaim", ns)
+
 	allowedNamespaces := r.Config.GetStringSlice("namespace::allowedlist")
 	deniedNamespaces := r.Config.GetStringSlice("namespace::deniedlist")
 
-	//r.Log.Info("permitted list", "allowedlist", allowedNamespaces, "deniedList", deniedNamespaces)
-
+	//logr.Info("incoming", "ns", ns, "allowedlist", allowedNamespaces, "deniedList", deniedNamespaces)
 	//process denied list
 	for _, s := range deniedNamespaces {
 		s = strings.ReplaceAll(s, "*", ".*")
@@ -123,7 +125,7 @@ func (r *DatabaseClaimReconciler) isNamespacePermitted(ns string) (bool, error) 
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", req.NamespacedName)
 
-	if permitted, err := r.isNamespacePermitted(req.NamespacedName.Name); !permitted {
+	if permitted, err := r.isNamespacePermitted(req.NamespacedName.Namespace); !permitted {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -132,6 +134,15 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		logr.Error(err, "unable to fetch DatabaseClaim")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	if dbClaim.Status.ActiveDB == nil {
+		dbClaim.Status.ActiveDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+	}
+	if dbClaim.Status.NewDB == nil {
+		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+	}
+
+	r.setReqInfo(&dbClaim)
 
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
@@ -172,8 +183,8 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) {
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getControllerMode")
-	logr.Info("test message", "dbclaim", dbClaim.Spec)
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setMode")
+
 	if *dbClaim.Spec.UseExistingSource {
 		if dbClaim.Spec.SourceDataFrom.Type == "database" {
 			r.Mode = M_UseExistingDB
@@ -190,15 +201,18 @@ func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) 
 		r.Mode = M_UseNewDB
 	}
 
+	logr.Info("successfully selected mode for", "dbclaim", dbClaim.Spec, "selected mode", r.Mode)
+
 }
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
 	r.Input = &input{}
 	var (
-		fragmentKey   string
-		err           error
-		createCloudDB bool
+		fragmentKey      string
+		err              error
+		createCloudDB    bool
+		dbHostIdentifier string
 	)
 	if dbClaim.Spec.InstanceLabel != "" {
 		fragmentKey, err = r.matchInstanceLabel(dbClaim)
@@ -221,11 +235,11 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	}
 	if connInfo.Host == "" {
 		createCloudDB = true
-		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
+		dbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
 	r.Input = &input{ManageCloudDB: createCloudDB,
 		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
-		DbType: string(dbClaim.Spec.Type),
+		DbType: string(dbClaim.Spec.Type), DbHostIdentifier: dbHostIdentifier,
 	}
 	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
@@ -296,6 +310,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			return r.manageError(ctx, dbClaim, err)
 		}
 		if result.Requeue {
+			logr.Info("requeuing request")
 			return result, nil
 		}
 		dbClaim.Status.ActiveDB = dbClaim.Status.NewDB.DeepCopy()
@@ -555,13 +570,12 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	if dbClaim.Spec.Type == defaultPostgresStr {
 		return r.managePostgresDBInstance(ctx, dbHostIdentifier, dbClaim)
 	} else if dbClaim.Spec.Type == defaultAuroraPostgresStr {
-		ready, err := r.manageDBCluster(ctx, dbHostIdentifier, dbClaim)
+		_, err := r.manageDBCluster(ctx, dbHostIdentifier, dbClaim)
 		if err != nil {
 			return false, err
 		}
-		if ready {
-			return r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim)
-		}
+		r.Log.Info("dbcluster is ready. proceeding to manage dbinstance")
+		return r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim)
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
@@ -821,13 +835,13 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := r.getCloudDBHostParams(ctx, dbClaim)
-	ms64 := int64(params.MinStorageGB)
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			r.Log.Info("aurora db instance not found. creating now")
 			dbInstance = &crossplanerds.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -839,24 +853,15 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						Region: region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
-							VPCSecurityGroupIDRefs: []xpv1.Reference{
-								{Name: r.getVpcSecurityGroupIDRefs()},
-							},
-							DBSubnetGroupNameRef: &xpv1.Reference{
-								Name: r.getDbSubnetGroupNameRef(),
-							},
 						},
 						// Items from Claim and fragmentKey
-						Engine:           &params.Engine,
-						DBInstanceClass:  &params.Shape,
-						AllocatedStorage: &ms64,
-						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Engine:          &params.Engine,
+						DBInstanceClass: &params.Shape,
+						Tags:            DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
-						MasterUsername:                  &params.MasterUsername,
-						EngineVersion:                   &params.EngineVersion,
-						PubliclyAccessible:              &params.PubliclyAccessible,
-						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-						DBClusterIdentifier:             &dbHostName,
+						EngineVersion:       &params.EngineVersion,
+						PubliclyAccessible:  &params.PubliclyAccessible,
+						DBClusterIdentifier: &dbHostName,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -1377,7 +1382,7 @@ loop:
 		case pgctl.S_Retry:
 			logr.Info("Retry called")
 
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: 30 * time.Second, Requeue: true}, nil
 		default:
 			s = next
 			dbClaim.Status.MigrationState = s.String()
@@ -1423,23 +1428,24 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileMigrateToNewDB")
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 
-	logr.Info("reconcileMigrateToNewDB", "r.Request", r.Input)
+	logr.Info("reconcileNewDB", "r.Request", r.Input)
 
 	if r.Input.ManageCloudDB {
 		isReady, err := r.manageCloudHost(ctx, dbClaim)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if isReady {
-			logr.Info("cloud host %s is in progress. requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+		if !isReady {
+			logr.Info("cloud instance %s is in progress. requeueing")
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
 		}
+		logr.Info("cloud instance ready. reading generated master secret")
 		connInfo, err := r.readResourceSecret(ctx, dbClaim)
 		if err != nil {
 			logr.Info("unable to read secret. requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
 		}
 		r.Input.MasterConnInfo.Host = connInfo.Host
 		r.Input.MasterConnInfo.Password = connInfo.Password
