@@ -307,6 +307,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		}
 		dbClaim.Status.ActiveDB = dbClaim.Status.NewDB.DeepCopy()
 		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+		if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
 		return r.manageSuccess(ctx, dbClaim)
 	}
 
@@ -538,6 +541,13 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, dbClai
 	connInfo.Port = string(rs.Data["port"])
 	connInfo.Username = string(rs.Data["username"])
 	connInfo.Password = string(rs.Data["password"])
+
+	if connInfo.Host == "" ||
+		connInfo.Port == "" ||
+		connInfo.Username == "" ||
+		connInfo.Password == "" {
+		return connInfo, fmt.Errorf("generated secret is incomplete")
+	}
 
 	return connInfo, nil
 }
@@ -1410,11 +1420,13 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		logr.Info("cloud instance ready. reading generated master secret")
 		connInfo, err := r.readResourceSecret(ctx, dbClaim)
 		if err != nil {
-			logr.Info("unable to read secret. requeueing")
+			logr.Info("unable to read the complete secret. requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
 		}
 		r.Input.MasterConnInfo.Host = connInfo.Host
 		r.Input.MasterConnInfo.Password = connInfo.Password
+		r.Input.MasterConnInfo.Port = connInfo.Port
+		r.Input.MasterConnInfo.Username = connInfo.Username
 
 	} else {
 		password, err := r.readMasterPassword(ctx, dbClaim)
