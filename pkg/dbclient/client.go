@@ -41,13 +41,15 @@ type Config struct {
 	Log    logr.Logger
 	DBType string // type of DB, only postgres
 	// connection string to connect to DB ie. postgres://username:password@1.2.3.4:5432/mydb?sslmode=verify-full
-	// If username is blank, IRSA/instance principles are used to connect to Database
+	// FQDN to connect to database including username and password if not using an IAM enabled user
 	DSN string
+	// UseIAM bool
+	UseIAM bool // attempt to connect with IAM user provided in DSN
 }
 
-func New(config Config) (Client, error) {
+func New(cfg Config) (Client, error) {
 
-	return newPostgresClient(context.TODO(), config.Log, config.DSN)
+	return newPostgresClient(context.TODO(), cfg)
 }
 
 // DBClientFactory, deprecated don't use
@@ -57,20 +59,34 @@ func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmod
 	switch dbType {
 	case PostgresType:
 	}
-	return newPostgresClient(context.TODO(), log, PostgresConnectionString(host, port, user, password, "postgres", sslmode))
+	return newPostgresClient(context.TODO(), Config{
+		Log: log,
+		DSN: PostgresConnectionString(host, port, user, password, "postgres", sslmode),
+	})
 }
 
 // creates postgres client
-func newPostgresClient(ctx context.Context, log logr.Logger, DSN string) (*client, error) {
-	db, err := sql.Open(PostgresType, DSN)
+func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
+
+	authedDSN := cfg.DSN
+
+	if cfg.UseIAM {
+		var err error
+		authedDSN, err = awsAuthBuilder(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	db, err := sql.Open(PostgresType, authedDSN)
 	if err != nil {
 		return nil, err
 	}
 	return &client{
 		dbType: PostgresType,
 		DB:     db,
-		log:    log,
-		dbURL:  DSN,
+		log:    cfg.Log,
+		dbURL:  cfg.DSN,
 	}, nil
 }
 

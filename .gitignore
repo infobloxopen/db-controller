@@ -27,3 +27,4 @@ vendor
 # Platform exclusions
 .DS_Store
 
+.id
