@@ -26,6 +26,10 @@ pipeline {
     }
     stage("Run tests") {
       steps {
+      withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GitHub_PAT')]) {
+          sh "echo machine github.com login $GitHub_PAT > ~/.netrc"
+          sh "echo machine api.github.com login $GitHub_PAT >> ~/.netrc"
+        }      
         dir("$DIRECTORY") {
           sh "sudo apt-get update"
           sh "sudo apt-get -y install postgresql-client"
