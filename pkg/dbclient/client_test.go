@@ -11,7 +11,6 @@ import (
 	intg "github.com/infobloxopen/atlas-app-toolkit/integration"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 const succeed = "\u2713"
@@ -121,8 +120,6 @@ func setupSqlDB(t *testing.T) *testDB {
 	}
 }
 
-var logger = zap.New(zap.UseDevMode(true))
-
 func TestPostgresClientOperations(t *testing.T) {
 	testDB := setupSqlDB(t)
 	defer testDB.Close()
@@ -151,7 +148,7 @@ func TestPostgresClientOperations(t *testing.T) {
 			mockClient{
 				dbType: "postgres",
 				DB:     sqlDB,
-				log:    logger,
+				log:    logr.Discard(),
 			},
 			args{
 				"test_db",

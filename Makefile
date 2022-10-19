@@ -4,7 +4,7 @@ REGISTRY ?= infoblox
 IMAGE_NAME ?= db-controller
 DBPROXY_IMAGE_NAME ?= dbproxy
 # commit tag info from git repo
-GIT_COMMIT     := $(shell git describe --always || echo pre-commit)
+GIT_COMMIT	   := $(shell git describe --always || echo pre-commit)
 # image tag
 TAG ?= ${GIT_COMMIT}
 # Image Path to use all building/pushing image targets
@@ -55,7 +55,9 @@ HELM_ENTRYPOINT ?= docker run \
 	-e AWS_SESSION_TOKEN \
 	 ${HELM_IMAGE} sh -c
 
-DBCTL_NAMESPACE ?= db-controller-namespace
+
+.id:
+	git config user.email | awk -F@ '{print $$1}' > .id
 
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -92,12 +94,12 @@ all: build
 
 .PHONY: help
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "	\033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: .id controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
@@ -157,20 +159,20 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+	$(KUSTOMIZE) build config/crd | kubectl apply --namespace `cat .id` -f -
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/crd | kubectl delete --namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:latest
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
+	$(KUSTOMIZE) build config/default | kubectl apply --namespace `cat .id` -f -
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/default | kubectl delete	--namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
 
 
 export CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
@@ -248,28 +250,28 @@ endif
 	${KUBEBUILDER_ASSETS}/kubectl version || true
 
 create-namespace:
-	kubectl create namespace ${DBCTL_NAMESPACE}
+	kubectl create namespace `cat .id`
 
 delete-namespace:
-	kubectl delete namespace ${DBCTL_NAMESPACE}
+	kubectl delete namespace `cat .id`
 
-install-crds:
-	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl apply -f -
+install-crds: .id
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=`cat .id` |kubectl apply -f -
 
-uninstall-crds:
-	helm template db-controller-crd helm/db-controller-crds/ --namespace=${DBCTL_NAMESPACE} |kubectl delete -f -
+uninstall-crds: .id
+	helm template db-controller-crd helm/db-controller-crds/ --namespace=`cat .id` |kubectl delete -f -
 
-deploy-controller:
-	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl apply -f -
+deploy-controller: .id
+	helm template db-controller ./helm/db-controller/ --namespace=`cat .id` -f helm/db-controller/minikube.yaml | kubectl apply --namespace `cat .id` -f -
 
-uninstall-controller:
-	helm template db-controller ./helm/db-controller/ --namespace=${DBCTL_NAMESPACE} -f helm/db-controller/minikube.yaml | kubectl delete -f -
+uninstall-controller: .id
+	helm template db-controller ./helm/db-controller/ --namespace=`cat .id` -f helm/db-controller/minikube.yaml | kubectl delete --namespace `cat .id` -f -
 
-deploy-samples:
-	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl apply -f -
+deploy-samples: .id
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=`cat .id` | kubectl apply -f -
 
 uninstall-samples:
-	helm template dbclaim-sample helm/dbclaim-sample --namespace=${DBCTL_NAMESPACE} | kubectl delete -f -
+	helm template dbclaim-sample helm/dbclaim-sample --namespace=`cat .id` | kubectl delete -f -
 
 deploy-all: create-namespace install-crds deploy-controller
 
