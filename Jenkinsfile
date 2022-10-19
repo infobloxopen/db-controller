@@ -32,8 +32,9 @@ pipeline {
         }      
         dir("$DIRECTORY") {
           sh "sudo apt-get update"
-          sh "sudo apt-get -y install postgresql-client"
-          sh "make test"
+  	  sh "sudo apt-get -y install postgresql-client"
+	  sh "echo 'db-controller-name' > .id"
+	  sh "make test"
           sh "sudo apt-get -y remove postgresql-client"
         }
       }
