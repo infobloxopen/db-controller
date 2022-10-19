@@ -27,9 +27,10 @@ rules:
       - patch
       - update
   - apiGroups:
-      - "database.aws.crossplane.io"
+      - "rds.aws.crossplane.io"
     resources:
-      - rdsinstances
+      - dbinstances
+      - dbclusters
     verbs:
       - get
       - list
