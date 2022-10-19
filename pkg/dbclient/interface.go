@@ -1,5 +1,7 @@
 package dbclient
 
+import "github.com/aws/aws-sdk-go-v2/aws"
+
 type Client interface {
 	CreateDatabase(dbName string) (bool, error)
 	CreateUser(username, role, userPassword string) (bool, error)
@@ -20,3 +22,5 @@ type DBClient interface {
 type DBCloser interface {
 	Close() error
 }
+
+type CredentialsProviderFunc aws.CredentialsProviderFunc
