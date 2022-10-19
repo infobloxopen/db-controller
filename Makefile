@@ -139,17 +139,19 @@ docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-a
 		-t $(SERVER_IMAGE):$(IMAGE_VERSION) \
 		-t $(SERVER_IMAGE):latest .
 
-.PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
+docker-build-dbproxy:
 	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} -t ${DBPROXY_IMG_PATH}:latest .
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG_PATH}:${TAG}
-	docker push ${IMG_PATH}:latest
+.PHONY: docker-build
+docker-build: #test ## Build docker image with the manager.
+	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
+
+docker-push-dbproxy: docker-build-dbproxy
 	docker push ${DBPROXY_IMG_PATH}:${TAG}
-	docker push ${DBPROXY_IMG_PATH}:latest
+
+.PHONY: docker-push
+docker-push: docker-build
+	docker push ${IMG_PATH}:${TAG}
 
 ##@ Deployment
 
@@ -166,12 +168,12 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete --namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy-kustomize: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:latest
 	$(KUSTOMIZE) build config/default | kubectl apply --namespace `cat .id` -f -
 
 .PHONY: undeploy
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+undeploy-kustomize: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | kubectl delete	--namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
 
 
@@ -300,3 +302,13 @@ clean:
 	@rm -f *build.properties || true
 	@rm -f *.tgz || true
 	sudo rm -rf /usr/local/kubebuilder
+
+deploy-crds: .id build-chart-crd
+	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
+
+deploy: .id docker-push
+	echo "TODO set class name"
+	${HELM} upgrade --install --namespace $(cat .id) --set .dbController.class=$(cat .id) ${CHART_FILE} --version $(CHART_VERSION)
+
+undeploy: .id
+	${HELM} delete --purge --namespace $(cat .id) ${CHART_FILE}
