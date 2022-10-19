@@ -57,6 +57,8 @@ HELM_ENTRYPOINT ?= docker run \
 
 
 .id:
+	git config user.email
+	echo "HI?"
 	git config user.email | awk -F@ '{print $$1}' > .id
 
 
