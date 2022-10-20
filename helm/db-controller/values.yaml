@@ -10,6 +10,8 @@ secrets:
 db:
   identifier:
     prefix: local
+dbController:
+  class: default
 
 image:
   repository: ghcr.io/infobloxopen/db-controller
@@ -107,10 +109,6 @@ controllerConfig:
   authSource: secret
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
-  namespace:
-    allowedList:
-    deniedList:
-      - bjeevan
   region: us-east-1
   vpcSecurityGroupIDRefs:
   dbSubnetGroupNameRef:
