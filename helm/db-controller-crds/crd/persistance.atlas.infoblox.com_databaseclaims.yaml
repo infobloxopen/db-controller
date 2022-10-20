@@ -39,6 +39,9 @@ spec:
                 description: Specifies an indentifier for the application using the
                   database.
                 type: string
+              class:
+                default: default
+                type: string
               databaseName:
                 description: The name of the database within InstanceLabel.
                 type: string

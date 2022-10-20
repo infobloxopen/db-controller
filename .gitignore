@@ -7,6 +7,7 @@
 *.dylib
 bin
 db-controller
+manager
 
 # Test binary, build with `go test -c`
 *.test
@@ -28,3 +29,5 @@ vendor
 .DS_Store
 
 .id
+
+.vscode
