@@ -31,8 +31,8 @@ CRDS_CHART := helm/${IMAGE_NAME}-crds
 CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
 CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
 
-export AWS_PROFILE           =$(shell aws configure get aws_profile)
-export AWS_ACCESS_KEY_ID     =$(shell aws configure get aws_access_key_id)
+#export AWS_PROFILE           = $(shell aws configure get aws_profile)
+export AWS_ACCESS_KEY_ID     = $(shell aws configure get aws_access_key_id)
 export AWS_SECRET_ACCESS_KEY = $(shell aws configure get aws_secret_access_key)
 export AWS_REGION            = $(shell aws configure get region)
 export AWS_SESSION_TOKEN     = $(shell aws configure get aws_session_token)
@@ -40,7 +40,6 @@ export AWS_SESSION_TOKEN     = $(shell aws configure get aws_session_token)
 HELM ?= docker run \
 	--rm \
 	--net host \
-	-e NOAWS="NOPE" \
 	-w /pkg \
 	-v ${CWD}:/pkg \
 	-v ${KUBECONFIG}:/root/.kube/config \

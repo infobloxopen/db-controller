@@ -47,9 +47,6 @@ pipeline {
       }
     }
     stage("Push db-controller image") {
-      when {
-        anyOf { buildingTag() }
-      }
       steps {
         withDockerRegistry([credentialsId: "${env.JENKINS_DOCKER_CRED_ID}", url: ""]) {
           dir("$DIRECTORY") {
@@ -59,22 +56,20 @@ pipeline {
       }
     }
     stage('Push charts') {
-      when {
-        anyOf {
-          buildingTag()
-        }
-      }
       steps {
         dir ("${WORKSPACE}/${DIRECTORY}") {
           withDockerRegistry([credentialsId: "dockerhub-bloxcicd", url: ""]) {
             withAWS(region:'us-east-1', credentials:'CICD_HELM') {
-              sh "make push-chart"
-              sh "make build-properties"
-              sh "make push-chart-crd"
-              sh "make build-properties-crd"
+              sh """
+                  make build-chart
+                  make push-chart
+                  make build-properties
+                  make push-chart-crd
+                  make build-properties-crd
+              chmod a+xrw ${WORKSPACE}/${DIRECTORY}"
+              """
               archiveArtifacts artifacts: '*.tgz'
               archiveArtifacts artifacts: '*build.properties'
-              sh "chmod a+xrw ${WORKSPACE}/${DIRECTORY}"
             }
           }
         }
