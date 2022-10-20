@@ -1,5 +1,5 @@
 # Docker hub repo
-REGISTRY ?= infoblox
+REGISTRY ?= ghcr.io/infobloxopen
 # image name
 IMAGE_NAME ?= db-controller
 DBPROXY_IMAGE_NAME ?= dbproxy
@@ -17,12 +17,6 @@ ACK_GINKGO_DEPRECATIONS := 1.16.5
 SHELL := $(shell which bash)
 
 CMD := "cmd/manager"
-
-# Emit local aws credentials to environment
-export AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
-export AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
-export AWS_REGION            := $(shell aws configure get region)
-export AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
 
 #configuration for helm
 CWD=$(shell pwd)
@@ -301,11 +295,28 @@ build-chart:
 build-chart-crd: update_crds
 	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
 
+
+# Emit local aws credentials to environment
+AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
+AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
+AWS_REGION            := $(shell aws configure get region)
+AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
+
 push-chart:
-	${HELM} s3 push ${CHART_FILE} infobloxcto
+	${HELM} \
+		-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+		-e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+		-e AWS_REGION=${AWS_REGION} \
+		-e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+		s3 push ${CHART_FILE} infobloxcto
 
 push-chart-crd:
-	${HELM} s3 push ${CHART_FILE_CRD} infobloxcto
+	${HELM} \
+		-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+		-e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+		-e AWS_REGION=${AWS_REGION} \
+		-e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+		s3 push ${CHART_FILE_CRD} infobloxcto
 
 clean:
 	@rm -f *build.properties || true
@@ -315,9 +326,15 @@ clean:
 deploy-crds: .id build-chart-crd
 	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
 
-deploy: .id docker-push
-	echo "TODO set class name"
-	${HELM} upgrade --install --namespace $(cat .id) --set .dbController.class=$(cat .id) ${CHART_FILE} --version $(CHART_VERSION)
+helm/db-controller/Chart.yaml: helm/db-controller/Chart.in
+	sed "s/appVersion: \"APP_VERSION\"/appVersion: \"${TAG}\"/g" $^ > $@
+
+deploy: .id docker-push helm/db-controller/Chart.yaml
+	${HELM} upgrade --debug --wait --namespace "`cat .id`" \
+		--create-namespace \
+		--install `cat .id`-db-ctrl helm/db-controller \
+		--set .dbController.class=`cat .id`
+		${HELM_SETFLAGS}
 
 undeploy: .id
 	${HELM} delete --purge --namespace $(cat .id) ${CHART_FILE}
