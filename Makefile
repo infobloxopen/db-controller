@@ -339,7 +339,9 @@ deploy: .id docker-push helm/db-controller/Chart.yaml
 	helm upgrade --install `cat .id`-db-ctrl helm/db-controller \
 		 --debug --wait --namespace "`cat .id`" \
 	 	--create-namespace \
-	 	--set dbController.class=`cat .id`
+                 -f helm/db-controller/minikube.yaml \
+	 	--set dbController.class=`cat .id` \
+	 	--set db.identifier.prefix=`cat .id` ${HELM_SETFLAGS}
 		${HELM_SETFLAGS}
 
 undeploy: .id
