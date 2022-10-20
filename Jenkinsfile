@@ -63,7 +63,7 @@ pipeline {
               sh """
                   printenv | grep AWS
                   make build-chart
-                  AWS_REGION=us-east-1 make push-chart
+                  make push-chart
                   make build-properties
                   make push-chart-crd
                   make build-properties-crd
