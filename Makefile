@@ -18,6 +18,12 @@ SHELL := $(shell which bash)
 
 CMD := "cmd/manager"
 
+# Emit local aws credentials to environment
+export AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
+export AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
+export AWS_REGION            := $(shell aws configure get region)
+export AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
+
 #configuration for helm
 CWD=$(shell pwd)
 KUBECONFIG ?= ${HOME}/.kube/config
@@ -33,9 +39,11 @@ CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
 HELM ?= docker run \
 	--rm \
 	--net host \
+	-e NOAWS="NOPE" \
 	-w /pkg \
 	-v ${CWD}:/pkg \
 	-v ${KUBECONFIG}:/root/.kube/config \
+	-e AWS_PROFILE \
 	-e AWS_REGION \
 	-e AWS_ACCESS_KEY_ID \
 	-e AWS_SECRET_ACCESS_KEY \
@@ -49,6 +57,7 @@ HELM_ENTRYPOINT ?= docker run \
 	-w /pkg \
 	-v ${CWD}:/pkg \
 	-v ${KUBECONFIG}:/root/.kube/config \
+	-e AWS_PROFILE \
 	-e AWS_REGION \
 	-e AWS_ACCESS_KEY_ID \
 	-e AWS_SECRET_ACCESS_KEY \
