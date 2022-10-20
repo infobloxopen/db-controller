@@ -61,13 +61,11 @@ pipeline {
           withDockerRegistry([credentialsId: "dockerhub-bloxcicd", url: ""]) {
             withAWS(region:'us-east-1', credentials:'CICD_HELM') {
               sh """
-                  printenv | grep AWS
-                  make build-chart
-                  make push-chart
-                  make build-properties
-                  make push-chart-crd
-                  make build-properties-crd
-              chmod a+xrw ${WORKSPACE}/${DIRECTORY}"
+				make build-chart build-chart-crd
+				make push-chart push-chart-crd
+				make build-properties
+				make build-properties-crd
+				chmod a+xrw ${WORKSPACE}/${DIRECTORY}
               """
               archiveArtifacts artifacts: '*.tgz'
               archiveArtifacts artifacts: '*build.properties'
