@@ -42,6 +42,7 @@ HELM ?= docker run \
 	--net host \
 	-w /pkg \
 	-v ${CWD}:/pkg \
+	-v ~/.aws:/root/.aws \
 	-v ${KUBECONFIG}:/root/.kube/config \
 	-e AWS_PROFILE \
 	-e AWS_REGION \
@@ -56,6 +57,7 @@ HELM_ENTRYPOINT ?= docker run \
 	--net host \
 	-w /pkg \
 	-v ${CWD}:/pkg \
+	-v ~/.aws:/root/.aws \
 	-v ${KUBECONFIG}:/root/.kube/config \
 	-e AWS_PROFILE \
 	-e AWS_REGION \
