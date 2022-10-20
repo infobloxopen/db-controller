@@ -30,6 +30,9 @@ DB_CONTROLLER_CHART_IN := ${DB_CONTROLLER_CHART}/Chart.in
 CRDS_CHART := helm/${IMAGE_NAME}-crds
 CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
 CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
+
+export AWS_PROFILE=$(shell aws configure get aws_profile)
+
 HELM ?= docker run \
 	--rm \
 	--net host \
@@ -297,11 +300,10 @@ build-chart-crd: update_crds
 
 
 # Emit local aws credentials to environment
-AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
-AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
-AWS_REGION            := $(shell aws configure get region)
-AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
-
+push-chart: AWS_ACCESS_KEY_ID     = $(shell aws configure get aws_access_key_id)
+push-chart: AWS_SECRET_ACCESS_KEY = $(shell aws configure get aws_secret_access_key)
+push-chart: AWS_REGION            = $(shell aws configure get region)
+push-chart: AWS_SESSION_TOKEN     = $(shell aws configure get aws_session_token)
 push-chart:
 	${HELM} \
 		-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
@@ -310,6 +312,10 @@ push-chart:
 		-e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
 		s3 push ${CHART_FILE} infobloxcto
 
+push-chart-crd: AWS_ACCESS_KEY_ID     = $(shell aws configure get aws_access_key_id)
+push-chart-crd: AWS_SECRET_ACCESS_KEY = $(shell aws configure get aws_secret_access_key)
+push-chart-crd: AWS_REGION            = $(shell aws configure get region)
+push-chart-crd: AWS_SESSION_TOKEN     = $(shell aws configure get aws_session_token)
 push-chart-crd:
 	${HELM} \
 		-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
@@ -330,11 +336,11 @@ helm/db-controller/Chart.yaml: helm/db-controller/Chart.in
 	sed "s/appVersion: \"APP_VERSION\"/appVersion: \"${TAG}\"/g" $^ > $@
 
 deploy: .id docker-push helm/db-controller/Chart.yaml
-	${HELM} upgrade --debug --wait --namespace "`cat .id`" \
-		--create-namespace \
-		--install `cat .id`-db-ctrl helm/db-controller \
-		--set .dbController.class=`cat .id`
+	helm upgrade --install `cat .id`-db-ctrl helm/db-controller \
+		 --debug --wait --namespace "`cat .id`" \
+	 	--create-namespace \
+	 	--set dbController.class=`cat .id`
 		${HELM_SETFLAGS}
 
 undeploy: .id
-	${HELM} delete --purge --namespace $(cat .id) ${CHART_FILE}
+	helm delete --namespace `cat .id` `cat .id`-db-ctrl
