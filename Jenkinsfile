@@ -48,12 +48,12 @@ pipeline {
     }
     stage("Push db-controller image") {
       when {
-        anyOf { branch 'main'; buildingTag() }
+        anyOf { buildingTag() }
       }
       steps {
         withDockerRegistry([credentialsId: "${env.JENKINS_DOCKER_CRED_ID}", url: ""]) {
           dir("$DIRECTORY") {
-            sh "REGISTRY=infobloxopen make docker-push"
+            sh "REGISTRY=infoblox make docker-push"
           }
         }
       }

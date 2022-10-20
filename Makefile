@@ -142,15 +142,14 @@ docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-a
 		--build-arg api_version=$(API_VERSION) \
 		--build-arg srv_version=$(SRV_VERSION) \
 		-f $(SERVER_DOCKERFILE) \
-		-t $(SERVER_IMAGE):$(IMAGE_VERSION) \
-		-t $(SERVER_IMAGE):latest .
+		-t $(SERVER_IMAGE):$(IMAGE_VERSION) .
 
 docker-build-dbproxy:
-	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} -t ${DBPROXY_IMG_PATH}:latest .
+	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} .
 
 .PHONY: docker-build
 docker-build: #test ## Build docker image with the manager.
-	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
+	docker build -t ${IMG_PATH}:${TAG} .
 
 docker-push-dbproxy: docker-build-dbproxy
 	docker push ${DBPROXY_IMG_PATH}:${TAG}
@@ -175,7 +174,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: deploy
 deploy-kustomize: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:latest
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:${TAG}
 	$(KUSTOMIZE) build config/default | kubectl apply --namespace `cat .id` -f -
 
 .PHONY: undeploy
