@@ -61,8 +61,6 @@ pipeline {
     stage('Push charts') {
       when {
         anyOf {
-          branch 'main'
-          branch 'release*'
           buildingTag()
         }
       }
