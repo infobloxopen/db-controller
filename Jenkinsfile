@@ -61,8 +61,9 @@ pipeline {
           withDockerRegistry([credentialsId: "dockerhub-bloxcicd", url: ""]) {
             withAWS(region:'us-east-1', credentials:'CICD_HELM') {
               sh """
+                  printenv | grep AWS
                   make build-chart
-                  make push-chart
+                  AWS_REGION=us-east-1 make push-chart
                   make build-properties
                   make push-chart-crd
                   make build-properties-crd
