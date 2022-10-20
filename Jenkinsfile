@@ -53,7 +53,7 @@ pipeline {
       steps {
         withDockerRegistry([credentialsId: "${env.JENKINS_DOCKER_CRED_ID}", url: ""]) {
           dir("$DIRECTORY") {
-            sh "make docker-push"
+            sh "REGISTRY=infobloxopen make docker-push"
           }
         }
       }
