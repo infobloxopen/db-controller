@@ -29,14 +29,14 @@ pipeline {
       withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GitHub_PAT')]) {
           sh "echo machine github.com login $GitHub_PAT > ~/.netrc"
           sh "echo machine api.github.com login $GitHub_PAT >> ~/.netrc"
-        }      
-        dir("$DIRECTORY") {
-          sh "sudo apt-get update"
-  	  sh "sudo apt-get -y install postgresql-client"
-	  sh "echo 'db-controller-name' > .id"
-	  sh "make test"
-          sh "sudo apt-get -y remove postgresql-client"
         }
+		dir("$DIRECTORY") {
+		  sh "sudo apt-get update"
+		  sh "sudo apt-get -y install postgresql-client"
+		  sh "echo 'db-controller-name' > .id"
+		  sh "make test"
+		  sh "sudo apt-get -y remove postgresql-client"
+		}
       }
     }
     stage("Build db-controller image") {
@@ -70,10 +70,8 @@ pipeline {
         dir ("${WORKSPACE}/${DIRECTORY}") {
           withDockerRegistry([credentialsId: "dockerhub-bloxcicd", url: ""]) {
             withAWS(region:'us-east-1', credentials:'CICD_HELM') {
-              sh "make build-chart"
               sh "make push-chart"
               sh "make build-properties"
-              sh "make build-chart-crd"
               sh "make push-chart-crd"
               sh "make build-properties-crd"
               archiveArtifacts artifacts: '*.tgz'
