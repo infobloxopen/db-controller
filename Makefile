@@ -1,5 +1,5 @@
 # Docker hub repo
-REGISTRY ?= infoblox
+REGISTRY ?= ghcr.io/infobloxopen
 # image name
 IMAGE_NAME ?= db-controller
 DBPROXY_IMAGE_NAME ?= dbproxy
@@ -33,9 +33,11 @@ CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
 HELM ?= docker run \
 	--rm \
 	--net host \
+	-e NOAWS="NOPE" \
 	-w /pkg \
 	-v ${CWD}:/pkg \
 	-v ${KUBECONFIG}:/root/.kube/config \
+	-e AWS_PROFILE \
 	-e AWS_REGION \
 	-e AWS_ACCESS_KEY_ID \
 	-e AWS_SECRET_ACCESS_KEY \
@@ -49,6 +51,7 @@ HELM_ENTRYPOINT ?= docker run \
 	-w /pkg \
 	-v ${CWD}:/pkg \
 	-v ${KUBECONFIG}:/root/.kube/config \
+	-e AWS_PROFILE \
 	-e AWS_REGION \
 	-e AWS_ACCESS_KEY_ID \
 	-e AWS_SECRET_ACCESS_KEY \
@@ -139,17 +142,19 @@ docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-a
 		-t $(SERVER_IMAGE):$(IMAGE_VERSION) \
 		-t $(SERVER_IMAGE):latest .
 
-.PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
+docker-build-dbproxy:
 	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} -t ${DBPROXY_IMG_PATH}:latest .
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG_PATH}:${TAG}
-	docker push ${IMG_PATH}:latest
+.PHONY: docker-build
+docker-build: #test ## Build docker image with the manager.
+	docker build -t ${IMG_PATH}:${TAG} -t ${IMG_PATH}:latest .
+
+docker-push-dbproxy: docker-build-dbproxy
 	docker push ${DBPROXY_IMG_PATH}:${TAG}
-	docker push ${DBPROXY_IMG_PATH}:latest
+
+.PHONY: docker-push
+docker-push: docker-build
+	docker push ${IMG_PATH}:${TAG}
 
 ##@ Deployment
 
@@ -166,12 +171,12 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete --namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy-kustomize: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:latest
 	$(KUSTOMIZE) build config/default | kubectl apply --namespace `cat .id` -f -
 
 .PHONY: undeploy
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+undeploy-kustomize: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | kubectl delete	--namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
 
 
@@ -290,13 +295,46 @@ build-chart:
 build-chart-crd: update_crds
 	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
 
+
+# Emit local aws credentials to environment
+AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
+AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
+AWS_REGION            := $(shell aws configure get region)
+AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
+
 push-chart:
-	${HELM} s3 push ${CHART_FILE} infobloxcto
+	${HELM} \
+		-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+		-e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+		-e AWS_REGION=${AWS_REGION} \
+		-e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+		s3 push ${CHART_FILE} infobloxcto
 
 push-chart-crd:
-	${HELM} s3 push ${CHART_FILE_CRD} infobloxcto
+	${HELM} \
+		-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+		-e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+		-e AWS_REGION=${AWS_REGION} \
+		-e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+		s3 push ${CHART_FILE_CRD} infobloxcto
 
 clean:
 	@rm -f *build.properties || true
 	@rm -f *.tgz || true
 	sudo rm -rf /usr/local/kubebuilder
+
+deploy-crds: .id build-chart-crd
+	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
+
+helm/db-controller/Chart.yaml: helm/db-controller/Chart.in
+	sed "s/appVersion: \"APP_VERSION\"/appVersion: \"${TAG}\"/g" $^ > $@
+
+deploy: .id docker-push helm/db-controller/Chart.yaml
+	${HELM} upgrade --debug --wait --namespace "`cat .id`" \
+		--create-namespace \
+		--install `cat .id`-db-ctrl helm/db-controller \
+		--set .dbController.class=`cat .id`
+		${HELM_SETFLAGS}
+
+undeploy: .id
+	${HELM} delete --purge --namespace $(cat .id) ${CHART_FILE}
