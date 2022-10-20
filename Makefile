@@ -31,18 +31,25 @@ CRDS_CHART := helm/${IMAGE_NAME}-crds
 CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
 CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
 
-export AWS_PROFILE           =$(shell aws configure get aws_profile)
-export AWS_ACCESS_KEY_ID     =$(shell aws configure get aws_access_key_id)
-export AWS_SECRET_ACCESS_KEY = $(shell aws configure get aws_secret_access_key)
-export AWS_REGION            = $(shell aws configure get region)
-export AWS_SESSION_TOKEN     = $(shell aws configure get aws_session_token)
+ifeq ($(AWS_ACCESS_KEY_ID),)
+export AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
+endif
+ifeq ($(AWS_SECRET_ACCESS_KEY),)
+export AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
+endif
+ifeq ($(AWS_REGION),)
+export AWS_REGION            := $(shell aws configure get region)
+endif
+ifeq ($(AWS_SESSION_TOKEN),)
+export AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
+endif
 
 HELM ?= docker run \
 	--rm \
 	--net host \
-	-e NOAWS="NOPE" \
 	-w /pkg \
 	-v ${CWD}:/pkg \
+	-v ~/.aws:/root/.aws \
 	-v ${KUBECONFIG}:/root/.kube/config \
 	-e AWS_PROFILE \
 	-e AWS_REGION \
@@ -57,6 +64,7 @@ HELM_ENTRYPOINT ?= docker run \
 	--net host \
 	-w /pkg \
 	-v ${CWD}:/pkg \
+	-v ~/.aws:/root/.aws \
 	-v ${KUBECONFIG}:/root/.kube/config \
 	-e AWS_PROFILE \
 	-e AWS_REGION \
