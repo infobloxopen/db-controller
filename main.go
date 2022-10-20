@@ -87,7 +87,9 @@ func main() {
 	var probePort int
 	var enableDBProxyWebhook bool
 	var dbIdentifierPrefix string
+	var class string
 
+	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
 	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "box-1", "The prefix to be added to the DbHost. Ideally this is the env name.")
 	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
 	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
@@ -132,6 +134,7 @@ func main() {
 		Config:             ctlConfig,
 		MasterAuth:         rdsauth.NewMasterAuth(),
 		DbIdentifierPrefix: dbIdentifierPrefix,
+		Class:              class,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)

@@ -58,6 +58,7 @@ spec:
             - --enable-leader-election
             - --config-file=/etc/config/config.yaml
             - --db-identifier-prefix={{ .Values.db.identifier.prefix }}
+            - --class={{ .Values.dbController.class }}
             {{ if .Values.zapLogger.develMode }}
             - --zap-devel
             {{ end }}
