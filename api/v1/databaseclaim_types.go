@@ -110,6 +110,12 @@ type SecretRef struct {
 
 // DatabaseClaimSpec defines the desired state of DatabaseClaim
 type DatabaseClaimSpec struct {
+	// class is used to run multiple instances of dbcontroller.
+	// +optional
+	// +kubebuilder:default:="default"
+
+	Class *string `json:"class"`
+
 	// SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
 	// if the dbclaim has already provisioned a database, this field is ignored
 	// +optional

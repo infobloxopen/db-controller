@@ -20,9 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/armon/go-radix"
@@ -92,46 +90,37 @@ type DatabaseClaimReconciler struct {
 	DbIdentifierPrefix string
 	Mode               ModeEnum
 	Input              *input
+	Class              string
 }
 
-func (r *DatabaseClaimReconciler) isNamespacePermitted(ns string) (bool, error) {
-	//logr := r.Log.WithValues("databaseclaim", ns)
+func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
+	controllerClass := r.Class
 
-	allowedNamespaces := r.Config.GetStringSlice("namespace::allowedlist")
-	deniedNamespaces := r.Config.GetStringSlice("namespace::deniedlist")
+	if claimClass == "" {
+		claimClass = "default"
+	}
+	if controllerClass == "" {
+		controllerClass = "default"
+	}
+	if claimClass != controllerClass {
+		return false
+	}
 
-	//logr.Info("incoming", "ns", ns, "allowedlist", allowedNamespaces, "deniedList", deniedNamespaces)
-	//process denied list
-	for _, s := range deniedNamespaces {
-		s = strings.ReplaceAll(s, "*", ".*")
-		rx, _ := regexp.Compile(fmt.Sprintf("/^%s$/", s))
-		if denied := rx.MatchString(ns); denied {
-			return false, fmt.Errorf("processing of namespace %s denied", ns)
-		}
-	}
-	// process allowed list
-	var allowed bool = true
-	for _, s := range allowedNamespaces {
-		if allowed, _ = regexp.MatchString(s, ns); allowed {
-			break
-		}
-	}
-	if !allowed {
-		return false, fmt.Errorf("processing of namespace %s not allowed", ns)
-	}
-	return true, nil
+	return true
 }
+
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", req.NamespacedName)
-
-	if permitted, err := r.isNamespacePermitted(req.NamespacedName.Namespace); !permitted {
-		return ctrl.Result{}, err
-	}
 
 	var dbClaim persistancev1.DatabaseClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
 		logr.Error(err, "unable to fetch DatabaseClaim")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if permitted := r.isClassPermitted(*dbClaim.Spec.Class); !permitted {
+		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
+		return ctrl.Result{}, nil
 	}
 
 	r.setReqInfo(&dbClaim)

@@ -5,7 +5,7 @@ metadata:
   name: databaseclaim-dynamic-3
 spec:
   appId: sample-app
-  secretName: databaseclaim-dynamic-3
+  secretName: dbc-databaseclaim-dynamic-3
   type: postgres
   userName: sample_user
   databaseName: pub

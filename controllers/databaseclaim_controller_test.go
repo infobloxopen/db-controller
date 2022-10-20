@@ -934,84 +934,73 @@ func Test_getServiceNamespace(t *testing.T) {
 	}
 }
 
-func TestDatabaseClaimReconciler_isNamespacePermitted(t *testing.T) {
+func TestDatabaseClaimReconciler_isClassPermitted(t *testing.T) {
 	type mockReconciler struct {
 		Config *viper.Viper
+		Class  string
 	}
 	type args struct {
-		ns string
+		claimClass string
 	}
 	tests := []struct {
 		name       string
 		reconciler mockReconciler
 		args       args
 		want       bool
-		wantErr    bool
 	}{
 		{
 			"permitted_ok",
 			mockReconciler{
 				Config: NewConfig(testConfig),
+				Class:  "default",
 			},
 			args{
-				ns: "identity",
+				claimClass: "default",
 			},
 			true,
-			false,
 		},
 		{
 			"denied",
 			mockReconciler{
 				Config: NewConfig(testConfig),
+				Class:  "default",
 			},
 			args{
-				ns: "authz",
+				claimClass: "danny",
 			},
 			false,
-			true,
 		},
 		{
-			"denied_regex",
+			"ok empty classes",
 			mockReconciler{
 				Config: NewConfig(testConfig),
+				Class:  "",
 			},
 			args{
-				ns: "entitlement",
+				claimClass: "",
 			},
-			false,
 			true,
 		},
 		{
-			"permitted regex",
+			"permitted with empty class",
 			mockReconciler{
 				Config: NewConfig(testConfig),
+				Class:  "default",
 			},
 			args{
-				ns: "testing",
+				claimClass: "",
 			},
 			true,
-			false,
 		},
 		{
-			"permitted regex",
+			"denied  - non default",
 			mockReconciler{
 				Config: NewConfig(testConfig),
+				Class:  "bjeevan",
 			},
 			args{
-				ns: "test",
+				claimClass: "",
 			},
-			true,
-			false,
-		},
-		{
-			"permitted dummy config",
-			mockReconciler{
-				Config: NewConfig(multiConfig),
-			},
-			args{
-				ns: "test",
-			},
-			true,
 			false,
 		},
 	}
@@ -1019,14 +1008,11 @@ func TestDatabaseClaimReconciler_isNamespacePermitted(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Config: tt.reconciler.Config,
+				Class:  tt.reconciler.Class,
 			}
-			got, err := r.isNamespacePermitted(tt.args.ns)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DatabaseClaimReconciler.isNamespacePermitted() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			got := r.isClassPermitted(tt.args.claimClass)
 			if got != tt.want {
-				t.Errorf("DatabaseClaimReconciler.isNamespacePermitted() = %v, want %v", got, tt.want)
+				t.Errorf("DatabaseClaimReconciler.isClassPermitted() = %v, want %v", got, tt.want)
 			}
 		})
 	}
