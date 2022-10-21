@@ -90,7 +90,7 @@ func main() {
 	var class string
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
-	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "box-1", "The prefix to be added to the DbHost. Ideally this is the env name.")
+	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "", "The prefix to be added to the DbHost. Ideally this is the env name.")
 	flag.StringVar(&metricsAddr, "metrics-addr", "0.0.0.0", "The address the metric endpoint binds to.")
 	flag.IntVar(&metricsPort, "metrics-port", 8080, "The port the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-address", "", "The address the probe endpoint binds to.")
@@ -100,7 +100,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
 		"Database connection string to with root credentials.")
-	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", true,
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
 		"Enable DB Proxy webhook. "+
 			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
 			"with the infoblox.com/db-secret-path annotation set.")
