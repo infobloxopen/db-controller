@@ -94,6 +94,7 @@ type DatabaseClaimReconciler struct {
 }
 
 func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
+	// r.Log.Info("in isClassPermitted", "claimClass", claimClass, "r.Class", r.Class)
 	controllerClass := r.Class
 
 	if claimClass == "" {
@@ -501,12 +502,16 @@ func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
 func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus) bool {
 	conditions := resourceStatus.Conditions
 	ready := xpv1.TypeReady
+	conditionTrue := corev1.ConditionTrue
 	for i := range conditions {
 		if conditions[i].Type == ready {
-			return true
+			if conditions[i].Status == conditionTrue {
+				return true
+			} else {
+				return false
+			}
 		}
 	}
-
 	return false
 }
 
@@ -1292,7 +1297,6 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, lo
 	if connInfo.Password == "" {
 		return nil, fmt.Errorf("invalid credentials (password)")
 	}
-
 	updateHostPortStatus(dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
 	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: connInfo.Dsn()})
@@ -1306,6 +1310,17 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	migrationState := dbClaim.Status.MigrationState
 
 	logr.Info("Migration is progress", "state", migrationState)
+
+	logr.Info("cloud instance ready. reading generated master secret")
+	connInfo, err := r.readResourceSecret(ctx, dbClaim)
+	if err != nil {
+		logr.Info("unable to read the complete secret. requeueing")
+		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+	}
+	r.Input.MasterConnInfo.Host = connInfo.Host
+	r.Input.MasterConnInfo.Password = connInfo.Password
+	r.Input.MasterConnInfo.Port = connInfo.Port
+	r.Input.MasterConnInfo.Username = connInfo.Username
 
 	target_master_dsn := r.Input.MasterConnInfo.Dsn()
 	target_app_conn := dbClaim.Status.NewDB.ConnectionInfo

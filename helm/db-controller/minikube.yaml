@@ -1,47 +1,10 @@
-secrets:
-  enabled: true
-
-image:
-  repository: infoblox/db-controller
-  pullPolicy: Never
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: latest
-
-postgresql:
-  enabled: true
-  postgresqlUsername: postgres
-  postgresqlPassword: postgres
-  debug: true
+dbproxy:
+  enabled: false
 
 controllerConfig:
-  config.yaml: |
-    # master credentials source can be 'aws' or 'secret'
-    authSource: "secret"
-    passwordConfig:
-      passwordComplexity: enabled
-      minPasswordLength: "15"
-      passwordRotationPeriod: "60"
-    sample-connection:
-      username: postgres
-      host: db-controller-postgresql
-      port: 5432
-      sslMode: disable
-      passwordSecretRef: sample-master-secret
-    another.connection:
-      username: root
-      host: some.other.service
-      port: 5412
-      sslMode: require
-      passwordSecretRef: another-connection-secret
-
-passwordSecretRefs:
-  sample-master-secret:
-    password: "{{ .Values.postgresql.postgresqlPassword }}"
-
-dashboards:
-  dashboard:
-    enabled: false
-
+  region: us-east-1
+  vpcSecurityGroupIDRefs: demo-box-1
+  dbSubnetGroupNameRef: demo-box-1
 zapLogger:
   develMode: true
   level: debug
