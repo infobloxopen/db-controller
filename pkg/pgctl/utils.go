@@ -12,7 +12,11 @@ import (
 )
 
 func isAdminUser(db *sql.DB) (bool, error) {
-	var exists bool
+	var (
+		exists bool
+		user   string
+		count  int
+	)
 
 	err := db.QueryRow("SELECT EXISTS(select  rolname from pg_roles where rolsuper = 't' and rolreplication ='t' and rolname = (select session_user))").Scan(&exists)
 
@@ -20,8 +24,23 @@ func isAdminUser(db *sql.DB) (bool, error) {
 		// pc.log.Error(err, "could not query for Subscription name")
 		return false, err
 	}
-	if !exists {
-		// pc.log.Info("creating Subscription:", "with name", subName)
+	if exists {
+		return true, nil
+	}
+	//AWS uses a different mechanism to grant admin/replication rules
+	_ = db.QueryRow("SELECT session_user").Scan(&user)
+
+	awsAdminQuery := fmt.Sprintf(`
+	SELECT count(1) 
+	FROM pg_roles 
+	WHERE pg_has_role( '%s', oid, 'member')
+  	AND rolname in ( 'rds_superuser', 'rds_replication');`, user)
+
+	err = db.QueryRow(awsAdminQuery).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count < 2 {
 		return false, fmt.Errorf("db user does not have required super_user and/or replication role")
 	}
 

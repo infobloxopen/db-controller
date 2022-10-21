@@ -183,6 +183,7 @@ func (s *validate_connection_state) Execute() (State, error) {
 		return nil, err
 	}
 	defer targetDBUser.Close()
+
 	if valid, err = isAdminUser(sourceDBAdmin); !valid || err != nil {
 		return nil, fmt.Errorf("%w; Source DB Admin user lacks  required permission", err)
 	}
@@ -333,7 +334,7 @@ func (s *create_subscription_state) Execute() (State, error) {
 
 	err = targetDBAdmin.QueryRow(q, DefaultSubName).Scan(&exists)
 	if err != nil {
-		log.Error(err, "could not query for subsription name")
+		log.Error(err, "could not query for subsription name", "stmt", createSub)
 		return nil, err
 	}
 	if !exists {
@@ -382,7 +383,7 @@ func (s *enable_subscription_state) Execute() (State, error) {
 	}
 	if exists {
 		log.Info("enabling Subscription")
-		if _, err := targetDBAdmin.Exec(fmt.Sprintf(alterSub)); err != nil {
+		if _, err := targetDBAdmin.Exec(alterSub); err != nil {
 			log.Error(err, "could not enable Subscription")
 			return nil, err
 		}
