@@ -189,12 +189,20 @@ func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) 
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
+	// fmt.Printf("before checking for null:%#v\n", dbClaim)
+	// fmt.Printf("before checking for null:%v\n", dbClaim)
+
 	if dbClaim.Status.ActiveDB == nil {
+		// fmt.Printf("inside if statement :%v\n", dbClaim)
 		dbClaim.Status.ActiveDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+		// fmt.Printf("val of database :%v\n", dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName)
+
 	}
 	if dbClaim.Status.NewDB == nil {
 		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 	}
+	// fmt.Printf("after checking for null:%#v\n", dbClaim)
+	// fmt.Printf("after checking for null:%v\n", dbClaim)
 
 	r.Input = &input{}
 	var (
@@ -263,6 +271,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
+		// fmt.Printf("%v", dbClaim.Status.ActiveDB)
 		if (dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName != existing_db_conn.DatabaseName) ||
 			(dbClaim.Status.ActiveDB.ConnectionInfo.Host != existing_db_conn.Host) {
 
@@ -1340,6 +1349,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		SourceDBUserDsn:  source_app_conn.Dsn(),
 		TargetDBUserDsn:  target_app_conn.Dsn(),
 		TargetDBAdminDsn: target_master_dsn,
+		ExportFilePath:   r.Config.GetString("pgTemp"),
 	}
 
 	logr.Info("DSN", "config", config)
