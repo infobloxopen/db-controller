@@ -110,6 +110,7 @@ controllerConfig:
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
   region: us-east-1
+  pgTemp: "/pg-temp/"
   vpcSecurityGroupIDRefs:
   dbSubnetGroupNameRef:
   dynamicHostWaitTimeMin: 1

@@ -86,6 +86,8 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            - name: pg-temp-volume 
+              mountPath: /pg-temp
             - name: config-volume
               mountPath: /etc/config
             {{- if .Values.dbproxy.enabled }}
@@ -94,6 +96,8 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
+      - name: pg-temp-volume
+        emptyDir: {}
       - name: config-volume
         configMap:
           name: {{ include "db-controller.name" . }}-config
