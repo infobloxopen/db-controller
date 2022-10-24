@@ -1,6 +1,7 @@
 # master credentials source can be 'aws' or 'secret'
 #authSource: aws
 authSource: secret
+pgTemp: "/tmp/"
 # if aws authorization is used iam role must be provided
 #iamRole: rds-role
 region: us-east-1
