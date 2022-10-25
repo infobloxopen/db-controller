@@ -25,7 +25,7 @@ func NewDBUser(baseName string) DBUser {
 	}
 }
 
-func (dbu DBUser) IsUserChanged(status *persistancev1.Status) bool {
+func (dbu DBUser) IsUserChanged(status persistancev1.Status) bool {
 	prevUsername := dbu.TrimUserSuffix(status.ConnectionInfo.Username)
 
 	if dbu.rolename != prevUsername && status.ConnectionInfo.Username != "" {
