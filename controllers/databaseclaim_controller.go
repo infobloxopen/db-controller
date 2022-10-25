@@ -125,7 +125,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	r.setReqInfo(&dbClaim)
-
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
@@ -189,21 +188,6 @@ func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) 
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
-	// fmt.Printf("before checking for null:%#v\n", dbClaim)
-	// fmt.Printf("before checking for null:%v\n", dbClaim)
-
-	if dbClaim.Status.ActiveDB == nil {
-		// fmt.Printf("inside if statement :%v\n", dbClaim)
-		dbClaim.Status.ActiveDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-		// fmt.Printf("val of database :%v\n", dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName)
-
-	}
-	if dbClaim.Status.NewDB == nil {
-		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-	}
-	// fmt.Printf("after checking for null:%#v\n", dbClaim)
-	// fmt.Printf("after checking for null:%v\n", dbClaim)
-
 	r.Input = &input{}
 	var (
 		fragmentKey      string
@@ -253,6 +237,13 @@ func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
+		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
+	if dbClaim.Status.NewDB.ConnectionInfo == nil {
+		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
+
 	r.setMode(dbClaim)
 
 	if r.Mode == M_UseExistingDB {
@@ -271,7 +262,6 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
-		// fmt.Printf("%v", dbClaim.Status.ActiveDB)
 		if (dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName != existing_db_conn.DatabaseName) ||
 			(dbClaim.Status.ActiveDB.ConnectionInfo.Host != existing_db_conn.Host) {
 
@@ -304,8 +294,8 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			logr.Info("requeuing request")
 			return result, nil
 		}
-		dbClaim.Status.ActiveDB = dbClaim.Status.NewDB.DeepCopy()
-		dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+		dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 		if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -1203,7 +1193,7 @@ func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
 	return dbClaim.Spec.DatabaseName
 }
 
-func updateUserStatus(status *persistancev1.Status, userName, userPassword string) {
+func updateUserStatus(status persistancev1.Status, userName, userPassword string) {
 	timeNow := metav1.Now()
 	status.UserUpdatedAt = &timeNow
 	status.ConnectionInfo.Username = userName
@@ -1211,14 +1201,14 @@ func updateUserStatus(status *persistancev1.Status, userName, userPassword strin
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-func updateDBStatus(status *persistancev1.Status, dbName string) {
+func updateDBStatus(status persistancev1.Status, dbName string) {
 	timeNow := metav1.Now()
 	status.DbCreatedAt = &timeNow
 	status.ConnectionInfo.DatabaseName = dbName
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-func updateHostPortStatus(status *persistancev1.Status, host, port, sslMode string) {
+func updateHostPortStatus(status persistancev1.Status, host, port, sslMode string) {
 	timeNow := metav1.Now()
 	status.ConnectionInfo.Host = host
 	status.ConnectionInfo.Port = port
@@ -1241,14 +1231,12 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	if err != nil {
 		return err
 	}
-
 	logr.Info("creating database client")
 	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
 	if err != nil {
 		logr.Error(err, "creating database client error")
 		return err
 	}
-
 	defer dbClient.Close()
 
 	logr.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
@@ -1385,8 +1373,8 @@ loop:
 	dbClaim.Status.MigrationState = pgctl.S_Completed.String()
 
 	//done with migration- switch active server to newDB
-	dbClaim.Status.ActiveDB = dbClaim.Status.NewDB.DeepCopy()
-	dbClaim.Status.NewDB = &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+	dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+	dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
 		logr.Error(err, "could not update db claim")
@@ -1470,7 +1458,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 	return ctrl.Result{}, nil
 }
 
-func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status *persistancev1.Status) error {
+func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status persistancev1.Status) error {
 	logr := r.Log.WithValues("func", "manageDatabase")
 
 	dbName := r.Input.MasterConnInfo.DatabaseName
@@ -1485,7 +1473,7 @@ func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, statu
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status persistancev1.Status, dbName string, baseUsername string) error {
 	logr := r.Log.WithValues("func", "manageUser")
 
 	// baseUsername := dbClaim.Spec.Username
