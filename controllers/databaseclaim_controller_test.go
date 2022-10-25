@@ -709,8 +709,8 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 						InstanceLabel: "sample.connection",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
-						NewDB:    &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						NewDB:    persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
 					},
 				},
 			},
@@ -728,8 +728,8 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 						InstanceLabel: "blabla",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
-						NewDB:    &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						NewDB:    persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
 					},
 				},
 			},

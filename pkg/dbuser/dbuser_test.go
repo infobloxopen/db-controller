@@ -29,7 +29,7 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 							Username: "oldUser",
 						},
 						},
@@ -46,7 +46,7 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 							Username: "",
 						},
 						},
@@ -66,7 +66,7 @@ func TestDBUser_IsUserChanged(t *testing.T) {
 						Username: "newUser",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: &persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 							Username: "oldUser",
 						},
 						},
