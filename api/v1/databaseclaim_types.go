@@ -189,9 +189,9 @@ type DatabaseClaimStatus struct {
 	// Any errors related to provisioning this claim.
 	Error string `json:"error,omitempty"`
 	//track the status of new db in the process of being created
-	NewDB *Status `json:"newDB,omitempty"`
+	NewDB Status `json:"newDB,omitempty"`
 	//track the status of the active db being used by the application
-	ActiveDB *Status `json:"activeDB,omitempty"`
+	ActiveDB Status `json:"activeDB,omitempty"`
 	//tracks status of DB migration. if empty, not started.
 	//non empty denotes migration in progress, unless it is S_Completed
 	MigrationState string `json:"migrationState,omitempty"`
