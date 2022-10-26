@@ -176,6 +176,8 @@ func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) 
 				r.Mode = M_MigrateToNewDB
 			} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
 				r.Mode = M_MigrationInProgress
+			} else {
+				r.Mode = M_UseNewDB
 			}
 		}
 	} else {
@@ -1180,7 +1182,7 @@ func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseCla
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
 	logr.Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
-	updateHostPortStatus(dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
+	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: r.Log, DBType: r.Input.DbType, DSN: r.getMasterDefaultDsn()})
 
 }
@@ -1193,7 +1195,7 @@ func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
 	return dbClaim.Spec.DatabaseName
 }
 
-func updateUserStatus(status persistancev1.Status, userName, userPassword string) {
+func updateUserStatus(status *persistancev1.Status, userName, userPassword string) {
 	timeNow := metav1.Now()
 	status.UserUpdatedAt = &timeNow
 	status.ConnectionInfo.Username = userName
@@ -1201,14 +1203,14 @@ func updateUserStatus(status persistancev1.Status, userName, userPassword string
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-func updateDBStatus(status persistancev1.Status, dbName string) {
+func updateDBStatus(status *persistancev1.Status, dbName string) {
 	timeNow := metav1.Now()
 	status.DbCreatedAt = &timeNow
 	status.ConnectionInfo.DatabaseName = dbName
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-func updateHostPortStatus(status persistancev1.Status, host, port, sslMode string) {
+func updateHostPortStatus(status *persistancev1.Status, host, port, sslMode string) {
 	timeNow := metav1.Now()
 	status.ConnectionInfo.Host = host
 	status.ConnectionInfo.Port = port
@@ -1242,9 +1244,9 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	logr.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	dbName := existingDBConnInfo.DatabaseName
-	updateDBStatus(dbClaim.Status.ActiveDB, dbName)
+	updateDBStatus(&dbClaim.Status.ActiveDB, dbName)
 
-	err = r.manageUser(dbClient, dbClaim.Status.ActiveDB, dbName, dbClaim.Spec.Username)
+	err = r.manageUser(dbClient, &dbClaim.Status.ActiveDB, dbName, dbClaim.Spec.Username)
 	if err != nil {
 		return err
 	}
@@ -1294,7 +1296,7 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, lo
 	if connInfo.Password == "" {
 		return nil, fmt.Errorf("invalid credentials (password)")
 	}
-	updateHostPortStatus(dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
+	updateHostPortStatus(&dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
 	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: connInfo.Dsn()})
 
@@ -1359,8 +1361,19 @@ loop:
 			break loop
 		case pgctl.S_Retry:
 			logr.Info("Retry called")
+			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
+		case pgctl.S_RerouteTargetSecret:
+			s = next
+			dbClaim.Status.MigrationState = s.String()
+			if err := r.Status().Update(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim status")
+				return r.manageError(ctx, dbClaim, err)
+			}
+			dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+			if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
 
-			return ctrl.Result{RequeueAfter: 30 * time.Second, Requeue: true}, nil
 		default:
 			s = next
 			dbClaim.Status.MigrationState = s.String()
@@ -1373,7 +1386,6 @@ loop:
 	dbClaim.Status.MigrationState = pgctl.S_Completed.String()
 
 	//done with migration- switch active server to newDB
-	dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
 	dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
@@ -1382,9 +1394,6 @@ loop:
 	}
 
 	//create connection info secret
-	if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
-		return r.manageError(ctx, dbClaim, err)
-	}
 
 	return r.manageSuccess(ctx, dbClaim)
 }
@@ -1416,7 +1425,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 			return ctrl.Result{}, err
 		}
 		if !isReady {
-			logr.Info("cloud instance %s is in progress. requeueing")
+			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
 		}
 		logr.Info("cloud instance ready. reading generated master secret")
@@ -1445,20 +1454,25 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		return ctrl.Result{}, err
 	}
 	defer dbClient.Close()
+	if dbClaim.Status.NewDB.ConnectionInfo.Host == dbClaim.Status.ActiveDB.ConnectionInfo.Host {
+		dbClaim.Status.NewDB.UserUpdatedAt = dbClaim.Status.ActiveDB.UserUpdatedAt
+		dbClaim.Status.NewDB.DbCreatedAt = dbClaim.Status.ActiveDB.DbCreatedAt
+		dbClaim.Status.NewDB.ConnectionInfoUpdatedAt = dbClaim.Status.ActiveDB.ConnectionInfoUpdatedAt
+	}
 
-	if err := r.manageDatabase(dbClient, dbClaim.Status.NewDB); err != nil {
+	if err := r.manageDatabase(dbClient, &dbClaim.Status.NewDB); err != nil {
 		return ctrl.Result{}, err
 
 	}
 
-	err = r.manageUser(dbClient, dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
+	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status persistancev1.Status) error {
+func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status *persistancev1.Status) error {
 	logr := r.Log.WithValues("func", "manageDatabase")
 
 	dbName := r.Input.MasterConnInfo.DatabaseName
@@ -1473,7 +1487,7 @@ func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, statu
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status persistancev1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
 	logr := r.Log.WithValues("func", "manageUser")
 
 	// baseUsername := dbClaim.Spec.Username
@@ -1486,7 +1500,7 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status pe
 		return err
 	}
 
-	if dbu.IsUserChanged(status) {
+	if dbu.IsUserChanged(*status) {
 		oldUsername := dbu.TrimUserSuffix(status.ConnectionInfo.Username)
 		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
 			return err
