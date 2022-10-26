@@ -554,6 +554,7 @@ func (s *reroute_target_secret_state) String() string {
 
 func (s *validate_migration_status_state) Execute() (State, error) {
 	//log := s.config.log.WithValues("state", s.String())
+	//place holder to implement any validation
 	return &disable_source_access_state{
 		config: s.config,
 	}, nil
