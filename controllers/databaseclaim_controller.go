@@ -68,6 +68,7 @@ type input struct {
 	FragmentKey      string
 	ManageCloudDB    bool
 	MasterConnInfo   persistancev1.DatabaseClaimConnectionInfo
+	TempSecret       string
 	DbHostIdentifier string
 	DbType           string
 }
@@ -108,6 +109,71 @@ func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
 	}
 
 	return true
+}
+
+func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) {
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setMode")
+
+	if *dbClaim.Spec.UseExistingSource {
+		if dbClaim.Spec.SourceDataFrom.Type == "database" {
+			r.Mode = M_UseExistingDB
+		}
+	} else if dbClaim.Spec.SourceDataFrom != nil {
+		if dbClaim.Spec.SourceDataFrom.Type == "database" {
+			if dbClaim.Status.MigrationState == "" {
+				r.Mode = M_MigrateToNewDB
+			} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
+				r.Mode = M_MigrationInProgress
+			} else {
+				r.Mode = M_UseNewDB
+			}
+		}
+	} else {
+		r.Mode = M_UseNewDB
+	}
+
+	logr.Info("successfully selected mode for", "dbclaim", dbClaim.Spec, "selected mode", r.Mode)
+}
+
+func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
+
+	r.Input = &input{}
+	var (
+		fragmentKey      string
+		err              error
+		createCloudDB    bool
+		dbHostIdentifier string
+	)
+	if dbClaim.Spec.InstanceLabel != "" {
+		fragmentKey, err = r.matchInstanceLabel(dbClaim)
+		if err != nil {
+			return err
+		}
+	}
+	connInfo := r.getClientConn(fragmentKey, dbClaim)
+	if connInfo.Port == "" {
+		return fmt.Errorf("cannot get master port")
+	}
+	if connInfo.Username == "" {
+		return fmt.Errorf("invalid credentials (username)")
+	}
+	if connInfo.SSLMode == "" {
+		return fmt.Errorf("invalid sslMode")
+	}
+	if connInfo.DatabaseName == "" {
+		return fmt.Errorf("invalid DatabaseName")
+	}
+	if connInfo.Host == "" {
+		createCloudDB = true
+		dbHostIdentifier = r.getDynamicHostName(dbClaim)
+	}
+	r.Input = &input{ManageCloudDB: createCloudDB,
+		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
+		DbType: string(dbClaim.Spec.Type), DbHostIdentifier: dbHostIdentifier,
+	}
+	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
+	return nil
 }
 
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -155,85 +221,11 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				return ctrl.Result{}, err
 			}
 		}
-
 		// Stop reconciliation as the item is being deleted
 		return ctrl.Result{}, nil
 	}
 
 	return r.updateStatus(ctx, &dbClaim)
-}
-
-func (r *DatabaseClaimReconciler) setMode(dbClaim *persistancev1.DatabaseClaim) {
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setMode")
-
-	if *dbClaim.Spec.UseExistingSource {
-		if dbClaim.Spec.SourceDataFrom.Type == "database" {
-			r.Mode = M_UseExistingDB
-		}
-	} else if dbClaim.Spec.SourceDataFrom != nil {
-		if dbClaim.Spec.SourceDataFrom.Type == "database" {
-			if dbClaim.Status.MigrationState == "" {
-				r.Mode = M_MigrateToNewDB
-			} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-				r.Mode = M_MigrationInProgress
-			} else {
-				r.Mode = M_UseNewDB
-			}
-		}
-	} else {
-		r.Mode = M_UseNewDB
-	}
-
-	logr.Info("successfully selected mode for", "dbclaim", dbClaim.Spec, "selected mode", r.Mode)
-
-}
-func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
-
-	r.Input = &input{}
-	var (
-		fragmentKey      string
-		err              error
-		createCloudDB    bool
-		dbHostIdentifier string
-	)
-	if dbClaim.Spec.InstanceLabel != "" {
-		fragmentKey, err = r.matchInstanceLabel(dbClaim)
-		if err != nil {
-			return err
-		}
-	}
-	connInfo := r.getClientConn(fragmentKey, dbClaim)
-	if connInfo.Port == "" {
-		return fmt.Errorf("cannot get master port")
-	}
-	if connInfo.Username == "" {
-		return fmt.Errorf("invalid credentials (username)")
-	}
-	if connInfo.SSLMode == "" {
-		return fmt.Errorf("invalid sslMode")
-	}
-	if connInfo.DatabaseName == "" {
-		return fmt.Errorf("invalid DatabaseName")
-	}
-	if connInfo.Host == "" {
-		createCloudDB = true
-		dbHostIdentifier = r.getDynamicHostName(dbClaim)
-	}
-	r.Input = &input{ManageCloudDB: createCloudDB,
-		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
-		DbType: string(dbClaim.Spec.Type), DbHostIdentifier: dbHostIdentifier,
-	}
-	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
-
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", r.Input.DbType,
-		r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password,
-		r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port,
-		"postgres", r.Input.MasterConnInfo.SSLMode)
 }
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
@@ -274,15 +266,11 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 				return r.manageError(ctx, dbClaim, err)
 			}
 		}
-		//r.setReqInfo(dbClaim)
-		// return r.manageSuccess(ctx, dbClaim)
+
 		return r.reconcileMigrateToNewDB(ctx, dbClaim)
 	}
 	if r.Mode == M_MigrationInProgress {
-		logr.Info("migration in progress")
-		//check if existingDB has been already reconciled, else reconcileUseExisitngDB
-		//r.setReqInfo(dbClaim)
-		// return r.manageSuccess(ctx, dbClaim)
+
 		return r.reconcileMigrationInProgress(ctx, dbClaim)
 	}
 	if r.Mode == M_UseNewDB {
@@ -296,17 +284,319 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			logr.Info("requeuing request")
 			return result, nil
 		}
-		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
-		dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-		if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
+		newDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
+		newDBConnInfo.Password = r.Input.TempSecret
+
+		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
+		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+		dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+
 		return r.manageSuccess(ctx, dbClaim)
 	}
 
 	logr.Info("unhandled mode")
 	return r.manageError(ctx, dbClaim, fmt.Errorf("unhandled mode"))
 
+}
+
+func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExisitngDB")
+
+	existingDBConnInfo, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
+	if err != nil {
+		return err
+	}
+	logr.Info("creating database client")
+	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
+	if err != nil {
+		logr.Error(err, "creating database client error")
+		return err
+	}
+	defer dbClient.Close()
+
+	logr.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
+
+	dbName := existingDBConnInfo.DatabaseName
+	updateDBStatus(&dbClaim.Status.ActiveDB, dbName)
+
+	err = r.manageUser(dbClient, &dbClaim.Status.ActiveDB, dbName, dbClaim.Spec.Username)
+	if err != nil {
+		return err
+	}
+	if err := r.Status().Update(ctx, dbClaim); err != nil {
+		logr.Error(err, "could not update db claim")
+		return err
+	} // create connection info secret
+	if r.Input.TempSecret != "" {
+		logr.Info("password reset. updating secret")
+		activeDBConnInfo := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
+		activeDBConnInfo.Password = r.Input.TempSecret
+
+		if err := r.createOrUpdateSecret(ctx, dbClaim, activeDBConnInfo); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
+	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
+
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
+	logr.Info("reconcileNewDB", "r.Input", r.Input)
+
+	if r.Input.ManageCloudDB {
+		isReady, err := r.manageCloudHost(ctx, dbClaim)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !isReady {
+			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+		}
+		logr.Info("cloud instance ready. reading generated master secret")
+		connInfo, err := r.readResourceSecret(ctx, dbClaim)
+		if err != nil {
+			logr.Info("unable to read the complete secret. requeueing")
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+		}
+		r.Input.MasterConnInfo.Host = connInfo.Host
+		r.Input.MasterConnInfo.Password = connInfo.Password
+		r.Input.MasterConnInfo.Port = connInfo.Port
+		r.Input.MasterConnInfo.Username = connInfo.Username
+
+	} else {
+		password, err := r.readMasterPassword(ctx, dbClaim)
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		// password := "postgres"
+		r.Input.MasterConnInfo.Password = password
+	}
+
+	dbClient, err := r.getDBClient(dbClaim)
+	if err != nil {
+		logr.Error(err, "creating database client error")
+		return ctrl.Result{}, err
+	}
+	defer dbClient.Close()
+
+	if dbClaim.Status.NewDB.ConnectionInfo.Host == dbClaim.Status.ActiveDB.ConnectionInfo.Host {
+		dbClaim.Status.NewDB.UserUpdatedAt = dbClaim.Status.ActiveDB.UserUpdatedAt
+		dbClaim.Status.NewDB.DbCreatedAt = dbClaim.Status.ActiveDB.DbCreatedAt
+		dbClaim.Status.NewDB.ConnectionInfoUpdatedAt = dbClaim.Status.ActiveDB.ConnectionInfoUpdatedAt
+	}
+
+	if err := r.manageDatabase(dbClient, &dbClaim.Status.NewDB); err != nil {
+		return ctrl.Result{}, err
+
+	}
+
+	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
+	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
+
+	result, err := r.reconcileNewDB(ctx, dbClaim)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+	if result.Requeue {
+		return result, nil
+	}
+	//store a temp secret to beused by migration process
+	//removing the practice of storing the secret in status
+	if r.Input.TempSecret != "" {
+		r.createTempSecret(ctx, r.Input.TempSecret, dbClaim)
+	}
+
+	return r.reconcileMigrationInProgress(ctx, dbClaim)
+}
+
+func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context,
+	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileMigrationInProgress")
+
+	migrationState := dbClaim.Status.MigrationState
+
+	logr.Info("Migration is progress", "state", migrationState)
+
+	logr.Info("cloud instance ready. reading generated master secret")
+	connInfo, err := r.readResourceSecret(ctx, dbClaim)
+	if err != nil {
+		logr.Info("unable to read the complete secret. requeueing")
+		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+	}
+	r.Input.MasterConnInfo.Host = connInfo.Host
+	r.Input.MasterConnInfo.Password = connInfo.Password
+	r.Input.MasterConnInfo.Port = connInfo.Port
+	r.Input.MasterConnInfo.Username = connInfo.Username
+
+	target_master_dsn := r.Input.MasterConnInfo.Dsn()
+	target_app_conn := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
+	target_app_conn.Password, err = r.getTempPasswordFromSecret(ctx, dbClaim)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+
+	source_master_conn, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+	source_master_conn.Password, err = r.getSrcAdminPasswdFromSecret(ctx, dbClaim)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+
+	source_app_conn := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
+	source_app_conn.Password, err = r.getSrcAppPasswdFromSecret(ctx, dbClaim)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+
+	config := pgctl.Config{
+		Log:              r.Log,
+		SourceDBAdminDsn: source_master_conn.Dsn(),
+		SourceDBUserDsn:  source_app_conn.Dsn(),
+		TargetDBUserDsn:  target_app_conn.Dsn(),
+		TargetDBAdminDsn: target_master_dsn,
+		ExportFilePath:   r.Config.GetString("pgTemp"),
+	}
+
+	logr.Info("DSN", "config", config)
+
+	s, err := pgctl.GetReplicatorState(migrationState, config)
+	if err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+
+loop:
+	for {
+		next, err := s.Execute()
+		if err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		switch next.Id() {
+		case pgctl.S_Completed:
+			logr.Info("Completed Migration")
+			break loop
+
+		case pgctl.S_Retry:
+			logr.Info("Retry called")
+			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
+
+		case pgctl.S_RerouteTargetSecret:
+			s = next
+			dbClaim.Status.MigrationState = s.String()
+			if err := r.Status().Update(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim status")
+				return r.manageError(ctx, dbClaim, err)
+			}
+			if err := r.createOrUpdateSecret(ctx, dbClaim, target_app_conn); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
+
+		default:
+			s = next
+			dbClaim.Status.MigrationState = s.String()
+			if err := r.Status().Update(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim status")
+				return r.manageError(ctx, dbClaim, err)
+			}
+		}
+	}
+	dbClaim.Status.MigrationState = pgctl.S_Completed.String()
+
+	//done with migration- switch active server to newDB
+	dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+	dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+
+	if err := r.Status().Update(ctx, dbClaim); err != nil {
+		logr.Error(err, "could not update db claim")
+		return r.manageError(ctx, dbClaim, err)
+	}
+	err = r.deleteTempSecret(ctx, dbClaim)
+	if err != nil {
+		logr.Error(err, "ignoring delete temp secret error")
+	}
+	//create connection info secret
+	logr.Info("migration complete")
+	return r.manageSuccess(ctx, dbClaim)
+}
+
+func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
+	dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
+
+	secretKey := "password"
+	gs := &corev1.Secret{}
+
+	if connInfo.Port == "" {
+		return nil, fmt.Errorf("cannot get master port")
+	}
+
+	if connInfo.Username == "" {
+		return nil, fmt.Errorf("invalid credentials (username)")
+	}
+
+	if connInfo.SSLMode == "" {
+		return nil, fmt.Errorf("invalid sslMode")
+	}
+
+	r.Log.Info("using credentials from secret")
+
+	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
+	}, gs)
+	if err != nil {
+		return nil, err
+	}
+	connInfo.Password = string(gs.Data[secretKey])
+
+	if connInfo.Password == "" {
+		return nil, fmt.Errorf("invalid credentials (password)")
+	}
+	updateHostPortStatus(&dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
+
+	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: connInfo.Dsn()})
+}
+
+func (r *DatabaseClaimReconciler) getClientConn(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
+	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
+
+	connInfo.Host = r.getMasterHost(dbClaim)
+	connInfo.Port = r.getMasterPort(dbClaim)
+	connInfo.Username = r.getMasterUser(dbClaim)
+	connInfo.SSLMode = r.getSSLMode(dbClaim)
+	connInfo.DatabaseName = GetDBName(dbClaim)
+	return connInfo
+}
+
+func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseClaim) (dbclient.Client, error) {
+	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
+
+	logr.Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
+	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
+	return dbclient.New(dbclient.Config{Log: r.Log, DBType: r.Input.DbType, DSN: r.getMasterDefaultDsn()})
+}
+
+func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
+
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", r.Input.DbType,
+		r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password,
+		r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port,
+		"postgres", r.Input.MasterConnInfo.SSLMode)
 }
 
 func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
@@ -576,6 +866,83 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
+func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status *persistancev1.Status) error {
+	logr := r.Log.WithValues("func", "manageDatabase")
+
+	dbName := r.Input.MasterConnInfo.DatabaseName
+	created, err := dbClient.CreateDatabase(dbName)
+	if err != nil {
+		msg := fmt.Sprintf("error creating database postgresURI %s using %s", dbName, r.Input.MasterConnInfo.Dsn())
+		logr.Error(err, msg)
+		return err
+	} else if created || status.ConnectionInfo.DatabaseName == "" {
+		updateDBStatus(status, dbName)
+	}
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
+	logr := r.Log.WithValues("func", "manageUser")
+
+	// baseUsername := dbClaim.Spec.Username
+	dbu := dbuser.NewDBUser(baseUsername)
+	rotationTime := r.getPasswordRotationTime()
+
+	// create role
+	_, err := dbClient.CreateGroup(dbName, baseUsername)
+	if err != nil {
+		return err
+	}
+
+	if dbu.IsUserChanged(*status) {
+		oldUsername := dbu.TrimUserSuffix(status.ConnectionInfo.Username)
+		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
+			return err
+		}
+		// updating user a
+		userPassword, err := r.generatePassword()
+		if err != nil {
+			return err
+		}
+		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixA, dbu.GetUserA(), baseUsername, userPassword); err != nil {
+			return err
+		}
+		r.updateUserStatus(status, dbu.GetUserA(), userPassword)
+		// updating user b
+		userPassword, err = r.generatePassword()
+		if err != nil {
+			return err
+		}
+		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixB, dbu.GetUserB(), baseUsername, userPassword); err != nil {
+			return err
+		}
+	}
+
+	if status.UserUpdatedAt == nil || time.Since(status.UserUpdatedAt.Time) > rotationTime {
+		logr.Info("rotating users")
+
+		userPassword, err := r.generatePassword()
+		if err != nil {
+			return err
+		}
+
+		nextUser := dbu.NextUser(status.ConnectionInfo.Username)
+		created, err := dbClient.CreateUser(nextUser, baseUsername, userPassword)
+		if err != nil {
+			metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
+			return err
+		}
+
+		if !created {
+			if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
+				return err
+			}
+		}
+		r.updateUserStatus(status, nextUser, userPassword)
+	}
+
+	return nil
+}
 
 type DynamicHostParms struct {
 	Engine                          string
@@ -721,7 +1088,6 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}
 
 	return r.isResourceReady(dbCluster.Status.ResourceStatus), nil
-
 }
 
 func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, dbHostName string,
@@ -1007,6 +1373,42 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 
 	return true, nil
 }
+func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim,
+	connInfo *persistancev1.DatabaseClaimConnectionInfo) error {
+
+	gs := &corev1.Secret{}
+	dbType := dbClaim.Spec.Type
+	secretName := dbClaim.Spec.SecretName
+	var dsn, dbURI string
+
+	switch dbType {
+	case dbclient.PostgresType:
+		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
+		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
+	default:
+		return fmt.Errorf("unknown DB type")
+	}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: dbClaim.Namespace,
+		Name:      secretName,
+	}, gs)
+
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		if err := r.createSecret(ctx, dbClaim, dsn, dbURI, connInfo); err != nil {
+			return err
+		}
+	} else if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, connInfo, gs); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo) error {
 	secretName := dbClaim.Spec.SecretName
@@ -1055,42 +1457,6 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	r.Log.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
-}
-
-func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
-	gs := &corev1.Secret{}
-	dbType := dbClaim.Spec.Type
-	secretName := dbClaim.Spec.SecretName
-	connInfo := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
-	var dsn, dbURI string
-
-	switch dbType {
-	case dbclient.PostgresType:
-		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
-			connInfo.DatabaseName, connInfo.SSLMode)
-		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
-			connInfo.DatabaseName, connInfo.SSLMode)
-	default:
-		return fmt.Errorf("unknown DB type")
-	}
-
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Namespace: dbClaim.Namespace,
-		Name:      secretName,
-	}, gs)
-
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
-		if err := r.createSecret(ctx, dbClaim, dsn, dbURI, connInfo); err != nil {
-			return err
-		}
-	} else if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, connInfo, gs); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
@@ -1167,26 +1533,6 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 	return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 }
 
-func (r *DatabaseClaimReconciler) getClientConn(fragmentKey string, dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
-	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
-
-	connInfo.Host = r.getMasterHost(dbClaim)
-	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = r.getMasterUser(dbClaim)
-	connInfo.SSLMode = r.getSSLMode(dbClaim)
-	connInfo.DatabaseName = GetDBName(dbClaim)
-	return connInfo
-}
-
-func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseClaim) (dbclient.Client, error) {
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
-
-	logr.Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
-	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
-	return dbclient.New(dbclient.Config{Log: r.Log, DBType: r.Input.DbType, DSN: r.getMasterDefaultDsn()})
-
-}
-
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
 	if dbClaim.Spec.DBNameOverride != "" {
 		return dbClaim.Spec.DBNameOverride
@@ -1195,11 +1541,11 @@ func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
 	return dbClaim.Spec.DatabaseName
 }
 
-func updateUserStatus(status *persistancev1.Status, userName, userPassword string) {
+func (r *DatabaseClaimReconciler) updateUserStatus(status *persistancev1.Status, userName, userPassword string) {
 	timeNow := metav1.Now()
 	status.UserUpdatedAt = &timeNow
 	status.ConnectionInfo.Username = userName
-	status.ConnectionInfo.Password = userPassword
+	r.Input.TempSecret = userPassword
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
@@ -1226,331 +1572,7 @@ func getServiceNamespace() (string, error) {
 	return ns, nil
 }
 
-func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExisitngDB")
-
-	existingDBConnInfo, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
-	if err != nil {
-		return err
-	}
-	logr.Info("creating database client")
-	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
-	if err != nil {
-		logr.Error(err, "creating database client error")
-		return err
-	}
-	defer dbClient.Close()
-
-	logr.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
-
-	dbName := existingDBConnInfo.DatabaseName
-	updateDBStatus(&dbClaim.Status.ActiveDB, dbName)
-
-	err = r.manageUser(dbClient, &dbClaim.Status.ActiveDB, dbName, dbClaim.Spec.Username)
-	if err != nil {
-		return err
-	}
-	if err := r.Status().Update(ctx, dbClaim); err != nil {
-		logr.Error(err, "could not update db claim")
-		return err
-	} // create connection info secret
-	if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
-	dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
-
-	secretKey := "password"
-	gs := &corev1.Secret{}
-
-	if connInfo.Port == "" {
-		return nil, fmt.Errorf("cannot get master port")
-	}
-
-	if connInfo.Username == "" {
-		return nil, fmt.Errorf("invalid credentials (username)")
-	}
-
-	if connInfo.SSLMode == "" {
-		return nil, fmt.Errorf("invalid sslMode")
-	}
-
-	r.Log.Info("using credentials from secret")
-
-	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
-	if ns == "" {
-		ns = "default"
-	}
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Namespace: ns,
-		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
-	}, gs)
-	if err != nil {
-		return nil, err
-	}
-	connInfo.Password = string(gs.Data[secretKey])
-
-	if connInfo.Password == "" {
-		return nil, fmt.Errorf("invalid credentials (password)")
-	}
-	updateHostPortStatus(&dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
-
-	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: connInfo.Dsn()})
-
-}
-
-func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context,
-	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileMigrationInProgress")
-
-	migrationState := dbClaim.Status.MigrationState
-
-	logr.Info("Migration is progress", "state", migrationState)
-
-	logr.Info("cloud instance ready. reading generated master secret")
-	connInfo, err := r.readResourceSecret(ctx, dbClaim)
-	if err != nil {
-		logr.Info("unable to read the complete secret. requeueing")
-		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
-	}
-	r.Input.MasterConnInfo.Host = connInfo.Host
-	r.Input.MasterConnInfo.Password = connInfo.Password
-	r.Input.MasterConnInfo.Port = connInfo.Port
-	r.Input.MasterConnInfo.Username = connInfo.Username
-
-	target_master_dsn := r.Input.MasterConnInfo.Dsn()
-	target_app_conn := dbClaim.Status.NewDB.ConnectionInfo
-	source_master_conn, err := persistancev1.ParseDsn(dbClaim.Spec.SourceDataFrom.Database.DSN)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
-	}
-	source_master_conn.Password, err = r.getPasswordFromSecret(ctx, dbClaim)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
-	}
-	source_app_conn := dbClaim.Status.ActiveDB.ConnectionInfo
-
-	config := pgctl.Config{
-		Log:              r.Log,
-		SourceDBAdminDsn: source_master_conn.Dsn(),
-		SourceDBUserDsn:  source_app_conn.Dsn(),
-		TargetDBUserDsn:  target_app_conn.Dsn(),
-		TargetDBAdminDsn: target_master_dsn,
-		ExportFilePath:   r.Config.GetString("pgTemp"),
-	}
-
-	logr.Info("DSN", "config", config)
-
-	s, err := pgctl.GetReplicatorState(migrationState, config)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
-	}
-
-loop:
-	for {
-		next, err := s.Execute()
-		if err != nil {
-			return r.manageError(ctx, dbClaim, err)
-		}
-		switch next.Id() {
-		case pgctl.S_Completed:
-			logr.Info("Completed Migration")
-			break loop
-		case pgctl.S_Retry:
-			logr.Info("Retry called")
-			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
-		case pgctl.S_RerouteTargetSecret:
-			s = next
-			dbClaim.Status.MigrationState = s.String()
-			if err := r.Status().Update(ctx, dbClaim); err != nil {
-				logr.Error(err, "could not update db claim status")
-				return r.manageError(ctx, dbClaim, err)
-			}
-			dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
-			if err := r.createOrUpdateSecret(ctx, dbClaim); err != nil {
-				return r.manageError(ctx, dbClaim, err)
-			}
-
-		default:
-			s = next
-			dbClaim.Status.MigrationState = s.String()
-			if err := r.Status().Update(ctx, dbClaim); err != nil {
-				logr.Error(err, "could not update db claim status")
-				return r.manageError(ctx, dbClaim, err)
-			}
-		}
-	}
-	dbClaim.Status.MigrationState = pgctl.S_Completed.String()
-
-	//done with migration- switch active server to newDB
-	dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-
-	if err := r.Status().Update(ctx, dbClaim); err != nil {
-		logr.Error(err, "could not update db claim")
-		return r.manageError(ctx, dbClaim, err)
-	}
-
-	//create connection info secret
-
-	return r.manageSuccess(ctx, dbClaim)
-}
-func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
-	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
-
-	result, err := r.reconcileNewDB(ctx, dbClaim)
-	if err != nil {
-		return r.manageError(ctx, dbClaim, err)
-	}
-	if result.Requeue {
-		return result, nil
-	}
-
-	return r.reconcileMigrationInProgress(ctx, dbClaim)
-
-}
-
-func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
-	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
-
-	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
-
-	logr.Info("reconcileNewDB", "r.Input", r.Input)
-
-	if r.Input.ManageCloudDB {
-		isReady, err := r.manageCloudHost(ctx, dbClaim)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !isReady {
-			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
-		}
-		logr.Info("cloud instance ready. reading generated master secret")
-		connInfo, err := r.readResourceSecret(ctx, dbClaim)
-		if err != nil {
-			logr.Info("unable to read the complete secret. requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
-		}
-		r.Input.MasterConnInfo.Host = connInfo.Host
-		r.Input.MasterConnInfo.Password = connInfo.Password
-		r.Input.MasterConnInfo.Port = connInfo.Port
-		r.Input.MasterConnInfo.Username = connInfo.Username
-
-	} else {
-		password, err := r.readMasterPassword(ctx, dbClaim)
-		if err != nil {
-			return r.manageError(ctx, dbClaim, err)
-		}
-		// password := "postgres"
-		r.Input.MasterConnInfo.Password = password
-	}
-
-	dbClient, err := r.getDBClient(dbClaim)
-	if err != nil {
-		logr.Error(err, "creating database client error")
-		return ctrl.Result{}, err
-	}
-	defer dbClient.Close()
-	if dbClaim.Status.NewDB.ConnectionInfo.Host == dbClaim.Status.ActiveDB.ConnectionInfo.Host {
-		dbClaim.Status.NewDB.UserUpdatedAt = dbClaim.Status.ActiveDB.UserUpdatedAt
-		dbClaim.Status.NewDB.DbCreatedAt = dbClaim.Status.ActiveDB.DbCreatedAt
-		dbClaim.Status.NewDB.ConnectionInfoUpdatedAt = dbClaim.Status.ActiveDB.ConnectionInfoUpdatedAt
-	}
-
-	if err := r.manageDatabase(dbClient, &dbClaim.Status.NewDB); err != nil {
-		return ctrl.Result{}, err
-
-	}
-
-	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status *persistancev1.Status) error {
-	logr := r.Log.WithValues("func", "manageDatabase")
-
-	dbName := r.Input.MasterConnInfo.DatabaseName
-	created, err := dbClient.CreateDatabase(dbName)
-	if err != nil {
-		msg := fmt.Sprintf("error creating database postgresURI %s using %s", dbName, r.Input.MasterConnInfo.Dsn())
-		logr.Error(err, msg)
-		return err
-	} else if created || status.ConnectionInfo.DatabaseName == "" {
-		updateDBStatus(status, dbName)
-	}
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
-	logr := r.Log.WithValues("func", "manageUser")
-
-	// baseUsername := dbClaim.Spec.Username
-	dbu := dbuser.NewDBUser(baseUsername)
-	rotationTime := r.getPasswordRotationTime()
-
-	// create role
-	_, err := dbClient.CreateGroup(dbName, baseUsername)
-	if err != nil {
-		return err
-	}
-
-	if dbu.IsUserChanged(*status) {
-		oldUsername := dbu.TrimUserSuffix(status.ConnectionInfo.Username)
-		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
-			return err
-		}
-		// updating user a
-		userPassword, err := r.generatePassword()
-		if err != nil {
-			return err
-		}
-		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixA, dbu.GetUserA(), baseUsername, userPassword); err != nil {
-			return err
-		}
-		updateUserStatus(status, dbu.GetUserA(), userPassword)
-		// updating user b
-		userPassword, err = r.generatePassword()
-		if err != nil {
-			return err
-		}
-		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixB, dbu.GetUserB(), baseUsername, userPassword); err != nil {
-			return err
-		}
-	}
-
-	if status.UserUpdatedAt == nil || time.Since(status.UserUpdatedAt.Time) > rotationTime {
-		logr.Info("rotating users")
-
-		userPassword, err := r.generatePassword()
-		if err != nil {
-			return err
-		}
-
-		nextUser := dbu.NextUser(status.ConnectionInfo.Username)
-		created, err := dbClient.CreateUser(nextUser, baseUsername, userPassword)
-		if err != nil {
-			metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
-			return err
-		}
-
-		if !created {
-			if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
-				return err
-			}
-		}
-		updateUserStatus(status, nextUser, userPassword)
-	}
-
-	return nil
-}
-
-func (r *DatabaseClaimReconciler) getPasswordFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) getSrcAdminPasswdFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 	secretKey := "password"
 	gs := &corev1.Secret{}
 
@@ -1566,5 +1588,111 @@ func (r *DatabaseClaimReconciler) getPasswordFromSecret(ctx context.Context, dbC
 		return "", err
 	}
 	return string(gs.Data[secretKey]), nil
+}
 
+func (r *DatabaseClaimReconciler) getSrcAppPasswdFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+	secretKey := "password"
+	secretName := dbClaim.Spec.SecretName
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		r.Log.Error(err, "getSrcAppPasswdFromSecret failed")
+		return "", err
+	}
+	return string(gs.Data[secretKey]), nil
+}
+
+func (r *DatabaseClaimReconciler) deleteTempSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+	secretName := "temp-" + dbClaim.Spec.SecretName
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return r.Client.Delete(ctx, gs)
+}
+
+func (r *DatabaseClaimReconciler) getTempPasswordFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+	secretKey := "password"
+	secretName := "temp-" + dbClaim.Spec.SecretName
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+	return string(gs.Data[secretKey]), nil
+}
+
+func (r *DatabaseClaimReconciler) createTempSecret(ctx context.Context, password string, dbClaim *persistancev1.DatabaseClaim) error {
+
+	gs := &corev1.Secret{}
+	secretName := "temp-" + dbClaim.Spec.SecretName
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: dbClaim.Namespace,
+		Name:      secretName,
+	}, gs)
+
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		truePtr := true
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: dbClaim.Namespace,
+				Name:      secretName,
+				Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "persistance.atlas.infoblox.com/v1",
+						Kind:               "DatabaseClaim",
+						Name:               dbClaim.Name,
+						UID:                dbClaim.UID,
+						Controller:         &truePtr,
+						BlockOwnerDeletion: &truePtr,
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"password": []byte(password),
+			},
+		}
+
+		r.Log.Info("creating temp secret", "name", secret.Name, "namespace", secret.Namespace)
+		return r.Client.Create(ctx, secret)
+	} else {
+		r.Log.Info("updating temp secret", "name", secretName)
+		gs.Data["password"] = []byte(password)
+		return r.Client.Update(ctx, gs)
+	}
 }
