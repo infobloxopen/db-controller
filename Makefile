@@ -32,16 +32,16 @@ CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
 CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
 
 ifeq ($(AWS_ACCESS_KEY_ID),)
-export AWS_ACCESS_KEY_ID     := $(shell aws configure get aws_access_key_id)
+export AWS_ACCESS_KEY_ID	 := $(shell aws configure get aws_access_key_id)
 endif
 ifeq ($(AWS_SECRET_ACCESS_KEY),)
 export AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
 endif
 ifeq ($(AWS_REGION),)
-export AWS_REGION            := $(shell aws configure get region)
+export AWS_REGION			 := $(shell aws configure get region)
 endif
 ifeq ($(AWS_SESSION_TOKEN),)
-export AWS_SESSION_TOKEN     := $(shell aws configure get aws_session_token)
+export AWS_SESSION_TOKEN	 := $(shell aws configure get aws_session_token)
 endif
 
 HELM ?= docker run \
@@ -160,15 +160,22 @@ docker-build-dbproxy:
 	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} .
 
 .PHONY: docker-build
-docker-build: #test ## Build docker image with the manager.
+docker-build: .image-${TAG} #test ## Build docker image with the manager.
+
+
+.image-${TAG}:
 	docker build -t ${IMG_PATH}:${TAG} .
+	@touch $@
 
 docker-push-dbproxy: docker-build-dbproxy
 	docker push ${DBPROXY_IMG_PATH}:${TAG}
 
-.PHONY: docker-push
-docker-push: docker-build
+.push-${TAG}: docker-build
 	docker push ${IMG_PATH}:${TAG}
+	@touch $@
+
+.PHONY: docker-push
+docker-push: .push-${TAG}
 
 ##@ Deployment
 
@@ -302,9 +309,10 @@ build-properties:
 build-properties-crd:
 	@sed 's/{CHART_FILE}/$(CHART_FILE_CRD)/g' build.properties.in > crd.build.properties
 
-build-chart:
-	sed "s/appVersion: \"APP_VERSION\"/appVersion: \"${TAG}\"/g" ${DB_CONTROLLER_CHART_IN} > ${DB_CONTROLLER_CHART_YAML}
+${DB_CONTROLLER_CHART}-${CHART_VERSION}.tgz:
 	${HELM_ENTRYPOINT} "helm package ${DB_CONTROLLER_CHART} --version ${CHART_VERSION} --app-version ${APP_VERSION}"
+
+build-chart: ${DB_CONTROLLER_CHART}-${CHART_VERSION}.tgz
 
 build-chart-crd: update_crds
 	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
@@ -320,25 +328,21 @@ push-chart-crd:
 		s3 push ${CHART_FILE_CRD} infobloxcto
 
 clean:
-	@rm -f *build.properties || true
-	@rm -f *.tgz || true
-	sudo rm -rf /usr/local/kubebuilder
+	rm -f *build.properties || true
+	rm -f *.tgz || true
+	rm .push* .image*
 
 deploy-crds: .id build-chart-crd
 	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
 
-helm/db-controller/Chart.yaml: helm/db-controller/Chart.in
-	sed "s/appVersion: \"APP_VERSION\"/appVersion: \"${TAG}\"/g" $^ > $@
-
-deploy: .id docker-push helm/db-controller/Chart.yaml
-	helm upgrade --install `cat .id`-db-ctrl helm/db-controller \
-		 --debug --wait --namespace "`cat .id`" \
-	 	--create-namespace \
-                 -f helm/db-controller/minikube.yaml \
-	 	--set dbController.class=`cat .id` \
+deploy: .id docker-push build-chart
+	helm upgrade --install `cat .id`-db-ctrl ${IMAGE_NAME}-${CHART_VERSION}.tgz \
+		--debug --wait --namespace "`cat .id`" \
+		--create-namespace \
+		-f helm/db-controller/minikube.yaml \
+		--set dbController.class=`cat .id` \
 		--set image.tag="${TAG}" \
-	 	--set db.identifier.prefix=`cat .id` ${HELM_SETFLAGS}
-
+		--set db.identifier.prefix=`cat .id` ${HELM_SETFLAGS}
 
 undeploy: .id
 	helm delete --namespace `cat .id` `cat .id`-db-ctrl

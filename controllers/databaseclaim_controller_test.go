@@ -130,7 +130,7 @@ type mockClient struct {
 	client.Client
 }
 
-func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	_ = ctx
 	if (key.Namespace == "testNamespace") &&
 		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" ||
@@ -724,7 +724,7 @@ var multiConfig = []byte(`
     host: some.other.service
     port: 5412
     sslMode: require
-    passwordSecretRef: another-connection-secret	
+    passwordSecretRef: another-connection-secret
 `)
 
 func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {

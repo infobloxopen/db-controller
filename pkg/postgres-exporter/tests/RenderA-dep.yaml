@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: RenderA-ReleaseA
+  namespace: nsA
+  ownerReferences:
+    - apiVersion: persistance.atlas.infoblox.com/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: DatabaseClaim
+      name: RenderA
+      uid: owner-abcd
+  labels:
+    app: RenderA
+    release: ReleaseA
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: RenderA
+      release: ReleaseA
+  template:
+    metadata:
+      labels:
+        app: RenderA
+        release: ReleaseA
+        keyA: valueA
+      annotations:
+        checksum/config: e1134fb
+        annkey: annvalue
+        port: "80"
+    spec:
+      serviceAccountName: robot
+      containers:
+        - name: RenderA
+          args:
+          - "--extend.query-path=/etc/config.yaml"
+          env:
+          - name: DATA_SOURCE_NAME
+            valueFrom:
+              secretKeyRef:
+                name: "secret/data"
+                key: dsn.txt
+          - name: DATA_SOURCE_USER
+            value: data
+          image: ":"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9187
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 0
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            initialDelaySeconds: 0
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: http
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: queries
+              mountPath: /etc/config.yaml
+              subPath: config.yaml
+      securityContext:
+        null
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: RenderA-ReleaseA
+        name: queries
