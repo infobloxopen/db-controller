@@ -253,6 +253,8 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	logr.Info("object information", "uid", dbClaim.ObjectMeta.UID)
+
 	if permitted := r.isClassPermitted(*dbClaim.Spec.Class); !permitted {
 		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
 		return ctrl.Result{}, nil
@@ -262,18 +264,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
-	// examine DeletionTimestamp to determine if object is under deletion
-	if dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
-			controllerutil.AddFinalizer(&dbClaim, dbFinalizerName)
-			if err := r.Update(ctx, &dbClaim); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
+	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
 			// our finalizer is present, so lets handle any external dependency
@@ -291,6 +282,16 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		// Stop reconciliation as the item is being deleted
 		return ctrl.Result{}, nil
+	}
+
+	// The object is not being deleted, so if it does not have our finalizer,
+	// then lets add the finalizer and update the object. This is equivalent
+	// registering our finalizer.
+	if !controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+		controllerutil.AddFinalizer(&dbClaim, dbFinalizerName)
+		if err := r.Update(ctx, &dbClaim); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return r.updateStatus(ctx, &dbClaim)

@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ReleaseA-testA
+  namespace: nsA
+  ownerReferences: owner-abcd
+  labels:
+    app: testA
+    release: ReleaseA
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: testA
+      release: ReleaseA
+  template:
+    metadata:
+      labels:
+        app: testA
+        release: ReleaseA
+        keyA: valueA
+      annotations:
+        checksum/config: e1134fb
+        annkey: annvalue
+    spec:
+      serviceAccountName: robot
+      containers:
+        - name: testA
+          args:
+          - "--extend.query-path=/etc/config.yaml"
+          env:
+          - name: DATA_SOURCE_NAME
+            valueFrom:
+              secretKeyRef:
+                name: "secret/data"
+                key: dsn.txt
+          - name: DATA_SOURCE_USER
+            value: data
+          image: ":"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9187
+              protocol: TCP
+          livenessProbe:
+            initialDelaySeconds: 0
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            initialDelaySeconds: 0
+            timeoutSeconds: 1
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {}
+          volumeMounts:
+            - name: queries
+              mountPath: /etc/config.yaml
+              subPath: config.yaml
+      securityContext:
+        null
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: ReleaseA-testA
+        name: queries
