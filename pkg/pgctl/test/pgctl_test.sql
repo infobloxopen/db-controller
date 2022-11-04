@@ -56,7 +56,21 @@ BEGIN
             pg_user
         WHERE
             usename = 'appuser') THEN
-    CREATE USER appuser PASSWORD 'secret';
+    CREATE ROLE appuser NOLOGIN;
+END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT
+            *
+        FROM
+            pg_user
+        WHERE
+            usename = 'appuser_a') THEN
+    CREATE USER appuser_a PASSWORD 'secret';
 END IF;
 END
 $$;

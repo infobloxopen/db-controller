@@ -581,11 +581,15 @@ func (s *disable_source_access_state) Execute() (State, error) {
 		return nil, err
 	}
 
+	//if user name is sample_user_a, the role inherited is sample_user
+	//remove "_x" to get role name
+	//the role has all the permission - which needs to be removed now
+	user := u.User.Username()
 	stmt := `
 		REVOKE insert, delete, update
 		ON ALL TABLES IN SCHEMA PUBLIC FROM %s`
 
-	_, err = sourceDBAdmin.Exec(fmt.Sprintf(stmt, u.User.Username()))
+	_, err = sourceDBAdmin.Exec(fmt.Sprintf(stmt, user[:len(user)-2]))
 	if err != nil {
 		log.Error(err, "failed revoking access for source db")
 		return nil, err
