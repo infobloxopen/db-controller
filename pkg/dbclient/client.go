@@ -169,6 +169,10 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 
 	if !exists {
 		pc.log.Info("creating a ROLE", "role", rolename)
+		grant := `
+			GRANT ALL PRIVILEGES ON DATABASE %s TO %s;
+			GRANT ALL ON ALL TABLES IN SCHEMA public TO %s
+		`
 		_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
 		if err != nil {
 			pc.log.Error(err, "could not create role "+rolename)
@@ -176,7 +180,9 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 			return created, err
 		}
 
-		if _, err := db.Exec(fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s", pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename))); err != nil {
+		if _, err := db.Exec(fmt.Sprintf(grant, pq.QuoteIdentifier(dbName),
+			pq.QuoteIdentifier(rolename),
+			pq.QuoteIdentifier(rolename))); err != nil {
 			pc.log.Error(err, "could not set permissions to role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 			return created, err

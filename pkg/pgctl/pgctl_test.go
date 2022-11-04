@@ -102,7 +102,7 @@ func realTestMain(m *testing.M) int {
 		fmt.Println(err)
 		return 1
 	}
-	SourceDBUserDsn = fmt.Sprintf("postgres://appuser:secret@localhost:%s/pub?sslmode=disable", sourcePort)
+	SourceDBUserDsn = fmt.Sprintf("postgres://appuser_a:secret@localhost:%s/pub?sslmode=disable", sourcePort)
 
 	if err = setWalLevel(repository, sourceVersion, sourcePort); err != nil {
 		fmt.Println(err)
