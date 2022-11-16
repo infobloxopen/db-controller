@@ -31,6 +31,8 @@ rules:
     resources:
       - dbinstances
       - dbclusters
+      - dbparametergroups
+      - dbclusterparametergroups
     verbs:
       - get
       - list

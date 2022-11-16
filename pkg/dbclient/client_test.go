@@ -76,7 +76,7 @@ func setupSqlDB(t *testing.T) *testDB {
 
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "postgres",
-		Tag:        "10",
+		Tag:        "14",
 		Env: []string{
 			"POSTGRES_USER=" + user,
 			"POSTGRES_PASSWORD=" + pass,
