@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/armon/go-radix"
@@ -628,9 +629,14 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 
 		if reclaimPolicy == "delete" {
 			dbHostName := r.getDynamicHostName(dbClaim)
+			pgName := r.getParameterGroupName(ctx, dbClaim)
 			if fragmentKey == "" {
 				// Delete
-				return r.deleteCloudDatabase(dbHostName, ctx)
+				if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
+					return err
+				}
+				return r.deleteParameterGroup(ctx, pgName)
+
 			} else {
 				// Check there is no other Claims that use this fragment
 				var dbClaimList persistancev1.DatabaseClaimList
@@ -640,7 +646,11 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 
 				if len(dbClaimList.Items) == 1 {
 					// Delete
-					return r.deleteCloudDatabase(dbHostName, ctx)
+					if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
+						return err
+					}
+					return r.deleteParameterGroup(ctx, pgName)
+
 				}
 			}
 		}
@@ -851,6 +861,13 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *persistancev1.Data
 	return prefix + r.Input.FragmentKey
 }
 
+func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) string {
+	hostName := r.getDynamicHostName(dbClaim)
+	params := r.getCloudDBHostParams(ctx, dbClaim)
+
+	return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
+}
+
 func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
@@ -1007,6 +1024,12 @@ func (r *DatabaseClaimReconciler) getCloudDBHostParams(ctx context.Context, dbCl
 func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 
+	pgName, err := r.manageClusterParamGroup(ctx, dbHostName, dbClaim)
+	if err != nil {
+		r.Log.Error(err, "parameter group setup failed")
+		return false, err
+	}
+
 	serviceNS, err := getServiceNamespace()
 	if err != nil {
 		return false, err
@@ -1055,6 +1078,9 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretCluster,
+							DBClusterParameterGroupNameRef: &xpv1.Reference{
+								Name: pgName,
+							},
 						},
 						// Items from Claim and fragmentKey
 						Engine: &params.Engine,
@@ -1108,6 +1134,12 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 		},
 		Key: "password",
 	}
+
+	pgName, err := r.manageParamGroup(ctx, dbHostName, dbClaim)
+	if err != nil {
+		r.Log.Error(err, "parameter group setup failed")
+		return false, err
+	}
 	// Infrastructure Config
 	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
@@ -1140,6 +1172,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							},
 							DBSubnetGroupNameRef: &xpv1.Reference{
 								Name: r.getDbSubnetGroupNameRef(),
+							},
+							DBParameterGroupNameRef: &xpv1.Reference{
+								Name: pgName,
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
@@ -1194,12 +1229,17 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
+	pgName, err := r.manageParamGroup(ctx, dbHostName, dbClaim)
+	if err != nil {
+		r.Log.Error(err, "parameter group setup failed")
+		return false, err
+	}
 
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := r.getCloudDBHostParams(ctx, dbClaim)
 
-	err := r.Client.Get(ctx, client.ObjectKey{
+	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
 	if err != nil {
@@ -1217,6 +1257,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 						},
+						DBParameterGroupName: &pgName,
 						// Items from Claim and fragmentKey
 						Engine:          &params.Engine,
 						DBInstanceClass: &params.Shape,
@@ -1257,6 +1298,156 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
 }
 
+func (r *DatabaseClaimReconciler) manageParamGroup(ctx context.Context, dbHostName string,
+	dbClaim *persistancev1.DatabaseClaim) (string, error) {
+
+	logical := "rds.logical_replication"
+	one := "1"
+	immediate := "immediate"
+	reboot := "pending-reboot"
+	forceSsl := "rds.force_ssl"
+	transactionTimeout := "idle_in_transaction_session_timeout"
+	transactionTimeoutValue := "300000"
+	params := r.getCloudDBHostParams(ctx, dbClaim)
+	pgName := r.getParameterGroupName(ctx, dbClaim)
+	desc := "custom PG for " + pgName
+
+	providerConfigReference := xpv1.Reference{
+		Name: "default",
+	}
+
+	dbParamGroup := &crossplanerds.DBParameterGroup{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: pgName,
+	}, dbParamGroup)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			dbParamGroup = &crossplanerds.DBParameterGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pgName,
+				},
+				Spec: crossplanerds.DBParameterGroupSpec{
+					ForProvider: crossplanerds.DBParameterGroupParameters{
+						Region:      r.getRegion(),
+						Description: &desc,
+						CustomDBParameterGroupParameters: crossplanerds.CustomDBParameterGroupParameters{
+							DBParameterGroupFamilySelector: &crossplanerds.DBParameterGroupFamilyNameSelector{
+								Engine:        params.Engine,
+								EngineVersion: &params.EngineVersion,
+							},
+							Parameters: []crossplanerds.Parameter{
+								{ParameterName: &logical,
+									ParameterValue: &one,
+									ApplyMethod:    &reboot,
+								},
+								{ParameterName: &forceSsl,
+									ParameterValue: &one,
+									ApplyMethod:    &immediate,
+								},
+								{ParameterName: &transactionTimeout,
+									ParameterValue: &transactionTimeoutValue,
+									ApplyMethod:    &immediate,
+								},
+							},
+						},
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
+					},
+				},
+			}
+			r.Log.Info("creating crossplane DBParameterGroup resource", "DBParameterGroup", dbParamGroup.Name)
+
+			err = r.Client.Create(ctx, dbParamGroup)
+			if err != nil {
+				return pgName, err
+			}
+
+		} else {
+			//not errors.IsNotFound(err) {
+			return pgName, err
+		}
+	}
+	return pgName, nil
+}
+
+func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, dbHostName string,
+	dbClaim *persistancev1.DatabaseClaim) (string, error) {
+
+	logical := "rds.logical_replication"
+	one := "1"
+	immediate := "immediate"
+	reboot := "pending-reboot"
+	forceSsl := "rds.force_ssl"
+	transactionTimeout := "idle_in_transaction_session_timeout"
+	transactionTimeoutValue := "300000"
+	params := r.getCloudDBHostParams(ctx, dbClaim)
+	pgName := r.getParameterGroupName(ctx, dbClaim)
+	desc := "custom PG for " + pgName
+
+	providerConfigReference := xpv1.Reference{
+		Name: "default",
+	}
+
+	dbParamGroup := &crossplanerds.DBClusterParameterGroup{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: pgName,
+	}, dbParamGroup)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			dbParamGroup = &crossplanerds.DBClusterParameterGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pgName,
+				},
+				Spec: crossplanerds.DBClusterParameterGroupSpec{
+					ForProvider: crossplanerds.DBClusterParameterGroupParameters{
+						Region:      r.getRegion(),
+						Description: &desc,
+						CustomDBClusterParameterGroupParameters: crossplanerds.CustomDBClusterParameterGroupParameters{
+							DBParameterGroupFamilySelector: &crossplanerds.DBParameterGroupFamilyNameSelector{
+								Engine:        params.Engine,
+								EngineVersion: &params.EngineVersion,
+							},
+							Parameters: []crossplanerds.Parameter{
+								{ParameterName: &logical,
+									ParameterValue: &one,
+									ApplyMethod:    &reboot,
+								},
+								{ParameterName: &forceSsl,
+									ParameterValue: &one,
+									ApplyMethod:    &immediate,
+								},
+								{ParameterName: &transactionTimeout,
+									ParameterValue: &transactionTimeoutValue,
+									ApplyMethod:    &immediate,
+								},
+							},
+						},
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
+					},
+				},
+			}
+			r.Log.Info("creating crossplane DBParameterGroup resource", "DBParameterGroup", dbParamGroup.Name)
+
+			err = r.Client.Create(ctx, dbParamGroup)
+			if err != nil {
+				return pgName, err
+			}
+
+		} else {
+			//not errors.IsNotFound(err) {
+			return pgName, err
+		}
+	}
+	return pgName, nil
+}
+
 func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
 
 	dbInstance := &crossplanerds.DBInstance{}
@@ -1266,29 +1457,31 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 		Name: dbHostName,
 	}, dbInstance)
 	if err != nil {
-		// Nothing to delete
-		return nil
-	}
-
-	// Deletion is long running task check that is not already deleted.
-	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
-		return nil
-	}
-
-	if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-		r.Log.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName)
-		return err
-	} else {
-		r.Log.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName)
-	}
-
-	if err := r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostName,
-	}, dbCluster); err == nil {
-		// Deletion is long running task check that is not already deleted.
-		if !dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
-			return nil
+		if !errors.IsNotFound(err) {
+			return err
+		} // else not found - no action required
+	} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+			r.Log.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName)
+			return err
+		} else {
+			r.Log.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName)
 		}
+	}
+
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbCluster)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil //nothing to delete
+		} else {
+			return err
+		}
+	}
+
+	if dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
 		if err := r.Delete(ctx, dbCluster, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
 			r.Log.Info("unable delete crossplane DBCluster resource", "DBCluster", dbHostName)
 			return err
@@ -1300,6 +1493,51 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 	return nil
 }
 
+func (r *DatabaseClaimReconciler) deleteParameterGroup(ctx context.Context, pgName string) error {
+
+	dbParamGroup := &crossplanerds.DBParameterGroup{}
+	dbClusterParamGroup := &crossplanerds.DBClusterParameterGroup{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: pgName,
+	}, dbParamGroup)
+
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		} // else not found - no action required
+	} else if dbParamGroup.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbParamGroup, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+			r.Log.Info("unable delete crossplane dbParamGroup resource", "dbParamGroup", dbParamGroup)
+			return err
+		} else {
+			r.Log.Info("deleted crossplane dbParamGroup resource", "dbParamGroup", dbParamGroup)
+		}
+	}
+
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: pgName,
+	}, dbClusterParamGroup)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil //nothing to delete
+		} else {
+			return err
+		}
+	}
+
+	if dbClusterParamGroup.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbClusterParamGroup, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+			r.Log.Info("unable delete crossplane DBCluster resource", "dbClusterParamGroup", dbClusterParamGroup)
+			return err
+		} else {
+			r.Log.Info("deleted crossplane DBCluster resource", "dbClusterParamGroup", dbClusterParamGroup)
+		}
+	}
+
+	return nil
+}
 func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim *persistancev1.DatabaseClaim,
 	dbInstance *crossplanerds.DBInstance) (bool, error) {
 

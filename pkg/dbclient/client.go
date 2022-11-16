@@ -19,7 +19,9 @@ const (
 	PostgresType = "postgres"
 )
 
-var extensions = []string{"citext", "uuid-ossp", "pgcrypto"}
+var extensions = []string{"citext", "uuid-ossp",
+	"pgcrypto", "hstore", "pg_stat_statements",
+	"plpgsql"}
 
 type client struct {
 	dbType string
@@ -117,8 +119,8 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	var exists bool
 	created := false
 	db := pc.DB
-	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbName).Scan(&exists)
 
+	err := db.QueryRow("SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)", dbName).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for database name")
 		metrics.DBProvisioningErrors.WithLabelValues("read error")
@@ -135,22 +137,24 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 		created = true
 		pc.log.Info("database has been created", "DB", dbName)
 		metrics.DBCreated.Inc()
-	}
-	// db is now database specific connection
-	db, err = pc.getDB(dbName)
-	pc.log.Info("connected to " + dbName)
-	if err != nil {
-		pc.log.Error(err, "could not connect to db", "database", dbName)
-		return created, err
-	}
-	defer db.Close()
-	for _, s := range extensions {
-		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
-			pc.log.Error(err, "could not create extension", "database_name", dbName)
-			return created, fmt.Errorf("could not create extension %s: %s", s, err)
+
+		// db is now database specific connection
+		db, err = pc.getDB(dbName)
+		pc.log.Info("connected to " + dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
 		}
-		pc.log.Info("created extension " + s)
+		defer db.Close()
+		for _, s := range extensions {
+			if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
+				pc.log.Error(err, "could not create extension", "database_name", dbName)
+				return created, fmt.Errorf("could not create extension %s: %s", s, err)
+			}
+			pc.log.Info("created extension " + s)
+		}
 	}
+
 	return created, err
 }
 
