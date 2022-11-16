@@ -1030,6 +1030,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}
 
 	params := r.getCloudDBHostParams(ctx, dbClaim)
+	encryptStrg := true
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -1063,6 +1064,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						MasterUsername:                  &params.MasterUsername,
 						EngineVersion:                   &params.EngineVersion,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+						StorageEncrypted:                &encryptStrg,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretCluster,
@@ -1118,6 +1120,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	params := r.getCloudDBHostParams(ctx, dbClaim)
 	ms64 := int64(params.MinStorageGB)
+	perfIns := true
+	encryptStrg := true
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -1154,6 +1158,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						EngineVersion:                   &params.EngineVersion,
 						PubliclyAccessible:              &params.PubliclyAccessible,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+						EnablePerformanceInsights:       &perfIns,
+						StorageEncrypted:                &encryptStrg,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretInstance,
@@ -1198,6 +1204,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := r.getCloudDBHostParams(ctx, dbClaim)
+	perfIns := true
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -1222,9 +1229,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBInstanceClass: &params.Shape,
 						Tags:            DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
-						EngineVersion:       &params.EngineVersion,
-						PubliclyAccessible:  &params.PubliclyAccessible,
-						DBClusterIdentifier: &dbHostName,
+						EngineVersion:             &params.EngineVersion,
+						PubliclyAccessible:        &params.PubliclyAccessible,
+						DBClusterIdentifier:       &dbHostName,
+						EnablePerformanceInsights: &perfIns,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
