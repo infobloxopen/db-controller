@@ -72,6 +72,7 @@ type input struct {
 	TempSecret       string
 	DbHostIdentifier string
 	DbType           string
+	HostParams       DynamicHostParms
 }
 
 const (
@@ -93,6 +94,18 @@ type DatabaseClaimReconciler struct {
 	Mode               ModeEnum
 	Input              *input
 	Class              string
+}
+type DynamicHostParms struct {
+	Engine                          string
+	Shape                           string
+	MinStorageGB                    int
+	EngineVersion                   string
+	MasterUsername                  string
+	SkipFinalSnapshotBeforeDeletion bool
+	PubliclyAccessible              bool
+	EnableIAMDatabaseAuthentication bool
+	DeletionPolicy                  xpv1.DeletionPolicy
+	Port                            int64
 }
 
 func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
@@ -145,7 +158,10 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		err              error
 		createCloudDB    bool
 		dbHostIdentifier string
+		port             int
 	)
+	hostParams := DynamicHostParms{}
+
 	if dbClaim.Spec.InstanceLabel != "" {
 		fragmentKey, err = r.matchInstanceLabel(dbClaim)
 		if err != nil {
@@ -155,7 +171,11 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	connInfo := r.getClientConn(fragmentKey, dbClaim)
 	if connInfo.Port == "" {
 		return fmt.Errorf("cannot get master port")
+	} else if port, err = strconv.Atoi(connInfo.Port); err != nil {
+		return fmt.Errorf("invalid master port")
 	}
+	hostParams.Port = int64(port)
+
 	if connInfo.Username == "" {
 		return fmt.Errorf("invalid credentials (username)")
 	}
@@ -169,9 +189,54 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		createCloudDB = true
 		dbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
+	if fragmentKey == "" {
+		hostParams.MasterUsername = connInfo.Username
+		hostParams.Shape = dbClaim.Spec.Shape
+		hostParams.Engine = string(dbClaim.Spec.Type)
+		hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
+	} else {
+		hostParams.MasterUsername = r.getMasterUser(dbClaim)
+		hostParams.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
+		hostParams.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
+		hostParams.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
+	}
+
+	if hostParams.EngineVersion == "" {
+		hostParams.EngineVersion = r.Config.GetString("defaultEngineVersion")
+	}
+
+	if hostParams.Shape == "" {
+		hostParams.Shape = r.Config.GetString("defaultShape")
+	}
+
+	if hostParams.Engine == "" {
+		hostParams.Engine = r.Config.GetString("defaultEngine")
+	}
+
+	if hostParams.MinStorageGB == 0 {
+		hostParams.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
+	}
+
+	if hostParams.Port == 0 {
+		hostParams.Port = int64(r.Config.GetInt("defaultMasterPort"))
+	}
+
+	// TODO - Implement these for each fragmentKey also
+	hostParams.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool("defaultSkipFinalSnapshotBeforeDeletion")
+	hostParams.PubliclyAccessible = r.Config.GetBool("defaultPubliclyAccessible")
+	if r.Config.GetString("defaultDeletionPolicy") == "delete" {
+		hostParams.DeletionPolicy = xpv1.DeletionDelete
+	} else {
+		hostParams.DeletionPolicy = xpv1.DeletionOrphan
+	}
+
+	// TODO - Enable IAM auth based on authSource config
+	hostParams.EnableIAMDatabaseAuthentication = false
+
 	r.Input = &input{ManageCloudDB: createCloudDB,
 		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
 		DbType: string(dbClaim.Spec.Type), DbHostIdentifier: dbHostIdentifier,
+		HostParams: hostParams,
 	}
 	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
@@ -589,12 +654,12 @@ func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseCla
 
 	logr.Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
 	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
-	return dbclient.New(dbclient.Config{Log: r.Log, DBType: r.Input.DbType, DSN: r.getMasterDefaultDsn()})
+	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: r.getMasterDefaultDsn()})
 }
 
 func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", r.Input.DbType,
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
 		r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password,
 		r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port,
 		"postgres", r.Input.MasterConnInfo.SSLMode)
@@ -622,7 +687,7 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 	// delete any external resources associated with the dbClaim
 	// Only RDS Instance are managed for now
 
-	if dbClaim.Spec.Host == "" {
+	if r.Input.ManageCloudDB {
 
 		fragmentKey := dbClaim.Spec.InstanceLabel
 		reclaimPolicy := r.getReclaimPolicy(fragmentKey)
@@ -863,9 +928,16 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *persistancev1.Data
 
 func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) string {
 	hostName := r.getDynamicHostName(dbClaim)
-	params := r.getCloudDBHostParams(ctx, dbClaim)
+	params := &r.Input.HostParams
 
-	return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
+	switch r.Input.DbType {
+	case defaultPostgresStr:
+		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
+	case defaultAuroraPostgresStr:
+		return hostName + "-a-" + (strings.Split(params.EngineVersion, "."))[0]
+	default:
+		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
+	}
 }
 
 func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
@@ -961,70 +1033,10 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 	return nil
 }
 
-type DynamicHostParms struct {
-	Engine                          string
-	Shape                           string
-	MinStorageGB                    int
-	EngineVersion                   string
-	MasterUsername                  string
-	SkipFinalSnapshotBeforeDeletion bool
-	PubliclyAccessible              bool
-	EnableIAMDatabaseAuthentication bool
-	DeletionPolicy                  xpv1.DeletionPolicy
-}
-
-func (r *DatabaseClaimReconciler) getCloudDBHostParams(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) DynamicHostParms {
-	params := DynamicHostParms{}
-
-	fragmentKey := r.Input.FragmentKey
-	// Database Config
-	if fragmentKey == "" {
-		params.MasterUsername = r.Input.MasterConnInfo.Username
-		params.Shape = dbClaim.Spec.Shape
-		params.Engine = string(dbClaim.Spec.Type)
-		params.MinStorageGB = dbClaim.Spec.MinStorageGB
-	} else {
-		params.MasterUsername = r.getMasterUser(dbClaim)
-		params.EngineVersion = r.Config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
-		params.Shape = r.Config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
-		params.MinStorageGB = r.Config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
-	}
-
-	if params.EngineVersion == "" {
-		params.EngineVersion = r.Config.GetString("defaultEngineVersion")
-	}
-
-	if params.Shape == "" {
-		params.Shape = r.Config.GetString("defaultShape")
-	}
-
-	if params.Engine == "" {
-		params.Engine = r.Config.GetString("defaultEngine")
-	}
-
-	if params.MinStorageGB == 0 {
-		params.MinStorageGB = r.Config.GetInt("defaultMinStorageGB")
-	}
-
-	// TODO - Implement these for each fragmentKey also
-	params.SkipFinalSnapshotBeforeDeletion = r.Config.GetBool("defaultSkipFinalSnapshotBeforeDeletion")
-	params.PubliclyAccessible = r.Config.GetBool("defaultPubliclyAccessible")
-	if r.Config.GetString("defaultDeletionPolicy") == "delete" {
-		params.DeletionPolicy = xpv1.DeletionDelete
-	} else {
-		params.DeletionPolicy = xpv1.DeletionOrphan
-	}
-
-	// TODO - Enable IAM auth based on authSource config
-	params.EnableIAMDatabaseAuthentication = false
-
-	return params
-}
-
 func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 
-	pgName, err := r.manageClusterParamGroup(ctx, dbHostName, dbClaim)
+	pgName, err := r.manageClusterParamGroup(ctx, dbClaim)
 	if err != nil {
 		r.Log.Error(err, "parameter group setup failed")
 		return false, err
@@ -1052,7 +1064,8 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 		Name: "default",
 	}
 
-	params := r.getCloudDBHostParams(ctx, dbClaim)
+	params := &r.Input.HostParams
+
 	encryptStrg := true
 
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -1091,6 +1104,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						EngineVersion:                   &params.EngineVersion,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						StorageEncrypted:                &encryptStrg,
+						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretCluster,
@@ -1137,7 +1151,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 		Key: "password",
 	}
 
-	pgName, err := r.manageParamGroup(ctx, dbHostName, dbClaim)
+	pgName, err := r.managePostgresParamGroup(ctx, dbClaim)
 	if err != nil {
 		r.Log.Error(err, "parameter group setup failed")
 		return false, err
@@ -1150,7 +1164,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	dbInstance := &crossplanerds.DBInstance{}
 
-	params := r.getCloudDBHostParams(ctx, dbClaim)
+	params := &r.Input.HostParams
 	ms64 := int64(params.MinStorageGB)
 	perfIns := true
 	encryptStrg := true
@@ -1195,6 +1209,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						EnablePerformanceInsights:       &perfIns,
 						StorageEncrypted:                &encryptStrg,
+						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretInstance,
@@ -1235,7 +1250,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	providerConfigReference := xpv1.Reference{
 		Name: "default",
 	}
-	pgName, err := r.manageParamGroup(ctx, dbHostName, dbClaim)
+	pgName, err := r.manageAuroraPostgresParamGroup(ctx, dbClaim)
 	if err != nil {
 		r.Log.Error(err, "parameter group setup failed")
 		return false, err
@@ -1243,7 +1258,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 
 	dbInstance := &crossplanerds.DBInstance{}
 
-	params := r.getCloudDBHostParams(ctx, dbClaim)
+	params := &r.Input.HostParams
 	perfIns := true
 
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -1306,8 +1321,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
 }
 
-func (r *DatabaseClaimReconciler) manageParamGroup(ctx context.Context, dbHostName string,
-	dbClaim *persistancev1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
 	logical := "rds.logical_replication"
 	one := "1"
@@ -1316,7 +1330,7 @@ func (r *DatabaseClaimReconciler) manageParamGroup(ctx context.Context, dbHostNa
 	forceSsl := "rds.force_ssl"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	params := r.getCloudDBHostParams(ctx, dbClaim)
+	params := &r.Input.HostParams
 	pgName := r.getParameterGroupName(ctx, dbClaim)
 	desc := "custom PG for " + pgName
 
@@ -1380,9 +1394,69 @@ func (r *DatabaseClaimReconciler) manageParamGroup(ctx context.Context, dbHostNa
 	}
 	return pgName, nil
 }
+func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
-func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, dbHostName string,
-	dbClaim *persistancev1.DatabaseClaim) (string, error) {
+	immediate := "immediate"
+	transactionTimeout := "idle_in_transaction_session_timeout"
+	transactionTimeoutValue := "300000"
+	params := &r.Input.HostParams
+	pgName := r.getParameterGroupName(ctx, dbClaim)
+	desc := "custom PG for " + pgName
+
+	providerConfigReference := xpv1.Reference{
+		Name: "default",
+	}
+
+	dbParamGroup := &crossplanerds.DBParameterGroup{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: pgName,
+	}, dbParamGroup)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			dbParamGroup = &crossplanerds.DBParameterGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pgName,
+				},
+				Spec: crossplanerds.DBParameterGroupSpec{
+					ForProvider: crossplanerds.DBParameterGroupParameters{
+						Region:      r.getRegion(),
+						Description: &desc,
+						CustomDBParameterGroupParameters: crossplanerds.CustomDBParameterGroupParameters{
+							DBParameterGroupFamilySelector: &crossplanerds.DBParameterGroupFamilyNameSelector{
+								Engine:        params.Engine,
+								EngineVersion: &params.EngineVersion,
+							},
+							Parameters: []crossplanerds.Parameter{
+								{ParameterName: &transactionTimeout,
+									ParameterValue: &transactionTimeoutValue,
+									ApplyMethod:    &immediate,
+								},
+							},
+						},
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
+					},
+				},
+			}
+			r.Log.Info("creating crossplane DBParameterGroup resource", "DBParameterGroup", dbParamGroup.Name)
+
+			err = r.Client.Create(ctx, dbParamGroup)
+			if err != nil {
+				return pgName, err
+			}
+
+		} else {
+			//not errors.IsNotFound(err) {
+			return pgName, err
+		}
+	}
+	return pgName, nil
+}
+
+func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
 	logical := "rds.logical_replication"
 	one := "1"
@@ -1391,7 +1465,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	forceSsl := "rds.force_ssl"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	params := r.getCloudDBHostParams(ctx, dbClaim)
+	params := &r.Input.HostParams
 	pgName := r.getParameterGroupName(ctx, dbClaim)
 	desc := "custom PG for " + pgName
 
@@ -1628,11 +1702,17 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	var dsn, dbURI string
 
 	switch dbType {
-	case dbclient.PostgresType:
+	case defaultPostgresStr:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
+	case defaultAuroraPostgresStr:
+		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
+		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
+			connInfo.DatabaseName, connInfo.SSLMode)
+
 	default:
 		return fmt.Errorf("unknown DB type")
 	}
