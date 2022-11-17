@@ -171,7 +171,9 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	connInfo := r.getClientConn(fragmentKey, dbClaim)
 	if connInfo.Port == "" {
 		return fmt.Errorf("cannot get master port")
-	} else if port, err = strconv.Atoi(connInfo.Port); err != nil {
+	} 
+	
+	if port, err = strconv.Atoi(connInfo.Port); err != nil {
 		return fmt.Errorf("invalid master port")
 	}
 	hostParams.Port = int64(port)
