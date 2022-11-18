@@ -21,7 +21,7 @@ const (
 
 var extensions = []string{"citext", "uuid-ossp",
 	"pgcrypto", "hstore", "pg_stat_statements",
-	"plpgsql"}
+	"plpgsql", "pg_partman", "pg_cron", "hll"}
 
 type client struct {
 	dbType string
@@ -115,6 +115,10 @@ func (pc *client) CreateDataBase(name string) (bool, error) {
 	return pc.CreateDatabase(name)
 }
 
+var getDefaulExtensions = func() []string {
+	return extensions
+}
+
 func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	var exists bool
 	created := false
@@ -146,7 +150,7 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 			return created, err
 		}
 		defer db.Close()
-		for _, s := range extensions {
+		for _, s := range getDefaulExtensions() {
 			if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
 				pc.log.Error(err, "could not create extension", "database_name", dbName)
 				return created, fmt.Errorf("could not create extension %s: %s", s, err)
