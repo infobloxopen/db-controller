@@ -109,6 +109,7 @@ controllerConfig:
   authSource: secret
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
+  multiAZEnabled: false
   region: us-east-1
   pgTemp: "/pg-temp/"
   vpcSecurityGroupIDRefs:

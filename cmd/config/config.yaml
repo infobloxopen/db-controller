@@ -4,6 +4,7 @@ authSource: secret
 pgTemp: "/tmp/"
 # if aws authorization is used iam role must be provided
 #iamRole: rds-role
+multiAZEnabled: false
 region: us-east-1
 vpcSecurityGroupIDRefs: demo-box-1
 dbSubnetGroupNameRef: demo-box-1
