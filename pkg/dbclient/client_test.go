@@ -162,6 +162,18 @@ func TestPostgresClientOperations(t *testing.T) {
 			false,
 		},
 	}
+	oldDefaultExtionsions := getDefaulExtensions
+	defer func() {
+		getDefaulExtensions = oldDefaultExtionsions
+	}()
+	// This overrides a var getDefaulExtensions because some of the extensions are not supported by the postgres image used by dockertest.
+	// we chose to ignore those extentions in unit test as the focus of db-controller is not use these extensions - but just to make sure the mechanism of creating extensions
+	// are working.
+	getDefaulExtensions = func() []string {
+		return []string{"citext", "uuid-ossp",
+			"pgcrypto", "hstore", "pg_stat_statements", "plpgsql"}
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pc := &client{

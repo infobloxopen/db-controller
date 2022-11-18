@@ -171,8 +171,8 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	connInfo := r.getClientConn(fragmentKey, dbClaim)
 	if connInfo.Port == "" {
 		return fmt.Errorf("cannot get master port")
-	} 
-	
+	}
+
 	if port, err = strconv.Atoi(connInfo.Port); err != nil {
 		return fmt.Errorf("invalid master port")
 	}
@@ -1334,6 +1334,10 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
 	pgName := r.getParameterGroupName(ctx, dbClaim)
+	sharedLib := "shared_preload_libraries"
+	sharedLibValue := "pg_stat_statements,pg_cron"
+	cron := "cron.database_name"
+	cronValue := r.Input.MasterConnInfo.DatabaseName
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
@@ -1373,6 +1377,14 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 									ParameterValue: &transactionTimeoutValue,
 									ApplyMethod:    &immediate,
 								},
+								{ParameterName: &sharedLib,
+									ParameterValue: &sharedLibValue,
+									ApplyMethod:    &reboot,
+								},
+								{ParameterName: &cron,
+									ParameterValue: &cronValue,
+									ApplyMethod:    &reboot,
+								},
 							},
 						},
 					},
@@ -1399,10 +1411,15 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
 	immediate := "immediate"
+	reboot := "pending-reboot"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
 	pgName := r.getParameterGroupName(ctx, dbClaim)
+	sharedLib := "shared_preload_libraries"
+	sharedLibValue := "pg_stat_statements,pg_cron"
+	cron := "cron.database_name"
+	cronValue := r.Input.MasterConnInfo.DatabaseName
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
@@ -1433,6 +1450,14 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 								{ParameterName: &transactionTimeout,
 									ParameterValue: &transactionTimeoutValue,
 									ApplyMethod:    &immediate,
+								},
+								{ParameterName: &sharedLib,
+									ParameterValue: &sharedLibValue,
+									ApplyMethod:    &reboot,
+								},
+								{ParameterName: &cron,
+									ParameterValue: &cronValue,
+									ApplyMethod:    &reboot,
 								},
 							},
 						},
@@ -1469,6 +1494,10 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
 	pgName := r.getParameterGroupName(ctx, dbClaim)
+	sharedLib := "shared_preload_libraries"
+	sharedLibValue := "pg_stat_statements,pg_cron"
+	cron := "cron.database_name"
+	cronValue := r.Input.MasterConnInfo.DatabaseName
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
@@ -1507,6 +1536,14 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 								{ParameterName: &transactionTimeout,
 									ParameterValue: &transactionTimeoutValue,
 									ApplyMethod:    &immediate,
+								},
+								{ParameterName: &sharedLib,
+									ParameterValue: &sharedLibValue,
+									ApplyMethod:    &reboot,
+								},
+								{ParameterName: &cron,
+									ParameterValue: &cronValue,
+									ApplyMethod:    &reboot,
 								},
 							},
 						},
@@ -1622,6 +1659,7 @@ func (r *DatabaseClaimReconciler) deleteParameterGroup(ctx context.Context, pgNa
 
 	return nil
 }
+
 func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim *persistancev1.DatabaseClaim,
 	dbInstance *crossplanerds.DBInstance) (bool, error) {
 
