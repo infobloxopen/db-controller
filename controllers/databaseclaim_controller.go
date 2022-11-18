@@ -957,17 +957,18 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 			return false, err
 		}
 		r.Log.Info("dbcluster is ready. proceeding to manage dbinstance")
-		_, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
+		writerReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
 		if err != nil {
 			return false, err
 		}
+		readerReady := true
 		if r.getMultiAZEnabled() {
-			_, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
+			readerReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
 			if err != nil {
 				return false, err
 			}
 		}
-		return true, nil
+		return writerReady && readerReady, nil
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
