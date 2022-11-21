@@ -109,7 +109,7 @@ controllerConfig:
   authSource: secret
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
-  multiAZEnabled: false
+  dbMultiAZEnabled: false
   region: us-east-1
   pgTemp: "/pg-temp/"
   vpcSecurityGroupIDRefs:
@@ -118,7 +118,7 @@ controllerConfig:
   defaultShape: db.t4g.medium
   defaultMinStorageGB: 20
   defaultEngine: postgres
-  defaultEngineVersion: 12.8
+  defaultEngineVersion: 12.11
   defaultMasterPort: 5432
   defaultSslMode: require
   defaultMasterUsername: root

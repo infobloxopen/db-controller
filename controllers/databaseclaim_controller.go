@@ -848,7 +848,7 @@ func (r *DatabaseClaimReconciler) getRegion() string {
 }
 
 func (r *DatabaseClaimReconciler) getMultiAZEnabled() bool {
-	return r.Config.GetBool("multiAZEnabled")
+	return r.Config.GetBool("dbMultiAZEnabled")
 }
 
 func (r *DatabaseClaimReconciler) getVpcSecurityGroupIDRefs() string {
@@ -957,18 +957,18 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 			return false, err
 		}
 		r.Log.Info("dbcluster is ready. proceeding to manage dbinstance")
-		writerReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
+		firstInsReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
 		if err != nil {
 			return false, err
 		}
-		readerReady := true
+		secondInsReady := true
 		if r.getMultiAZEnabled() {
-			readerReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
+			secondInsReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
 			if err != nil {
 				return false, err
 			}
 		}
-		return writerReady && readerReady, nil
+		return firstInsReady && secondInsReady, nil
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
@@ -1263,7 +1263,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 }
 
 func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, dbHostName string,
-	dbClaim *persistancev1.DatabaseClaim, isReader bool) (bool, error) {
+	dbClaim *persistancev1.DatabaseClaim, isSecondIns bool) (bool, error) {
 	// Infrastructure Config
 	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
@@ -1275,8 +1275,8 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 		return false, err
 	}
 	dbClusterIdentifier := dbHostName
-	if isReader {
-		dbHostName = dbHostName + "-reader"
+	if isSecondIns {
+		dbHostName = dbHostName + "-2"
 	}
 	dbInstance := &crossplanerds.DBInstance{}
 
@@ -1596,7 +1596,7 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 
 	if r.getMultiAZEnabled() {
 		err := r.Client.Get(ctx, client.ObjectKey{
-			Name: dbHostName + "-reader",
+			Name: dbHostName + "-2",
 		}, dbInstance)
 		if err != nil {
 			if !errors.IsNotFound(err) {
@@ -1604,10 +1604,10 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 			} // else not found - no action required
 		} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
 			if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-				r.Log.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName+"-reader")
+				r.Log.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName+"-2")
 				return err
 			} else {
-				r.Log.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName+"-reader")
+				r.Log.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName+"-2")
 			}
 		}
 	}
