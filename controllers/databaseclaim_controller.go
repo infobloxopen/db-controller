@@ -847,6 +847,10 @@ func (r *DatabaseClaimReconciler) getRegion() string {
 	return r.Config.GetString("region")
 }
 
+func (r *DatabaseClaimReconciler) getMultiAZEnabled() bool {
+	return r.Config.GetBool("dbMultiAZEnabled")
+}
+
 func (r *DatabaseClaimReconciler) getVpcSecurityGroupIDRefs() string {
 	return r.Config.GetString("vpcSecurityGroupIDRefs")
 }
@@ -953,7 +957,18 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 			return false, err
 		}
 		r.Log.Info("dbcluster is ready. proceeding to manage dbinstance")
-		return r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim)
+		firstInsReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
+		if err != nil {
+			return false, err
+		}
+		secondInsReady := true
+		if r.getMultiAZEnabled() {
+			secondInsReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
+			if err != nil {
+				return false, err
+			}
+		}
+		return firstInsReady && secondInsReady, nil
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
@@ -1168,6 +1183,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	params := &r.Input.HostParams
 	ms64 := int64(params.MinStorageGB)
+	multiAZ := r.getMultiAZEnabled()
 	perfIns := true
 	encryptStrg := true
 
@@ -1201,6 +1217,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						},
 						// Items from Claim and fragmentKey
 						Engine:           &params.Engine,
+						MultiAZ:          &multiAZ,
 						DBInstanceClass:  &params.Shape,
 						AllocatedStorage: &ms64,
 						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
@@ -1246,7 +1263,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 }
 
 func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, dbHostName string,
-	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
+	dbClaim *persistancev1.DatabaseClaim, isSecondIns bool) (bool, error) {
 	// Infrastructure Config
 	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
@@ -1257,7 +1274,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 		r.Log.Error(err, "parameter group setup failed")
 		return false, err
 	}
-
+	dbClusterIdentifier := dbHostName
+	if isSecondIns {
+		dbHostName = dbHostName + "-2"
+	}
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := &r.Input.HostParams
@@ -1289,7 +1309,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						// Items from Config
 						EngineVersion:             &params.EngineVersion,
 						PubliclyAccessible:        &params.PubliclyAccessible,
-						DBClusterIdentifier:       &dbHostName,
+						DBClusterIdentifier:       &dbClusterIdentifier,
 						EnablePerformanceInsights: &perfIns,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
@@ -1573,6 +1593,24 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 
 	dbInstance := &crossplanerds.DBInstance{}
 	dbCluster := &crossplanerds.DBCluster{}
+
+	if r.getMultiAZEnabled() {
+		err := r.Client.Get(ctx, client.ObjectKey{
+			Name: dbHostName + "-2",
+		}, dbInstance)
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				return err
+			} // else not found - no action required
+		} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+				r.Log.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName+"-2")
+				return err
+			} else {
+				r.Log.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName+"-2")
+			}
+		}
+	}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
