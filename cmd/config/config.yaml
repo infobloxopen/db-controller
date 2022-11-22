@@ -4,6 +4,7 @@ authSource: secret
 pgTemp: "/tmp/"
 # if aws authorization is used iam role must be provided
 #iamRole: rds-role
+dbMultiAZEnabled: false
 region: us-east-1
 vpcSecurityGroupIDRefs: demo-box-1
 dbSubnetGroupNameRef: demo-box-1
@@ -11,7 +12,7 @@ dynamicHostWaitTimeMin: 1
 defaultShape: db.t4g.medium
 defaultMinStorageGB: 20
 defaultEngine: postgres
-defaultEngineVersion: 12.8
+defaultEngineVersion: 12.11
 defaultMasterPort: 5432
 defaultSslMode: disable
 defaultMasterUsername: postgres
