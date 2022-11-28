@@ -3,7 +3,7 @@ package exporter
 import (
 	"bytes"
 	"context"
-	"html/template"
+	"text/template"
 	"io/ioutil"
 	"strings"
 

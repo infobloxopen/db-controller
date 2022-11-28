@@ -1,7 +1,7 @@
 package exporter
 
 import (
-	"html/template"
+	"text/template"
 	"strings"
 
 	"github.com/Masterminds/sprig"

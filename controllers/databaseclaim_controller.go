@@ -46,6 +46,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
 	"github.com/infobloxopen/db-controller/pkg/pgctl"
+	exporter "github.com/infobloxopen/db-controller/pkg/postgres-exporter"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 )
 
@@ -294,7 +295,20 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
+	// FIXME: turn on metrics deployments later when testing on box-2 is available
+	// if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
+	// 	return ctrl.Result{}, err
+	// }
+
 	return r.updateStatus(ctx, &dbClaim)
+}
+
+func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, dbClaim persistancev1.DatabaseClaim) error {
+	cfg := exporter.NewConfig()
+	cfg.Name = dbClaim.ObjectMeta.Name
+	cfg.Namespace = dbClaim.ObjectMeta.Name
+	cfg.DBClaimOwnerRef = string(dbClaim.ObjectMeta.UID)
+	return exporter.Apply(ctx, r.Client, cfg)
 }
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
