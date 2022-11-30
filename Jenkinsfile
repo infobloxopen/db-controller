@@ -27,7 +27,10 @@ pipeline {
     stage("Build db-controller image") {
       steps {
         dir("$DIRECTORY") {
-          sh "REGISTRY=infoblox make docker-build"
+          sh """
+            echo cicd > .id
+            REGISTRY=infoblox make docker-build
+          """
         }
       }
     }
