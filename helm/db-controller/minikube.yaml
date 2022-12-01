@@ -5,6 +5,7 @@ controllerConfig:
   region: us-east-1
   vpcSecurityGroupIDRefs: demo-box-1
   dbSubnetGroupNameRef: demo-box-1
+  providerConfig: default
 zapLogger:
   develMode: true
   level: debug
