@@ -127,6 +127,7 @@ controllerConfig:
   defaultSkipFinalSnapshotBeforeDeletion: true
   defaultPubliclyAccessible: false
   defaultDeletionPolicy: orphan
+  providerConfig: default
   passwordConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
