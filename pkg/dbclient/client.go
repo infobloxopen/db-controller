@@ -21,7 +21,10 @@ const (
 
 var extensions = []string{"citext", "uuid-ossp",
 	"pgcrypto", "hstore", "pg_stat_statements",
-	"plpgsql", "pg_partman", "pg_cron", "hll"}
+	"plpgsql", "pg_partman", "hll"}
+
+// TBD
+//#pg_cron
 
 type client struct {
 	dbType string
@@ -94,19 +97,12 @@ func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 
 func PostgresConnectionString(host, port, user, password, dbname, sslmode string) string {
 	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
-		port, escapeValue(user), escapeValue(password), escapeValue(dbname), sslmode)
+		port, url.QueryEscape(user), url.QueryEscape(password), url.QueryEscape(dbname), sslmode)
 }
 
 func PostgresURI(host, port, user, password, dbname, sslmode string) string {
-	connURL := &url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(user, password),
-		Host:     fmt.Sprintf("%s:%s", host, port),
-		Path:     fmt.Sprintf("/%s", dbname),
-		RawQuery: fmt.Sprintf("sslmode=%s", sslmode),
-	}
-
-	return connURL.String()
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
+		url.QueryEscape(user), url.QueryEscape(password), host, port, url.QueryEscape(dbname), sslmode)
 }
 
 // CreateDataBase implements typo func name incase anybody is using it
@@ -142,24 +138,27 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 		pc.log.Info("database has been created", "DB", dbName)
 		metrics.DBCreated.Inc()
 
-		// db is now database specific connection
-		db, err = pc.getDB(dbName)
-		pc.log.Info("connected to " + dbName)
-		if err != nil {
-			pc.log.Error(err, "could not connect to db", "database", dbName)
-			return created, err
-		}
-		defer db.Close()
-		for _, s := range getDefaulExtensions() {
-			if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
-				pc.log.Error(err, "could not create extension", "database_name", dbName)
-				return created, fmt.Errorf("could not create extension %s: %s", s, err)
-			}
-			pc.log.Info("created extension " + s)
-		}
 	}
 
 	return created, err
+}
+
+func (pc *client) CreateDefaultExtentions(dbName string) error {
+	db, err := pc.getDB(dbName)
+	pc.log.Info("connected to " + dbName)
+	if err != nil {
+		pc.log.Error(err, "could not connect to db", "database", dbName)
+		return err
+	}
+	defer db.Close()
+	for _, s := range getDefaulExtensions() {
+		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
+			pc.log.Error(err, "could not create extension", "database_name", dbName)
+			return fmt.Errorf("could not create extension %s: %s", s, err)
+		}
+		pc.log.Info("created extension " + s)
+	}
+	return err
 }
 
 func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {

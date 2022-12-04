@@ -161,6 +161,10 @@ type DatabaseClaimSpec struct {
 	// The name of the database within InstanceLabel.
 	DatabaseName string `json:"databaseName,omitempty"`
 
+	// The version of the database.
+	// +optional
+	DBVersion string `json:"dbVersion"`
+
 	// DSN key name.
 	DSNName string `json:"dsnName"`
 
@@ -206,11 +210,26 @@ type Status struct {
 
 	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo"`
 
+	// Version of the provisioned Database
+	DBVersion string `json:"dbversion,omitempty"`
+
+	// The optional Shape values are arbitrary and help drive instance selection
+	Shape string `json:"shape,omitempty"`
+
+	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
+	MinStorageGB int `json:"minStorageGB,omitempty"`
+
+	// Specifies the type of database to provision. Only postgres is supported.
+	Type DatabaseType `json:"type,omitempty"`
+
 	// Time the connection info was updated/created.
 	ConnectionInfoUpdatedAt *metav1.Time `json:"connectionUpdatedAt,omitempty"`
 
 	// Time the user/password was updated/created
 	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
+
+	// Status of the DB. inprogress, "", ready
+	Status string `json:"status,omitempty"`
 }
 
 type DatabaseClaimConnectionInfo struct {
@@ -247,12 +266,12 @@ func init() {
 	SchemeBuilder.Register(&DatabaseClaim{}, &DatabaseClaimList{})
 }
 
-func (c *DatabaseClaimConnectionInfo) Dsn() string {
+func (c *DatabaseClaimConnectionInfo) Uri() string {
 	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
-		c.Username, url.QueryEscape(c.Password), c.Host, c.Port, c.DatabaseName, c.SSLMode)
+		url.QueryEscape(c.Username), url.QueryEscape(c.Password), c.Host, c.Port, url.QueryEscape(c.DatabaseName), c.SSLMode)
 }
 
-func ParseDsn(dsn string) (*DatabaseClaimConnectionInfo, error) {
+func ParseUri(dsn string) (*DatabaseClaimConnectionInfo, error) {
 
 	c := DatabaseClaimConnectionInfo{}
 

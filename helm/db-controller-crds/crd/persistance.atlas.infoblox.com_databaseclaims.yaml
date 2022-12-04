@@ -50,6 +50,9 @@ spec:
                 description: In most cases the AppID will match the database name.
                   In some cases, however, we will need to provide an optional override.
                 type: string
+              dbVersion:
+                description: The version of the database.
+                type: string
               dsnName:
                 description: DSN key name.
                 type: string
@@ -218,9 +221,27 @@ spec:
                     description: Time the database was created
                     format: date-time
                     type: string
+                  dbversion:
+                    description: Version of the provisioned Database
+                    type: string
                   matchLabel:
                     description: The name of the label that was successfully matched
                       against the fragment key names in the db-controller configMap
+                    type: string
+                  minStorageGB:
+                    description: The optional MinStorageGB value requests the minimum
+                      database host storage capacity in GBytes
+                    type: integer
+                  shape:
+                    description: The optional Shape values are arbitrary and help
+                      drive instance selection
+                    type: string
+                  status:
+                    description: Status of the DB. inprogress, "", ready
+                    type: string
+                  type:
+                    description: Specifies the type of database to provision. Only
+                      postgres is supported.
                     type: string
                   userUpdatedAt:
                     description: Time the user/password was updated/created
@@ -262,9 +283,27 @@ spec:
                     description: Time the database was created
                     format: date-time
                     type: string
+                  dbversion:
+                    description: Version of the provisioned Database
+                    type: string
                   matchLabel:
                     description: The name of the label that was successfully matched
                       against the fragment key names in the db-controller configMap
+                    type: string
+                  minStorageGB:
+                    description: The optional MinStorageGB value requests the minimum
+                      database host storage capacity in GBytes
+                    type: integer
+                  shape:
+                    description: The optional Shape values are arbitrary and help
+                      drive instance selection
+                    type: string
+                  status:
+                    description: Status of the DB. inprogress, "", ready
+                    type: string
+                  type:
+                    description: Specifies the type of database to provision. Only
+                      postgres is supported.
                     type: string
                   userUpdatedAt:
                     description: Time the user/password was updated/created
