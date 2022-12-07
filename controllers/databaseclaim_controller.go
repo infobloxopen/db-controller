@@ -870,6 +870,10 @@ func (r *DatabaseClaimReconciler) getVpcSecurityGroupIDRefs() string {
 	return r.Config.GetString("vpcSecurityGroupIDRefs")
 }
 
+func (r *DatabaseClaimReconciler) getProviderConfig() string {
+	return r.Config.GetString("providerConfig")
+}
+
 func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
 	return r.Config.GetString("dbSubnetGroupNameRef")
 }
@@ -1093,7 +1097,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}
 	dbCluster := &crossplanerds.DBCluster{}
 	providerConfigReference := xpv1.Reference{
-		Name: "default",
+		Name: r.getProviderConfig(),
 	}
 
 	params := &r.Input.HostParams
@@ -1191,7 +1195,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	// Infrastructure Config
 	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
-		Name: "default",
+		Name: r.getProviderConfig(),
 	}
 
 	dbInstance := &crossplanerds.DBInstance{}
@@ -1282,7 +1286,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	// Infrastructure Config
 	region := r.getRegion()
 	providerConfigReference := xpv1.Reference{
-		Name: "default",
+		Name: r.getProviderConfig(),
 	}
 	pgName, err := r.manageAuroraPostgresParamGroup(ctx, dbClaim)
 	if err != nil {
@@ -1376,7 +1380,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
-		Name: "default",
+		Name: r.getProviderConfig(),
 	}
 
 	dbParamGroup := &crossplanerds.DBParameterGroup{}
@@ -1458,7 +1462,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
-		Name: "default",
+		Name: r.getProviderConfig(),
 	}
 
 	dbParamGroup := &crossplanerds.DBParameterGroup{}
@@ -1536,7 +1540,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
-		Name: "default",
+		Name: r.getProviderConfig(),
 	}
 
 	dbParamGroup := &crossplanerds.DBClusterParameterGroup{}
