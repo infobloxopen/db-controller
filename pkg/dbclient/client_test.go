@@ -98,8 +98,6 @@ func setupSqlDB(t *testing.T) *testDB {
 
 	// Exponential retry to connect to database while it is booting
 	if err := pool.Retry(func() error {
-		//dbConnStr := fmt.Sprintf("host=%s port=%d user=%s dbname=postgres password=%s sslmode=disable",
-		//	host, port, user, pass)
 		dbConnStr := PostgresURI(host, strconv.Itoa(port), user, pass, "postgres", "disable")
 		sqlDB, err = sql.Open("postgres", dbConnStr)
 		if err != nil {
