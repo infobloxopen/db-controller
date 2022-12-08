@@ -1215,7 +1215,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						DBVersion:    "12.11",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{Status: "using-existing-db"},
+						ActiveDB: persistancev1.Status{DbState: "using-existing-db"},
 					},
 				},
 			},
@@ -1248,7 +1248,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						DBVersion:    "12.11",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB:       persistancev1.Status{Status: "using-existing-db"},
+						ActiveDB:       persistancev1.Status{DbState: "using-existing-db"},
 						MigrationState: "something in progress",
 					},
 				},
@@ -1280,7 +1280,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							Status:       "ready",
+							DbState:      "ready",
 							Type:         "postgres",
 							DBVersion:    "12.11",
 							Shape:        "db.t4g.medium",
@@ -1316,7 +1316,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							Status:       "ready",
+							DbState:      "ready",
 							Type:         "postgres",
 							DBVersion:    "12.11",
 							Shape:        "db.t4g.medium",
@@ -1352,14 +1352,14 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							Status:       "ready",
+							DbState:      "ready",
 							Type:         "postgres",
 							DBVersion:    "12.11",
 							Shape:        "db.t4g.medium",
 							MinStorageGB: 20,
 						},
 						NewDB: persistancev1.Status{
-							Status: "in-progress",
+							DbState: "in-progress",
 						},
 						MigrationState: "something in progress",
 					},

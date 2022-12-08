@@ -145,11 +145,11 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 
 func (pc *client) CreateDefaultExtentions(dbName string) error {
 	db, err := pc.getDB(dbName)
-	pc.log.Info("connected to " + dbName)
 	if err != nil {
 		pc.log.Error(err, "could not connect to db", "database", dbName)
 		return err
 	}
+	pc.log.Info("connected to " + dbName)
 	defer db.Close()
 	for _, s := range getDefaulExtensions() {
 		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {

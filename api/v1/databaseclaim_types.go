@@ -228,9 +228,18 @@ type Status struct {
 	// Time the user/password was updated/created
 	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
 
-	// Status of the DB. inprogress, "", ready
-	Status string `json:"status,omitempty"`
+	// DbState of the DB. inprogress, "", ready
+	DbState DbState `json:"DbState,omitempty"`
 }
+
+// DbState keeps track of state of the DB.
+type DbState string
+
+const (
+	Ready           DbState = "ready"
+	InProgress      DbState = "in-progress"
+	UsingExistingDB DbState = "using-existing-db"
+)
 
 type DatabaseClaimConnectionInfo struct {
 	Host         string `json:"hostName,omitempty"`

@@ -232,7 +232,7 @@ func TestGetActiveHostParams(t *testing.T) {
 						MinStorageGB: 20,
 					},
 					NewDB: persistancev1.Status{
-						Status: "in-progress",
+						DbState: persistancev1.InProgress,
 					},
 					MigrationState: "something in progress",
 				},

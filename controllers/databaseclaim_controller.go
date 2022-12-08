@@ -131,7 +131,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	// use existing is false // source data is present
 	if dbClaim.Spec.SourceDataFrom != nil {
 		if dbClaim.Spec.SourceDataFrom.Type == "database" {
-			if dbClaim.Status.ActiveDB.Status == "using-existing-db" {
+			if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingExistingDB {
 				if dbClaim.Status.MigrationState == "" {
 					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
 					return M_MigrateExistingToNewDB
@@ -145,11 +145,11 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 		}
 	}
 	// use existing is false; source data is not present ; active status is using-existing-db or ready
-	if dbClaim.Status.ActiveDB.Status == "ready" {
+	if dbClaim.Status.ActiveDB.DbState == persistancev1.Ready {
 		activeHostParams := hostparams.GetActiveHostParams(dbClaim)
 		if r.Input.HostParams.IsUpgradeRequested(activeHostParams) {
-			if dbClaim.Status.NewDB.Status == "" {
-				dbClaim.Status.NewDB.Status = "in-progress"
+			if dbClaim.Status.NewDB.DbState == "" {
+				dbClaim.Status.NewDB.DbState = persistancev1.InProgress
 				dbClaim.Status.MigrationState = ""
 			}
 			if dbClaim.Status.MigrationState == "" {
@@ -286,7 +286,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
-		dbClaim.Status.ActiveDB.Status = "using-existing-db"
+		dbClaim.Status.ActiveDB.DbState = persistancev1.UsingExistingDB
 		logr.Info("existing db reconcile complete")
 		return r.manageSuccess(ctx, dbClaim)
 	}
@@ -338,7 +338,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			}
 		}
 		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
-		dbClaim.Status.ActiveDB.Status = "ready"
+		dbClaim.Status.ActiveDB.DbState = persistancev1.Ready
 		dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 
 		return r.manageSuccess(ctx, dbClaim)
@@ -589,7 +589,7 @@ loop:
 
 	//done with migration- switch active server to newDB
 	dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
-	dbClaim.Status.ActiveDB.Status = "ready"
+	dbClaim.Status.ActiveDB.DbState = persistancev1.Ready
 	dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 
 	if err := r.Status().Update(ctx, dbClaim); err != nil {
@@ -741,6 +741,7 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	complEnabled := r.isPasswordComplexity()
 
 	// Customize the list of symbols.
+	// Removed \ from the default list as the encoding/decoding was treating it as an escape character
 	gen, err := gopassword.NewGenerator(&gopassword.GeneratorInput{
 		Symbols: "~!@#$%^&*()_+`-={}|[]:<>?,./",
 	})
@@ -766,7 +767,6 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 
 var (
 	instanceLableKey = ".spec.instanceLabel"
-	// apiGVStr         = persistancev1.GroupVersion.String()
 )
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {

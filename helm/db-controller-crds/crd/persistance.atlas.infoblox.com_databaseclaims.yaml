@@ -198,6 +198,9 @@ spec:
               activeDB:
                 description: track the status of the active db being used by the application
                 properties:
+                  DbState:
+                    description: DbState of the DB. inprogress, "", ready
+                    type: string
                   connectionInfo:
                     properties:
                       databaseName:
@@ -235,9 +238,6 @@ spec:
                   shape:
                     description: The optional Shape values are arbitrary and help
                       drive instance selection
-                    type: string
-                  status:
-                    description: Status of the DB. inprogress, "", ready
                     type: string
                   type:
                     description: Specifies the type of database to provision. Only
@@ -260,6 +260,9 @@ spec:
               newDB:
                 description: track the status of new db in the process of being created
                 properties:
+                  DbState:
+                    description: DbState of the DB. inprogress, "", ready
+                    type: string
                   connectionInfo:
                     properties:
                       databaseName:
@@ -297,9 +300,6 @@ spec:
                   shape:
                     description: The optional Shape values are arbitrary and help
                       drive instance selection
-                    type: string
-                  status:
-                    description: Status of the DB. inprogress, "", ready
                     type: string
                   type:
                     description: Specifies the type of database to provision. Only
