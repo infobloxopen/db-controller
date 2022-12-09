@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
@@ -1043,7 +1044,11 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 			fields{
 				Config:             NewConfig(multiConfig),
 				DbIdentifierPrefix: "boxing-x",
-				Input:              &input{FragmentKey: ""},
+				Input: &input{FragmentKey: "",
+					HostParams: hostparams.HostParams{Engine: "postgres",
+						EngineVersion: "12.11",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20}},
 			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
@@ -1054,14 +1059,18 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					},
 				},
 			},
-			"dbc-boxing-x-identity-dbclaim-name",
+			"dbc-boxing-x-identity-dbclaim-name-1620c8de",
 		},
 		{
 			"OK",
 			fields{
 				Config:             NewConfig(multiConfig),
 				DbIdentifierPrefix: "boxing-x",
-				Input:              &input{FragmentKey: "athena"},
+				Input: &input{FragmentKey: "athena",
+					HostParams: hostparams.HostParams{Engine: "aurora-postgresql",
+						EngineVersion: "12.11",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20}},
 			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
@@ -1072,7 +1081,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					},
 				},
 			},
-			"dbc-boxing-x-athena",
+			"dbc-boxing-x-athena-5e8ec24d",
 		},
 	}
 	for _, tt := range tests {
@@ -1089,6 +1098,291 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 			}
 			if got := r.getDynamicHostName(tt.args.dbClaim); got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.getDynamicHostName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDatabaseClaimReconciler_getMode(t *testing.T) {
+	tru := true
+	flse := false
+	opts := zap.Options{
+		Development: true,
+	}
+	type fields struct {
+		Client             client.Client
+		Log                logr.Logger
+		Scheme             *runtime.Scheme
+		Config             *viper.Viper
+		MasterAuth         *rdsauth.MasterAuth
+		DbIdentifierPrefix string
+		Mode               ModeEnum
+		Input              *input
+		Class              string
+	}
+
+	type args struct {
+		dbClaim *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   ModeEnum
+	}{
+		{
+			"useExistingWithNoSource",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts))},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &tru,
+						SourceDataFrom:    nil,
+					},
+				},
+			},
+			M_NotSupported,
+		},
+		{
+			"useExisting_DatabaseType",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts))},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &tru,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("database"),
+							Database: &persistancev1.Database{DSN: "postgres://r@h:5432/pub?sslmode=require",
+								SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+							},
+						},
+					},
+				},
+			},
+			M_UseExistingDB,
+		},
+		{
+			"useExisting_S3Type",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts))},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &tru,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("s3"),
+						},
+					},
+				},
+			},
+			M_NotSupported,
+		},
+		{
+			"migrateExistingToNewDB",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11"}}},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("database"),
+							Database: &persistancev1.Database{DSN: "postgres://r@h:5432/pub?sslmode=require",
+								SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+							},
+						},
+						Type:         "postgres",
+						Shape:        "db.t4g.medium",
+						MinStorageGB: 20,
+						DBVersion:    "12.11",
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{DbState: "using-existing-db"},
+					},
+				},
+			},
+			M_MigrateExistingToNewDB,
+		},
+		{
+			"MigrationOfExistingDBVtoNewDBInProgress",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11"}}},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("database"),
+							Database: &persistancev1.Database{DSN: "postgres://r@h:5432/pub?sslmode=require",
+								SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+							},
+						},
+						Type:         "postgres",
+						Shape:        "db.t4g.medium",
+						MinStorageGB: 20,
+						DBVersion:    "12.11",
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB:       persistancev1.Status{DbState: "using-existing-db"},
+						MigrationState: "something in progress",
+					},
+				},
+			},
+			M_MigrationInProgress,
+		},
+		{
+			"sourcedatapresent_newNewDb",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11"}}},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("database"),
+							Database: &persistancev1.Database{
+								DSN:       "postgres://r@h:5432/pub?sslmode=require",
+								SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+							},
+						},
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DbState:      "ready",
+							Type:         "postgres",
+							DBVersion:    "12.11",
+							Shape:        "db.t4g.medium",
+							MinStorageGB: 20,
+						},
+					},
+				},
+			},
+			M_UseNewDB,
+		},
+		{
+			"sourcedatapresent_upgradeDB",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{Engine: "aurora-postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11"}}},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("database"),
+							Database: &persistancev1.Database{
+								DSN:       "postgres://r@h:5432/pub?sslmode=require",
+								SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+							},
+						},
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DbState:      "ready",
+							Type:         "postgres",
+							DBVersion:    "12.11",
+							Shape:        "db.t4g.medium",
+							MinStorageGB: 20,
+						},
+					},
+				},
+			},
+			M_InitiateDBUpgrade,
+		},
+		{
+			"sourceNotpresent_UpgradeDBInProgress",
+			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{Engine: "aurora-postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11"}}},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom: &persistancev1.SourceDataFrom{
+							Type: persistancev1.SourceDataType("database"),
+							Database: &persistancev1.Database{
+								DSN:       "postgres://r@h:5432/pub?sslmode=require",
+								SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+							},
+						},
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DbState:      "ready",
+							Type:         "postgres",
+							DBVersion:    "12.11",
+							Shape:        "db.t4g.medium",
+							MinStorageGB: 20,
+						},
+						NewDB: persistancev1.Status{
+							DbState: "in-progress",
+						},
+						MigrationState: "something in progress",
+					},
+				},
+			},
+			M_UpgradeDBInProgress,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client:             tt.fields.Client,
+				Log:                tt.fields.Log,
+				Scheme:             tt.fields.Scheme,
+				Config:             tt.fields.Config,
+				MasterAuth:         tt.fields.MasterAuth,
+				DbIdentifierPrefix: tt.fields.DbIdentifierPrefix,
+				Mode:               tt.fields.Mode,
+				Input:              tt.fields.Input,
+				Class:              tt.fields.Class,
+			}
+			if got := r.getMode(tt.args.dbClaim); got != tt.want {
+				t.Errorf("DatabaseClaimReconciler.getMode() = %v, want %v", got, tt.want)
 			}
 		})
 	}
