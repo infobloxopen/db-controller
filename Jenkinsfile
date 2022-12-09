@@ -5,7 +5,7 @@ pipeline {
     label 'ubuntu_20_04_label'
   }
   tools {
-    go "Go 1.17"
+    go "Go 1.18"
   }
   options {
     checkoutToSubdirectory('src/github.com/infobloxopen/db-controller')
