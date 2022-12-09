@@ -66,7 +66,7 @@ func setupSqlDB(t *testing.T) *testDB {
 	}
 	t.Log("Got available port for DB: ", port)
 	user := "test"
-	pass := "test"
+	pass := "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./"
 
 	// Create a new pool for docker containers
 	pool, err := dockertest.NewPool("")
@@ -98,8 +98,7 @@ func setupSqlDB(t *testing.T) *testDB {
 
 	// Exponential retry to connect to database while it is booting
 	if err := pool.Retry(func() error {
-		dbConnStr := fmt.Sprintf("host=%s port=%d user=%s dbname=postgres password=%s sslmode=disable",
-			host, port, user, pass)
+		dbConnStr := PostgresURI(host, strconv.Itoa(port), user, pass, "postgres", "disable")
 		sqlDB, err = sql.Open("postgres", dbConnStr)
 		if err != nil {
 			t.Log("Database is not ready yet (it is booting up, wait for a few tries)...")
@@ -320,11 +319,11 @@ func TestConnectionString(t *testing.T) {
 				host:     "test-host",
 				port:     "1234",
 				user:     "test_user",
-				password: `test-pas\sword'`,
+				password: "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./",
 				dbName:   "test_db",
 				sslmode:  "disable",
 			},
-			`host='test-host' port='1234' user='test_user' password='test-pas\\sword\'' dbname='test_db' sslmode='disable'`,
+			`host='test-host' port='1234' user='test_user' password='pa%40ss%24%29%7B%5Bd~%26%21%40%23%24%25%5E%2A%28%29_%2B%60-%3D%7B%7D%7C%5B%5D%3A%3C%3E%3F%2C.%2F' dbname='test_db' sslmode='disable'`,
 		},
 	}
 
@@ -357,11 +356,11 @@ func TestPostgresURI(t *testing.T) {
 				host:     "test-host",
 				port:     "1234",
 				user:     "test_user",
-				password: `pas\s)'d`,
+				password: "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./",
 				dbname:   "test_db",
 				sslmode:  "disable",
 			},
-			want: `postgres://test_user:pas%5Cs%29%27d@test-host:1234/test_db?sslmode=disable`,
+			want: `postgres://test_user:pa%40ss%24%29%7B%5Bd~%26%21%40%23%24%25%5E%2A%28%29_%2B%60-%3D%7B%7D%7C%5B%5D%3A%3C%3E%3F%2C.%2F@test-host:1234/test_db?sslmode=disable`,
 		},
 	}
 	for _, tt := range tests {
