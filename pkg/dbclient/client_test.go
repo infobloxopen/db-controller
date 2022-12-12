@@ -56,6 +56,25 @@ func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
 	return sql.Open("postgres", dbConnStr)
 }
 
+func (t *testDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, error) {
+	if dbname == "" {
+		dbname = "postgres"
+	}
+
+	dbConnStr := PostgresURI("localhost", strconv.Itoa(t.port), username, password, dbname, "disable")
+	t.t.Log("dbConnStr", dbConnStr)
+	return sql.Open("postgres", dbConnStr)
+}
+
+func (t *testDB) OpenUserWithConnectionString(dbname, username, password string) (*sql.DB, error) {
+	if dbname == "" {
+		dbname = "postgres"
+	}
+	dbConnStr := PostgresConnectionString("localhost", strconv.Itoa(t.port), username, password, dbname, "disable")
+	t.t.Log("dbConnStr", dbConnStr)
+	return sql.Open("postgres", dbConnStr)
+}
+
 func setupSqlDB(t *testing.T) *testDB {
 	t.Log("Setting up an instance of PostgreSQL DB with dockertest")
 
@@ -155,7 +174,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				"test-user",
 				"test_password",
 				"new-test-user",
-				"new_test_password",
+				"pa@ss$x)x{x[xdx~x&x!x@x#x$x%x^x*x(x)x_x+x`x-x=x{x}x|x[x]x:x<x>x?x,x.x/",
 			},
 			true,
 			false,
@@ -291,6 +310,22 @@ func TestPostgresClientOperations(t *testing.T) {
 			if err != nil {
 				t.Errorf("could not login with updated password %s", err)
 			}
+			db.Close()
+			t.Logf("\t%s OpenUser() is passed", succeed)
+			// login as user
+			db, err = testDB.OpenUserWithURI(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
+			if err != nil {
+				t.Errorf("could not login with updated password %s", err)
+			}
+			db.Close()
+			t.Logf("\t%s OpenUserWithURI() is passed", succeed)
+			// login as user
+			db, err = testDB.OpenUserWithConnectionString(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
+			if err != nil {
+				t.Errorf("could not login with updated password %s", err)
+			}
+			t.Logf("\t%s OpenUserWithURI() is passed", succeed)
+
 			defer db.Close()
 			if _, err := db.Exec("CREATE EXTENSION IF NOT EXISTS citext"); err != nil {
 				t.Errorf("citext is not created: %s", err)
@@ -319,11 +354,11 @@ func TestConnectionString(t *testing.T) {
 				host:     "test-host",
 				port:     "1234",
 				user:     "test_user",
-				password: "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./",
+				password: "pa@ss$x)x{x[xdx~x&x!x@x#x$x%x^x*x(x)x_x+x`x-x=x{x}x|x[x]x:x<x>x?x,x.x/",
 				dbName:   "test_db",
 				sslmode:  "disable",
 			},
-			`host='test-host' port='1234' user='test_user' password='pa%40ss%24%29%7B%5Bd~%26%21%40%23%24%25%5E%2A%28%29_%2B%60-%3D%7B%7D%7C%5B%5D%3A%3C%3E%3F%2C.%2F' dbname='test_db' sslmode='disable'`,
+			"host=test-host port=1234 user=test_user password=pa@ss\\$x)x{x[xdx~x&x\\!x@x#x\\$x%x^x*x(x)x_x+x\\`x-x=x{x}x|x[x]x:x<x>x?x,x.x/ dbname=test_db sslmode=disable",
 		},
 	}
 
