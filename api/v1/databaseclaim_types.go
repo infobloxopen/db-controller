@@ -239,6 +239,7 @@ const (
 	Ready           DbState = "ready"
 	InProgress      DbState = "in-progress"
 	UsingExistingDB DbState = "using-existing-db"
+	UsingSharedHost DbState = "using-shared-host"
 )
 
 type DatabaseClaimConnectionInfo struct {
