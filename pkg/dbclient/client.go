@@ -96,8 +96,8 @@ func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 }
 
 func PostgresConnectionString(host, port, user, password, dbname, sslmode string) string {
-	return fmt.Sprintf("host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode='%s'", host,
-		port, url.QueryEscape(user), url.QueryEscape(password), url.QueryEscape(dbname), sslmode)
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", host,
+		port, escapeValue(user), escapeValue(password), escapeValue(dbname), sslmode)
 }
 
 func PostgresURI(host, port, user, password, dbname, sslmode string) string {
@@ -364,6 +364,15 @@ func escapeValue(in string) string {
 		case '\'':
 			encoded = append(encoded, '\\')
 			encoded = append(encoded, '\'')
+		case '`':
+			encoded = append(encoded, '\\')
+			encoded = append(encoded, '`')
+		case '$':
+			encoded = append(encoded, '\\')
+			encoded = append(encoded, '$')
+		case '!':
+			encoded = append(encoded, '\\')
+			encoded = append(encoded, '!')
 		default:
 			encoded = append(encoded, c)
 		}
