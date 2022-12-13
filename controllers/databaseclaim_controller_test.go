@@ -674,12 +674,56 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 }
 
 var multiConfig = []byte(`
-    sample:
-      Host: sample.Host
-    sample.connection:
-      Host: test.Host
-    another.connection:
-      Host: another.Host
+  authSource: secret
+  # if aws authorization is used iam role must be provided
+  #iamRole: rds-role
+  dbMultiAZEnabled: false
+  region: us-east-1
+  pgTemp: "/pg-temp/"
+  vpcSecurityGroupIDRefs:
+  dbSubnetGroupNameRef:
+  dynamicHostWaitTimeMin: 1
+  defaultShape: db.t4g.medium
+  defaultMinStorageGB: 20
+  defaultEngine: postgres
+  defaultEngineVersion: 12.11
+  defaultMasterPort: 5432
+  defaultSslMode: require
+  defaultMasterUsername: root
+  defaultReclaimPolicy: delete
+  # For Production this should be false and if SnapShot is not taken it will not be deleted
+  defaultSkipFinalSnapshotBeforeDeletion: true
+  defaultPubliclyAccessible: false
+  defaultDeletionPolicy: orphan
+  providerConfig: default
+  passwordConfig:
+    passwordComplexity: enabled
+    minPasswordLength: 15
+    passwordRotationPeriod: 60
+  sample-connection:
+    username: postgres
+    host: localhost
+    port: 5432
+    sslMode: disable
+    passwordSecretRef: postgres-postgresql
+    passwordSecretKey: postgresql-password
+  # host omitted, allocates database dynamically
+  dynamic-connection:
+    username: root
+    port: 5432
+    sslMode: require
+    passwordSecretRef: dynamic-connection-secret
+    shape: db.t4g.medium
+    minStorageGB: 20
+    engine: postgres
+    engineVersion: 12.8
+    reclaimPolicy: delete
+  another:
+    username: root
+    host: some.other.service
+    port: 5412
+    sslMode: require
+    passwordSecretRef: another-connection-secret	
 `)
 
 func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
@@ -707,7 +751,7 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					Spec: persistancev1.DatabaseClaimSpec{
-						InstanceLabel: "sample.connection",
+						InstanceLabel: "sample-connection",
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
@@ -715,9 +759,29 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 					},
 				},
 			},
-			"sample.connection",
+			"sample-connection",
 			false,
 		},
+		{
+			"Get partial match fragment key",
+			mockReconciler{
+				Config: NewConfig(multiConfig),
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						InstanceLabel: "another-connection",
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+						NewDB:    persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}},
+					},
+				},
+			},
+			"another",
+			false,
+		},
+
 		{
 			"No key match",
 			mockReconciler{
@@ -1132,7 +1196,12 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 	}{
 		{
 			"useExistingWithNoSource",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts))},
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					SharedDBHost: false,
+				},
+			},
 
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
@@ -1149,8 +1218,12 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"useExisting_DatabaseType",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts))},
-
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					SharedDBHost: false,
+				},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
@@ -1171,8 +1244,12 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"useExisting_S3Type",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts))},
-
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					SharedDBHost: false,
+				},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
@@ -1190,12 +1267,18 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"migrateExistingToNewDB",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
-				Input: &input{HostParams: hostparams.HostParams{Engine: "postgres",
-					Shape:         "db.t4g.medium",
-					MinStorageGB:  20,
-					EngineVersion: "12.11"}}},
-
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					HostParams: hostparams.HostParams{
+						Engine:        "postgres",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20,
+						EngineVersion: "12.11",
+					},
+					SharedDBHost: false,
+				},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
@@ -1223,12 +1306,17 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"MigrationOfExistingDBVtoNewDBInProgress",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
-				Input: &input{HostParams: hostparams.HostParams{Engine: "postgres",
-					Shape:         "db.t4g.medium",
-					MinStorageGB:  20,
-					EngineVersion: "12.11"}}},
-
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					HostParams: hostparams.HostParams{
+						Engine:        "postgres",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20,
+						EngineVersion: "12.11",
+					},
+					SharedDBHost: false},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
@@ -1257,17 +1345,19 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"sourcedatapresent_newNewDb",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
-				Input: &input{HostParams: hostparams.HostParams{Engine: "postgres",
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{
+					Engine:        "postgres",
 					Shape:         "db.t4g.medium",
 					MinStorageGB:  20,
-					EngineVersion: "12.11"}}},
-
+					EngineVersion: "12.11"},
+					SharedDBHost: false},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
 						Namespace: "unitest"},
-
 					Spec: persistancev1.DatabaseClaimSpec{
 						UseExistingSource: &flse,
 						SourceDataFrom: &persistancev1.SourceDataFrom{
@@ -1280,7 +1370,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							DbState:      "ready",
+							DbState:      persistancev1.Ready,
 							Type:         "postgres",
 							DBVersion:    "12.11",
 							Shape:        "db.t4g.medium",
@@ -1293,17 +1383,22 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"sourcedatapresent_upgradeDB",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
-				Input: &input{HostParams: hostparams.HostParams{Engine: "aurora-postgres",
-					Shape:         "db.t4g.medium",
-					MinStorageGB:  20,
-					EngineVersion: "12.11"}}},
-
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					HostParams: hostparams.HostParams{
+						Engine:        "aurora-postgres",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20,
+						EngineVersion: "12.11",
+					},
+					SharedDBHost: false,
+				},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
 						Namespace: "unitest"},
-
 					Spec: persistancev1.DatabaseClaimSpec{
 						UseExistingSource: &flse,
 						SourceDataFrom: &persistancev1.SourceDataFrom{
@@ -1316,7 +1411,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							DbState:      "ready",
+							DbState:      persistancev1.Ready,
 							Type:         "postgres",
 							DBVersion:    "12.11",
 							Shape:        "db.t4g.medium",
@@ -1329,17 +1424,21 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 		},
 		{
 			"sourceNotpresent_UpgradeDBInProgress",
-			fields{Log: zap.New(zap.UseFlagOptions(&opts)),
-				Input: &input{HostParams: hostparams.HostParams{Engine: "aurora-postgres",
-					Shape:         "db.t4g.medium",
-					MinStorageGB:  20,
-					EngineVersion: "12.11"}}},
-
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					HostParams: hostparams.HostParams{
+						Engine:        "aurora-postgres",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20,
+						EngineVersion: "12.11",
+					},
+				},
+			},
 			args{
 				dbClaim: &persistancev1.DatabaseClaim{
 					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
 						Namespace: "unitest"},
-
 					Spec: persistancev1.DatabaseClaimSpec{
 						UseExistingSource: &flse,
 						SourceDataFrom: &persistancev1.SourceDataFrom{
@@ -1352,7 +1451,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							DbState:      "ready",
+							DbState:      persistancev1.Ready,
 							Type:         "postgres",
 							DBVersion:    "12.11",
 							Shape:        "db.t4g.medium",
@@ -1366,6 +1465,67 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 				},
 			},
 			M_UpgradeDBInProgress,
+		},
+		{
+			"useSharedDBHost",
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{HostParams: hostparams.HostParams{
+					Engine:        "aurora-postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11",
+				},
+				},
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						InstanceLabel:     "testLabel",
+					},
+				},
+			},
+			M_UseNewDB,
+		},
+		{
+			"useSharedDBHost-withUpgradeRequest",
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					HostParams: hostparams.HostParams{
+						Engine:        "aurora-postgres",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20,
+						EngineVersion: "12.11",
+					},
+					SharedDBHost: false,
+				},
+			},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DbState:      persistancev1.UsingExistingDB,
+							Type:         "aurora-postgres",
+							DBVersion:    "13.11",
+							Shape:        "db.t4g.medium",
+							MinStorageGB: 20,
+						},
+					},
+				},
+			},
+			M_UseNewDB,
 		},
 	}
 	for _, tt := range tests {
