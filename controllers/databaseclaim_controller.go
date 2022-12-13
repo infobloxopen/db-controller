@@ -69,6 +69,7 @@ type ModeEnum int
 type input struct {
 	FragmentKey      string
 	ManageCloudDB    bool
+	SharedDBHost     bool
 	MasterConnInfo   persistancev1.DatabaseClaimConnectionInfo
 	TempSecret       string
 	DbHostIdentifier string
@@ -118,11 +119,24 @@ func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
 
 func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) ModeEnum {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getMode")
+	//default mode is M_UseNewDB. any non supported combination needs to be identfied and set to M_NotSupported
+
+	if r.Input.SharedDBHost {
+		if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingSharedHost {
+			activeHostParams := hostparams.GetActiveHostParams(dbClaim)
+			if r.Input.HostParams.IsUpgradeRequested(activeHostParams) {
+				logr.Info("upgrade requested for a shared host. shared host upgrades are not supported. ignoring upgrade request")
+			}
+		}
+		logr.Info("selected mode for shared db host", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
+
+		return M_UseNewDB
+	}
 
 	// use existing is true
 	if *dbClaim.Spec.UseExistingSource {
 		if dbClaim.Spec.SourceDataFrom != nil && dbClaim.Spec.SourceDataFrom.Type == "database" {
-			logr.Info("successfully selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "use existing db")
+			logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "use existing db")
 			return M_UseExistingDB
 		} else {
 			return M_NotSupported
@@ -162,6 +176,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 			}
 		}
 	}
+
 	logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
 
 	return M_UseNewDB
@@ -175,14 +190,15 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		fragmentKey   string
 		err           error
 		manageCloudDB bool
+		sharedDBHost  bool
 	)
-	// hostParams := DynamicHostParms{}
 
 	if dbClaim.Spec.InstanceLabel != "" {
 		fragmentKey, err = r.matchInstanceLabel(dbClaim)
 		if err != nil {
 			return err
 		}
+		sharedDBHost = true
 	}
 	connInfo := r.getClientConn(dbClaim)
 	if connInfo.Port == "" {
@@ -205,7 +221,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	if err != nil {
 		return err
 	}
-	r.Input = &input{ManageCloudDB: manageCloudDB,
+	r.Input = &input{ManageCloudDB: manageCloudDB, SharedDBHost: sharedDBHost,
 		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
 		DbType: string(dbClaim.Spec.Type), HostParams: *hostParams,
 	}
@@ -230,7 +246,10 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	r.setReqInfo(&dbClaim)
+	if err := r.setReqInfo(&dbClaim); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
@@ -338,7 +357,11 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			}
 		}
 		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
-		dbClaim.Status.ActiveDB.DbState = persistancev1.Ready
+		if r.Input.SharedDBHost {
+			dbClaim.Status.ActiveDB.DbState = persistancev1.UsingSharedHost
+		} else {
+			dbClaim.Status.ActiveDB.DbState = persistancev1.Ready
+		}
 		dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 
 		return r.manageSuccess(ctx, dbClaim)
