@@ -242,6 +242,8 @@ END;
 $body$
 LANGUAGE plpgsql;
 
+GRANT SELECT ON tab_1 TO appuser;
+
 --CREATE publication mypub FOR ALL tables;
 /*create subscription mysub connection 'dbname=pub host=localhost user=bjeevan port=5433' publication mypub;
 
