@@ -581,12 +581,25 @@ loop:
 		}
 		switch next.Id() {
 		case pgctl.S_Completed:
-			logr.Info("Completed Migration")
+			logr.Info("completed migration")
 			break loop
 
 		case pgctl.S_Retry:
-			logr.Info("Retry called")
+			logr.Info("retry called")
 			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
+
+		case pgctl.S_WaitToDisableSource:
+			logr.Info("wait called")
+			s = next
+			dbClaim.Status.MigrationState = s.String()
+			if err := r.Status().Update(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim status")
+				return r.manageError(ctx, dbClaim, err)
+			}
+			//TODO
+			//original secret is lost after reroutetargetstate
+			//removing the requeue until fix is applied
+			//return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
 
 		case pgctl.S_RerouteTargetSecret:
 			s = next

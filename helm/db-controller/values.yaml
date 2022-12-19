@@ -118,7 +118,7 @@ controllerConfig:
   defaultShape: db.t4g.medium
   defaultMinStorageGB: 20
   defaultEngine: postgres
-  defaultEngineVersion: 12.11
+  defaultEngineVersion: 13.8
   defaultMasterPort: 5432
   defaultSslMode: require
   defaultMasterUsername: root

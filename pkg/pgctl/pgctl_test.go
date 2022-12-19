@@ -259,9 +259,10 @@ func TestWrapper(t *testing.T) {
 	test_enable_subscription_state_Execute(t)
 	test_cut_over_readiness_check_state_Execute(t)
 	test_reset_target_sequence_state_Execute(t)
-	//test_reroute_target_secret_state_Execute(t)
-	//test_validate_migration_status_state_Execute(t)
+	test_reroute_target_secret_state_Execute(t)
+	test_wait_to_disable_source_state_Execute(t)
 	test_disable_source_access_state_Execute(t)
+	test_validate_migration_status_state_Execute(t)
 	test_disable_subscription_state_Execute(t)
 	test_delete_subscription_state_Execute(t)
 	test_delete_publication_state_Execute(t)
@@ -605,7 +606,7 @@ func test_cut_over_readiness_check_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
-		{name: "_test_cut_over_readiness_check_state_Executeok", wantErr: false, want: S_Retry,
+		{name: "test_cut_over_readiness_check_state_Executeok", wantErr: false, want: S_Retry,
 			fields: fields{Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
@@ -679,7 +680,7 @@ func test_reroute_target_secret_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
-		{name: "test_reroute_target_secret_state_Execute_ok", wantErr: false, want: S_ValidateMigrationStatus,
+		{name: "test_reroute_target_secret_state_Execute_ok", wantErr: false, want: S_WaitToDisableSource,
 			fields: fields{Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
@@ -716,7 +717,7 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
-		{name: "test_validate_migration_status_state_ok", wantErr: false, want: S_DisableSourceAccess,
+		{name: "test_validate_migration_status_state_ok", wantErr: false, want: S_DisableSubscription,
 			fields: fields{Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
@@ -743,6 +744,43 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 	}
 }
 
+func test_wait_to_disable_source_state_Execute(t *testing.T) {
+	type fields struct {
+		config Config
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    StateEnum
+		wantErr bool
+	}{
+		{name: "test_wait_to_disable_source_state_Execute_ok", wantErr: false, want: S_DisableSourceAccess,
+			fields: fields{Config{
+				Log:              logger,
+				SourceDBAdminDsn: SourceDBAdminDsn,
+				SourceDBUserDsn:  SourceDBUserDsn,
+				TargetDBUserDsn:  TargetDBUserDsn,
+				TargetDBAdminDsn: TargetDBAdminDsn,
+			}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &wait_to_disable_source_state{
+				config: tt.fields.config,
+			}
+			got, err := s.Execute()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("test_wait_to_disable_source_state_Execute error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got.Id(), tt.want) {
+				t.Errorf("test_wait_to_disable_source_state_Execute = %v, want %v", got.Id(), tt.want)
+			}
+		})
+	}
+}
+
 func test_disable_source_access_state_Execute(t *testing.T) {
 	type fields struct {
 		config Config
@@ -753,7 +791,7 @@ func test_disable_source_access_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
-		{name: "test_disable_source_access_state_ok", wantErr: false, want: S_DisableSubscription,
+		{name: "test_disable_source_access_state_ok", wantErr: false, want: S_ValidateMigrationStatus,
 			fields: fields{Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
