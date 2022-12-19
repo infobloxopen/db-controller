@@ -42,8 +42,9 @@ type enable_subscription_state struct{ config Config }
 type cut_over_readiness_check_state struct{ config Config }
 type reset_target_sequence_state struct{ config Config }
 type reroute_target_secret_state struct{ config Config }
-type validate_migration_status_state struct{ config Config }
+type wait_to_disable_source_state struct{ config Config }
 type disable_source_access_state struct{ config Config }
+type validate_migration_status_state struct{ config Config }
 type disable_subscription_state struct{ config Config }
 type delete_subscription_state struct{ config Config }
 type delete_publication_state struct{ config Config }
@@ -61,8 +62,9 @@ var _ State = &cut_over_readiness_check_state{}
 var _ State = &reset_target_sequence_state{}
 var _ State = &reroute_target_secret_state{}
 var _ State = &disable_subscription_state{}
-var _ State = &validate_migration_status_state{}
+var _ State = &wait_to_disable_source_state{}
 var _ State = &disable_source_access_state{}
+var _ State = &validate_migration_status_state{}
 var _ State = &delete_subscription_state{}
 var _ State = &delete_publication_state{}
 var _ State = &completed_state{}
@@ -105,6 +107,8 @@ func GetReplicatorState(name string, c Config) (State, error) {
 		return &reset_target_sequence_state{config: c}, nil
 	case S_RerouteTargetSecret:
 		return &reroute_target_secret_state{config: c}, nil
+	case S_WaitToDisableSource:
+		return &wait_to_disable_source_state{config: c}, nil
 	case S_ValidateMigrationStatus:
 		return &validate_migration_status_state{config: c}, nil
 	case S_DisableSourceAccess:
@@ -152,6 +156,7 @@ func (s *initial_state) String() string {
 func (s *validate_connection_state) Execute() (State, error) {
 
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
 
 	var (
 		err   error
@@ -195,6 +200,7 @@ func (s *validate_connection_state) Execute() (State, error) {
 		return nil, err
 	}
 
+	log.Info("completed")
 	return &create_publication_state{
 		config: s.config,
 	}, nil
@@ -208,6 +214,7 @@ func (s *validate_connection_state) String() string {
 
 func (s *create_publication_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
 
 	var (
 		err           error
@@ -262,6 +269,7 @@ func (s *create_publication_state) String() string {
 
 func (s *copy_schema_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
 
 	dump := NewDump(s.config.SourceDBAdminDsn)
 
@@ -270,7 +278,12 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	dump.EnableVerbose()
 
-	dump.SetOptions([]string{"--schema-only", "--no-publication", "--no-subscriptions"})
+	dump.SetOptions([]string{
+		"--schema-only",
+		"--no-publication",
+		"--no-subscriptions",
+		"--no-privileges",
+	})
 
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
 	log.Info("executing", "full command", dumpExec.FullCommand)
@@ -290,7 +303,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 	if restoreExec.Error != nil {
 		return nil, restoreExec.Error.Err
 	}
-
+	log.Info("completed")
 	return &create_subscription_state{
 		config: s.config,
 	}, nil
@@ -310,6 +323,7 @@ var getSourceDbAdminDSNForCreateSubscription = func(c *Config) string {
 
 func (s *create_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
 	var exists bool
 
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -345,7 +359,7 @@ func (s *create_subscription_state) Execute() (State, error) {
 		}
 		log.Info("subsription created", "name", DefaultSubName)
 	}
-
+	log.Info("completed")
 	return &enable_subscription_state{
 		config: s.config,
 	}, nil
@@ -359,6 +373,8 @@ func (s *create_subscription_state) String() string {
 
 func (s *enable_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
+
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
 	if err != nil {
 		log.Error(err, "connection test failed for targetDBAdmin")
@@ -391,7 +407,7 @@ func (s *enable_subscription_state) Execute() (State, error) {
 		return nil, fmt.Errorf("unable to enable subscription. subscription not found - %s", DefaultSubName)
 	}
 
-	log.Info("Subscription enabled successfully")
+	log.Info("completed")
 
 	return &cut_over_readiness_check_state{
 		config: s.config,
@@ -406,6 +422,7 @@ func (s *enable_subscription_state) String() string {
 
 func (s *cut_over_readiness_check_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
 	var exists bool
 	var count int
 
@@ -432,12 +449,20 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 			AND slot_name like '%s_%%'
 			AND temporary = 't'
 		)`, DefaultPubName)
+	relExistsQuery := fmt.Sprintf(`
+		SELECT EXISTS
+		(
+			SELECT 1
+			FROM pg_subscription s, pg_subscription_rel sr
+			WHERE s.oid = sr.srsubid
+			AND s.subname = '%s'
+		)`, DefaultSubName)
 
 	subQuery := fmt.Sprintf(`
 		SELECT count(srrelid) 
 		FROM pg_subscription s, pg_subscription_rel sr
 		WHERE s.oid = sr.srsubid
-		AND sr.srsubstate <> 'r'
+		AND sr.srsubstate not in ('r', 's')
 		AND s.subname = '%s'`, DefaultSubName)
 
 	err = sourceDBAdmin.QueryRow(pubQuery).Scan(&exists)
@@ -446,7 +471,17 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 		return nil, err
 	}
 	if exists {
-		log.Info("Migration not complete in source - retry check in a few seconds")
+		log.Info("migration not complete in source - retry check in a few seconds")
+		return retry(s.config), nil
+	}
+
+	err = targetDBAdmin.QueryRow(relExistsQuery).Scan(&exists)
+	if err != nil {
+		log.Error(err, "could not query for subscription rel for records present")
+		return nil, err
+	}
+	if !exists {
+		log.Info("target yet to start receiving data - retry check in a few seconds")
 		return retry(s.config), nil
 	}
 
@@ -456,10 +491,10 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 		return nil, err
 	}
 	if count > 0 {
-		log.Info("Migration not complete in target - retry check in a few seconds")
+		log.Info("migration not complete in target - retry check in a few seconds")
 		return retry(s.config), nil
 	}
-
+	log.Info("completed")
 	return &reset_target_sequence_state{
 		config: s.config,
 	}, nil
@@ -473,6 +508,8 @@ func (s *cut_over_readiness_check_state) String() string {
 
 func (s *reset_target_sequence_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
+
 	type seqCount struct {
 		seqName string
 		lastVal int64
@@ -528,6 +565,7 @@ func (s *reset_target_sequence_state) Execute() (State, error) {
 			return nil, err
 		}
 	}
+	log.Info("completed")
 	return &reroute_target_secret_state{
 		config: s.config,
 	}, nil
@@ -541,7 +579,7 @@ func (s *reset_target_sequence_state) String() string {
 
 func (s *reroute_target_secret_state) Execute() (State, error) {
 	//log := s.config.log.WithValues("state", s.String())
-	return &validate_migration_status_state{
+	return &wait_to_disable_source_state{
 		config: s.config,
 	}, nil
 }
@@ -552,22 +590,23 @@ func (s *reroute_target_secret_state) String() string {
 	return S_RerouteTargetSecret.String()
 }
 
-func (s *validate_migration_status_state) Execute() (State, error) {
+func (s *wait_to_disable_source_state) Execute() (State, error) {
 	//log := s.config.log.WithValues("state", s.String())
-	//place holder to implement any validation
 	return &disable_source_access_state{
 		config: s.config,
 	}, nil
 }
-func (s *validate_migration_status_state) Id() StateEnum {
-	return S_ValidateMigrationStatus
+func (s *wait_to_disable_source_state) Id() StateEnum {
+	return S_WaitToDisableSource
 }
-func (s *validate_migration_status_state) String() string {
-	return S_ValidateMigrationStatus.String()
+func (s *wait_to_disable_source_state) String() string {
+	return S_WaitToDisableSource.String()
 }
 
 func (s *disable_source_access_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
+
 	sourceDBAdmin, err := getDB(s.config.SourceDBAdminDsn, nil)
 	if err != nil {
 		log.Error(err, "connection test failed for sourceDBAdmin")
@@ -594,8 +633,8 @@ func (s *disable_source_access_state) Execute() (State, error) {
 		log.Error(err, "failed revoking access for source db")
 		return nil, err
 	}
-
-	return &disable_subscription_state{
+	log.Info("completed")
+	return &validate_migration_status_state{
 		config: s.config,
 	}, nil
 }
@@ -606,8 +645,102 @@ func (s *disable_source_access_state) String() string {
 	return S_DisableSourceAccess.String()
 }
 
+func (s *validate_migration_status_state) Execute() (State, error) {
+	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
+
+	var (
+		sourceTableName  string
+		sourceTableCount int64
+		targetTableCount int64
+	)
+
+	targetDBUser, err := getDB(s.config.TargetDBUserDsn, nil)
+	if err != nil {
+		log.Error(err, "connection test failed for targetDBUser")
+		return nil, err
+	}
+	defer closeDB(log, targetDBUser)
+
+	sourceDBUser, err := getDB(s.config.SourceDBUserDsn, nil)
+	if err != nil {
+		log.Error(err, "connection test failed for sourceDBAdmin")
+		return nil, err
+	}
+	defer closeDB(log, sourceDBUser)
+
+	allTableCountQ := `
+		WITH tbl AS (
+			SELECT table_schema, table_name 
+			FROM information_schema.tables 
+			WHERE TABLE_NAME not like 'pg_%' 
+				AND table_type = 'BASE TABLE'
+				AND table_schema = 'public'
+		) 
+        SELECT 	table_name, 
+				(xpath('/row/c/text()', 
+					query_to_xml(format('select count(*) as c from %I.%I', table_schema, TABLE_NAME), FALSE, TRUE, '')
+					)
+				)[1]::text::int AS table_count 
+        FROM tbl 
+	`
+	tableCountQ := "SELECT count(*) From %s"
+
+	rows, err := sourceDBUser.Query(allTableCountQ)
+	if err != nil {
+		log.Error(err, "failed getting source table count", tableCountQ)
+		return nil, err
+	}
+	defer rows.Close()
+
+	deuce := true
+	for rows.Next() {
+		rows.Scan(&sourceTableName, &sourceTableCount)
+		err = targetDBUser.QueryRow(fmt.Sprintf(tableCountQ, sourceTableName)).Scan(&targetTableCount)
+		if err != nil {
+			log.Error(err, "failed to query target table count - "+sourceTableName)
+			return nil, err
+		}
+
+		if targetTableCount < sourceTableCount {
+			deuce = false
+			log.Error(fmt.Errorf("warning: table count not matching. intervention required if this message repeates idenfinetly"),
+				"tableName", sourceTableName,
+				"sourceTableCount", sourceTableCount,
+				"targetTableCount", targetTableCount,
+			)
+		} else {
+			log.Info("table count looks ok",
+				"tableName", sourceTableName,
+				"sourceTableCount", sourceTableCount,
+				"targetTableCount", targetTableCount,
+			)
+		}
+	}
+	if deuce {
+		log.Info("completed")
+		return &disable_subscription_state{
+			config: s.config,
+		}, nil
+	} else {
+		log.Info("not complete. retrying")
+		return &retry_state{
+			config: s.config,
+		}, nil
+	}
+}
+
+func (s *validate_migration_status_state) Id() StateEnum {
+	return S_ValidateMigrationStatus
+}
+func (s *validate_migration_status_state) String() string {
+	return S_ValidateMigrationStatus.String()
+}
+
 func (s *disable_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
+
 	var exists bool
 
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -637,7 +770,7 @@ func (s *disable_subscription_state) Execute() (State, error) {
 		}, nil
 	}
 
-	log.Info("Subscription disabled")
+	log.Info("completed")
 
 	return &delete_subscription_state{
 		config: s.config,
@@ -652,6 +785,7 @@ func (s *disable_subscription_state) String() string {
 
 func (s *delete_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
 
 	var exists bool
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -681,6 +815,7 @@ func (s *delete_subscription_state) Execute() (State, error) {
 		}
 		log.Info("Subscription deleted")
 	}
+	log.Info("completed")
 	return &delete_publication_state{
 		config: s.config,
 	}, nil
@@ -694,6 +829,8 @@ func (s *delete_subscription_state) String() string {
 
 func (s *delete_publication_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
+	log.Info("started")
+
 	var exists bool
 
 	sourceDBAdmin, err := getDB(s.config.SourceDBAdminDsn, nil)
@@ -724,8 +861,8 @@ func (s *delete_publication_state) Execute() (State, error) {
 	} else {
 		log.Info("publication not found. ignoring and moving on")
 	}
-	log.Info("publication deleted")
 
+	log.Info("completed")
 	return &completed_state{
 		config: s.config,
 	}, nil
