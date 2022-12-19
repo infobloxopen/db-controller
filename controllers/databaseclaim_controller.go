@@ -62,6 +62,7 @@ const (
 	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
 	defaultPostgresStr       = "postgres"
 	defaultAuroraPostgresStr = "aurora-postgresql"
+	defaultBackupPolicyKey   = "backup"
 )
 
 type ModeEnum int
@@ -1151,6 +1152,12 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 
 	encryptStrg := true
 
+	if dbClaim.Spec.BackupPolicy == "" {
+		dbClaim.Spec.Tags = append(dbClaim.Spec.Tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: r.Config.GetString("defaultBackupPolicyValue")})
+	} else {
+		dbClaim.Spec.Tags = append(dbClaim.Spec.Tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: dbClaim.Spec.BackupPolicy})
+	}
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbCluster)
@@ -1256,6 +1263,12 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	perfIns := true
 	encryptStrg := true
 
+	if dbClaim.Spec.BackupPolicy == "" {
+		dbClaim.Spec.Tags = append(dbClaim.Spec.Tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: r.Config.GetString("defaultBackupPolicyValue")})
+	} else {
+		dbClaim.Spec.Tags = append(dbClaim.Spec.Tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: dbClaim.Spec.BackupPolicy})
+	}
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
@@ -1353,6 +1366,12 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 
 	params := &r.Input.HostParams
 	perfIns := true
+
+	if dbClaim.Spec.BackupPolicy == "" {
+		dbClaim.Spec.Tags = append(dbClaim.Spec.Tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: r.Config.GetString("defaultBackupPolicyValue")})
+	} else {
+		dbClaim.Spec.Tags = append(dbClaim.Spec.Tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: dbClaim.Spec.BackupPolicy})
+	}
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,

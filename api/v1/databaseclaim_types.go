@@ -176,6 +176,11 @@ type DatabaseClaimSpec struct {
 	// +optional
 	MinStorageGB int `json:"minStorageGB"`
 
+	// BackupPolicy specifies the duration at which db backups are taken
+	// +optional
+	// +kubebuilder:validation:Enum=Bronze;Silver;Gold
+	BackupPolicy string `json:"backupPolicy,omitempty"`
+
 	// Tags
 	// +optional
 	// +nullable
