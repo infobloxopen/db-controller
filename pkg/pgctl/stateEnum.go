@@ -14,8 +14,9 @@ const (
 	S_CutOverReadinessCheck
 	S_ResetTargetSequence
 	S_RerouteTargetSecret
-	S_ValidateMigrationStatus
+	S_WaitToDisableSource
 	S_DisableSourceAccess
+	S_ValidateMigrationStatus
 	S_DisableSubscription
 	S_DeleteSubscription
 	S_DeletePublication
@@ -45,10 +46,12 @@ func (s StateEnum) String() string {
 		return "reset_target_sequence"
 	case S_RerouteTargetSecret:
 		return "reroute_target_secret"
-	case S_ValidateMigrationStatus:
-		return "validate_migration_status"
+	case S_WaitToDisableSource:
+		return "wait_to_disable_source"
 	case S_DisableSourceAccess:
 		return "disable_source_access"
+	case S_ValidateMigrationStatus:
+		return "validate_migration_status"
 	case S_DisableSubscription:
 		return "disable_subscription"
 	case S_DeleteSubscription:
@@ -76,8 +79,9 @@ func init() {
 	stateMap[S_CutOverReadinessCheck.String()] = S_CutOverReadinessCheck
 	stateMap[S_ResetTargetSequence.String()] = S_ResetTargetSequence
 	stateMap[S_RerouteTargetSecret.String()] = S_RerouteTargetSecret
-	stateMap[S_ValidateMigrationStatus.String()] = S_ValidateMigrationStatus
 	stateMap[S_DisableSourceAccess.String()] = S_DisableSourceAccess
+	stateMap[S_ValidateMigrationStatus.String()] = S_ValidateMigrationStatus
+	stateMap[S_WaitToDisableSource.String()] = S_WaitToDisableSource
 	stateMap[S_DisableSubscription.String()] = S_DisableSubscription
 	stateMap[S_DeleteSubscription.String()] = S_DeleteSubscription
 	stateMap[S_DeletePublication.String()] = S_DeletePublication
