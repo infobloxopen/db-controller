@@ -696,6 +696,7 @@ var multiConfig = []byte(`
   defaultPubliclyAccessible: false
   defaultDeletionPolicy: orphan
   providerConfig: default
+  defaultBackupPolicyValue: Bronze
   passwordConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
@@ -1543,6 +1544,68 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 			}
 			if got := r.getMode(tt.args.dbClaim); got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.getMode() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDatabaseClaimReconciler_BackupPolicy(t *testing.T) {
+	type mockReconciler struct {
+		Client client.Client
+		Log    logr.Logger
+		Scheme *runtime.Scheme
+		Config *viper.Viper
+	}
+	type args struct {
+		dbClaim *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name       string
+		reconciler mockReconciler
+		args       args
+		want       persistancev1.Tag
+	}{
+		{
+			"Get default Backup Policy Setting",
+			mockReconciler{
+				Config: NewConfig(multiConfig),
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						BackupPolicy: "",
+					},
+				},
+			},
+			persistancev1.Tag{Key: defaultBackupPolicyKey, Value: "Bronze"},
+		},
+		{
+			"Get Backup Policy set in DBClaim CR",
+			mockReconciler{
+				Config: NewConfig(multiConfig),
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						BackupPolicy: "Gold",
+					},
+				},
+			},
+			persistancev1.Tag{Key: defaultBackupPolicyKey, Value: "Gold"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client: tt.reconciler.Client,
+				Log:    tt.reconciler.Log,
+				Scheme: tt.reconciler.Scheme,
+				Config: tt.reconciler.Config,
+			}
+			got := r.configureBackupPolicy(tt.args.dbClaim.Spec.BackupPolicy, tt.args.dbClaim.Spec.Tags)
+
+			if got[0] != tt.want {
+				t.Errorf("configureBackupPolicy() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
