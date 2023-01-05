@@ -62,6 +62,7 @@ const (
 	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
 	defaultPostgresStr       = "postgres"
 	defaultAuroraPostgresStr = "aurora-postgresql"
+	defaultBackupPolicyKey   = "backup"
 )
 
 type ModeEnum int
@@ -1116,6 +1117,15 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 	return nil
 }
 
+func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tags []persistancev1.Tag) []persistancev1.Tag {
+	if backupPolicy == "" {
+		tags = append(tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: r.Config.GetString("defaultBackupPolicyValue")})
+	} else {
+		tags = append(tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: backupPolicy})
+	}
+	return tags
+}
+
 func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 
@@ -1150,6 +1160,8 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	params := &r.Input.HostParams
 
 	encryptStrg := true
+
+	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -1256,6 +1268,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	perfIns := true
 	encryptStrg := true
 
+	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
@@ -1353,6 +1367,8 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 
 	params := &r.Input.HostParams
 	perfIns := true
+
+	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -1776,7 +1792,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 
 	// Update DBInstance
-
+	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
 
 	// TODO:currently ignoring changes to shape and minStorage if a CR already exists.
@@ -1821,7 +1837,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
 
 	// Update DBCluster
-
+	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
 
 	// Compute a json patch based on the changed RDSInstance
