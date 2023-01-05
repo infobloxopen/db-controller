@@ -21,6 +21,7 @@ defaultReclaimPolicy: delete
 defaultSkipFinalSnapshotBeforeDeletion: true
 defaultPubliclyAccessible: false
 defaultDeletionPolicy: Orphan
+defaultBackupPolicyValue: Bronze
 
 passwordConfig:
   passwordComplexity: enabled
