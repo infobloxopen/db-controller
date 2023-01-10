@@ -1117,6 +1117,20 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 }
 
 func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tags []persistancev1.Tag) []persistancev1.Tag {
+
+	for _, tag := range tags {
+		if tag.Key == defaultBackupPolicyKey {
+			if tag.Value != backupPolicy {
+				if backupPolicy == "" {
+					tag.Value = r.Config.GetString("defaultBackupPolicyValue")
+				} else {
+					tag.Value = backupPolicy
+				}
+			}
+			return tags
+		}
+	}
+
 	if backupPolicy == "" {
 		tags = append(tags, persistancev1.Tag{Key: defaultBackupPolicyKey, Value: r.Config.GetString("defaultBackupPolicyValue")})
 	} else {
