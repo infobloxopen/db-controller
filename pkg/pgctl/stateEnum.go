@@ -89,7 +89,7 @@ func init() {
 	stateMap[S_Retry.String()] = S_Retry
 }
 
-func getStateEnum(name string) (StateEnum, error) {
+func GetStateEnum(name string) (StateEnum, error) {
 	if s, present := stateMap[name]; present {
 		return s, nil
 	} else {
