@@ -70,19 +70,10 @@ var _ State = &delete_publication_state{}
 var _ State = &completed_state{}
 var _ State = &retry_state{}
 
-// func GetReplicatorState(log logr.Logger, sourceDBAdminDsn string, sourceDBUserDsn string, targetDBAdminDsn string, targetDBUserDsn string, stateName string) (State, error) {
-
-// 	return getCurrentState(stateName, Config{Log: log,
-// 		SourceDBAdminDsn: sourceDBAdminDsn,
-// 		SourceDBUserDsn:  sourceDBUserDsn,
-// 		TargetDBAdminDsn: targetDBAdminDsn,
-// 		TargetDBUserDsn:  targetDBUserDsn})
-// }
-
 func GetReplicatorState(name string, c Config) (State, error) {
 	log := c.Log.WithValues("state", name)
 
-	stateEnum, err := getStateEnum(name)
+	stateEnum, err := GetStateEnum(name)
 	if err != nil {
 		log.Error(err, "error while getting current state")
 		return nil, err
