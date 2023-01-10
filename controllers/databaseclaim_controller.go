@@ -63,6 +63,8 @@ const (
 	defaultPostgresStr       = "postgres"
 	defaultAuroraPostgresStr = "aurora-postgresql"
 	defaultBackupPolicyKey   = "backup"
+	tempTargetPassword       = "targetPassword"
+	tempSourceDsn            = "sourceDsn"
 )
 
 type ModeEnum int
@@ -486,7 +488,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	//store a temp secret to beused by migration process
 	//removing the practice of storing the secret in status
 	if r.Input.TempSecret != "" {
-		r.createTempSecret(ctx, r.Input.TempSecret, dbClaim)
+		r.setTargetPasswordInTempSecret(ctx, r.Input.TempSecret, dbClaim)
 	}
 
 	return r.reconcileMigrationInProgress(ctx, dbClaim)
@@ -513,7 +515,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 
 	targetMasterDsn := r.Input.MasterConnInfo.Uri()
 	targetAppConn := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
-	targetAppConn.Password, err = r.getTempPasswordFromSecret(ctx, dbClaim)
+	targetAppConn.Password, err = r.getTargetPasswordFromTempSecret(ctx, dbClaim)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
 	}
@@ -597,19 +599,16 @@ loop:
 				logr.Error(err, "could not update db claim status")
 				return r.manageError(ctx, dbClaim, err)
 			}
-			//TODO
-			//original secret is lost after reroutetargetstate
-			//removing the requeue until fix is applied
-			//return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
 
 		case pgctl.S_RerouteTargetSecret:
+			if err := r.rerouteTargetSecret(ctx, sourceAppDsn, targetAppConn, dbClaim); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
 			s = next
 			dbClaim.Status.MigrationState = s.String()
 			if err := r.Status().Update(ctx, dbClaim); err != nil {
 				logr.Error(err, "could not update db claim status")
-				return r.manageError(ctx, dbClaim, err)
-			}
-			if err := r.createOrUpdateSecret(ctx, dbClaim, targetAppConn); err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
 
@@ -1858,6 +1857,21 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 
 	return true, nil
 }
+func (r *DatabaseClaimReconciler) rerouteTargetSecret(ctx context.Context, sourceDsn string,
+	targetAppConn *persistancev1.DatabaseClaimConnectionInfo, dbClaim *persistancev1.DatabaseClaim) error {
+
+	//store source dsn before overwriting secret
+	err := r.setSourceDsnInTempSecret(ctx, sourceDsn, dbClaim)
+	if err != nil {
+		return err
+	}
+	err = r.createOrUpdateSecret(ctx, dbClaim, targetAppConn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim,
 	connInfo *persistancev1.DatabaseClaimConnectionInfo) error {
 
@@ -2088,6 +2102,18 @@ func (r *DatabaseClaimReconciler) getSrcAdminPasswdFromSecret(ctx context.Contex
 }
 
 func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+	migrationState := dbClaim.Status.MigrationState
+	state, err := pgctl.GetStateEnum(migrationState)
+	if err != nil {
+		return "", err
+	}
+
+	if state > pgctl.S_RerouteTargetSecret {
+		//dsn is pulled from temp secret since app secret is not using new db
+		return r.getSourceDsnFromTempSecret(ctx, dbClaim)
+	}
+
+	// get dsn from secret used by the app
 	dsn := "uri_" + dbClaim.Spec.DSNName
 	secretName := dbClaim.Spec.SecretName
 	gs := &corev1.Secret{}
@@ -2096,7 +2122,7 @@ func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, db
 	if ns == "" {
 		ns = "default"
 	}
-	err := r.Client.Get(ctx, client.ObjectKey{
+	err = r.Client.Get(ctx, client.ObjectKey{
 		Namespace: ns,
 		Name:      secretName,
 	}, gs)
@@ -2105,10 +2131,11 @@ func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, db
 		return "", err
 	}
 	return string(gs.Data[dsn]), nil
+
 }
 
 func (r *DatabaseClaimReconciler) deleteTempSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
-	secretName := "temp-" + dbClaim.Spec.SecretName
+	secretName := getTempSecretName((dbClaim))
 
 	gs := &corev1.Secret{}
 
@@ -2129,8 +2156,27 @@ func (r *DatabaseClaimReconciler) deleteTempSecret(ctx context.Context, dbClaim 
 	return r.Client.Delete(ctx, gs)
 }
 
-func (r *DatabaseClaimReconciler) getTempPasswordFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
-	secretKey := "password"
+func (r *DatabaseClaimReconciler) getSourceDsnFromTempSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+	secretName := getTempSecretName((dbClaim))
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+	return string(gs.Data[tempSourceDsn]), nil
+}
+
+func (r *DatabaseClaimReconciler) getTargetPasswordFromTempSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+
 	secretName := "temp-" + dbClaim.Spec.SecretName
 
 	gs := &corev1.Secret{}
@@ -2146,13 +2192,37 @@ func (r *DatabaseClaimReconciler) getTempPasswordFromSecret(ctx context.Context,
 	if err != nil {
 		return "", err
 	}
-	return string(gs.Data[secretKey]), nil
+	return string(gs.Data[tempTargetPassword]), nil
 }
 
-func (r *DatabaseClaimReconciler) createTempSecret(ctx context.Context, password string, dbClaim *persistancev1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) setSourceDsnInTempSecret(ctx context.Context, dsn string, dbClaim *persistancev1.DatabaseClaim) error {
+
+	tSecret, err := r.getTempSecret(ctx, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	r.Log.Info("updating temp secret with source dsn")
+	tSecret.Data[tempSourceDsn] = []byte(dsn)
+	return r.Client.Update(ctx, tSecret)
+}
+
+func (r *DatabaseClaimReconciler) setTargetPasswordInTempSecret(ctx context.Context, password string, dbClaim *persistancev1.DatabaseClaim) error {
+
+	tSecret, err := r.getTempSecret(ctx, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	r.Log.Info("updating temp secret target password")
+	tSecret.Data[tempTargetPassword] = []byte(password)
+	return r.Client.Update(ctx, tSecret)
+}
+
+func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (*corev1.Secret, error) {
 
 	gs := &corev1.Secret{}
-	secretName := "temp-" + dbClaim.Spec.SecretName
+	secretName := getTempSecretName(dbClaim)
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: dbClaim.Namespace,
@@ -2161,7 +2231,7 @@ func (r *DatabaseClaimReconciler) createTempSecret(ctx context.Context, password
 
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return err
+			return nil, err
 		}
 		truePtr := true
 		secret := &corev1.Secret{
@@ -2181,15 +2251,20 @@ func (r *DatabaseClaimReconciler) createTempSecret(ctx context.Context, password
 				},
 			},
 			Data: map[string][]byte{
-				"password": []byte(password),
+				tempTargetPassword: nil,
+				tempSourceDsn:      nil,
 			},
 		}
 
 		r.Log.Info("creating temp secret", "name", secret.Name, "namespace", secret.Namespace)
-		return r.Client.Create(ctx, secret)
+		err = r.Client.Create(ctx, secret)
+		return secret, err
 	} else {
-		r.Log.Info("updating temp secret", "name", secretName)
-		gs.Data["password"] = []byte(password)
-		return r.Client.Update(ctx, gs)
+		r.Log.Info("secret exists returning temp secret", "name", secretName)
+		return gs, nil
 	}
+}
+
+func getTempSecretName(dbClaim *persistancev1.DatabaseClaim) string {
+	return "temp-" + dbClaim.Spec.SecretName
 }
