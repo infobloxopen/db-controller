@@ -15,7 +15,10 @@ func (r DBClaimTags) DBTags() DBTags {
 	sort.Sort(r)
 	tags := make(DBTags, 0, len(r))
 	for _, t := range r {
-		tags = append(tags, &crossplanerds.Tag{Key: &t.Key, Value: &t.Value})
+		key := t.Key
+		val := t.Value
+		tag := crossplanerds.Tag{Key: &key, Value: &val}
+		tags = append(tags, &tag)
 	}
 	return tags
 }
