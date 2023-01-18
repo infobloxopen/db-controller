@@ -318,11 +318,11 @@ the logs and you will need to find the value from the secret in db-controller na
 this database as part of your connection string.
 ```bash
 kubectl -n postgres exec -it postgres-postgresql-0 /bin/sh
-PGPASSWORD=**GONE**... createdb -h db-controller-dynamic.<some-region>.rds.amazonaws.com  -U root -p 10000 sample_app_claim_1
+PGPASSWORD=PGPASSHEREz... createdb -h db-controller-dynamic.<some-region>.rds.amazonaws.com  -U root -p 10000 sample_app_claim_1
 psql postgres://root:<password>@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
 ```
-psql postgres://root:***REMOVED***@***REMOVED***.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
-psql postgres://root:***REMOVED***@***REMOVED***.rds.amazonaws.com:10000/sample_app_claim_1?sslmode=require
+psql postgres://root:PASSHERE@<db-controller-full-aws-arn>:5432/sample_app_claim_1?sslmode=require
+psql postgres://root:PASSHERE@<db-controller-full-aws-arn>:10000/sample_app_claim_1?sslmode=require
 
-PGPASSWORD=***REMOVED*** createdb -h ***REMOVED***.rds.amazonaws.com  -U root -p 5432 sample_app_claim_1
-PGPASSWORD=EonpdKzIqu0kIU8WpzmUcEFtfMm  createdb -h db-controller-databaseclaim-dynamic-1.crs4bvboouwp.us-west-1.rds.amazonaws.com -U root -p 5432 sample_app_claim_1
+PGPASSWORD=PASSHERE createdb -h <db-controller-full-aws-arn>  -U root -p 5432 sample_app_claim_1
+PGPASSWORD=PASSHERE  createdb -h <db-controller-full-aws-arn> -U root -p 5432 sample_app_claim_1
