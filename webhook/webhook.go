@@ -3,6 +3,7 @@ package hook
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,6 +29,20 @@ var (
 type Config struct {
 	Containers []corev1.Container `json:"containers"`
 	Volumes    []corev1.Volume    `json:"volumes"`
+}
+
+func ParseConfig(configFile string) (*Config, error) {
+	data, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
 }
 
 func dbProxySideCardInjectionRequired(pod *corev1.Pod) (bool, string) {

@@ -7,6 +7,16 @@ metadata:
   name:  {{ $appName }}-manager-role
 rules:
   - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - configmaps
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+  - apiGroups:
       - persistance.atlas.infoblox.com
     resources:
       - databaseclaims

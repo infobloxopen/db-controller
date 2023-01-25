@@ -5,9 +5,9 @@
 *.dll
 *.so
 *.dylib
-bin
-db-controller
-manager
+/bin
+/manager
+/db-controller
 
 # Test binary, build with `go test -c`
 *.test
@@ -31,3 +31,4 @@ vendor
 .id
 
 .vscode
+/.*

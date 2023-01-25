@@ -38,7 +38,7 @@ import (
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
-	dbproxy "github.com/infobloxopen/db-controller/webhook"
+	dbwebhook "github.com/infobloxopen/db-controller/webhook"
 
 	//+kubebuilder:scaffold:imports
 	"github.com/infobloxopen/db-controller/pkg/config"
@@ -64,13 +64,13 @@ func init() {
 
 }
 
-func parseDBPoxySidecarConfig(configFile string) (*dbproxy.Config, error) {
+func parseDBPoxySidecarConfig(configFile string) (*dbwebhook.Config, error) {
 	data, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg dbproxy.Config
+	var cfg dbwebhook.Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
@@ -83,11 +83,14 @@ func main() {
 	var metricsPort int
 	var enableLeaderElection bool
 	var configFile string
+	var sidecarConfigPath string
 	var probeAddr string
 	var probePort int
 	var enableDBProxyWebhook bool
 	var dbIdentifierPrefix string
 	var class string
+	var metricsDepYamlPath string
+	var metricsConfigYamlPath string
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
 	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "", "The prefix to be added to the DbHost. Ideally this is the env name.")
@@ -98,8 +101,10 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml",
-		"Database connection string to with root credentials.")
+	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml", "Database connection string to with root credentials.")
+	flag.StringVar(&sidecarConfigPath, "sidecar-config-path", "/etc/config/sidecar.yaml", "Mutating webhook sidecar configuration.")
+	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
+	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
 	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
 		"Enable DB Proxy webhook. "+
 			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
@@ -128,13 +133,15 @@ func main() {
 	}
 
 	if err = (&controllers.DatabaseClaimReconciler{
-		Client:             mgr.GetClient(),
-		Log:                ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
-		Scheme:             mgr.GetScheme(),
-		Config:             ctlConfig,
-		MasterAuth:         rdsauth.NewMasterAuth(),
-		DbIdentifierPrefix: dbIdentifierPrefix,
-		Class:              class,
+		Class:                 class,
+		Client:                mgr.GetClient(),
+		Config:                ctlConfig,
+		DbIdentifierPrefix:    dbIdentifierPrefix,
+		Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
+		MasterAuth:            rdsauth.NewMasterAuth(),
+		MetricsDepYamlPath:    metricsDepYamlPath,
+		MetricsConfigYamlPath: metricsConfigYamlPath,
+		Scheme:                mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
@@ -156,16 +163,22 @@ func main() {
 		webHookServer.Port = 7443
 		webHookServer.CertDir = "./certs/"
 
-		dbProxySidecarConfig, err := parseDBPoxySidecarConfig("./config/dbproxy/dbproxysidecar.json")
+		cfg, err := dbwebhook.ParseConfig(sidecarConfigPath)
 		if err != nil {
 			setupLog.Error(err, "could not parse db proxy sidecar configuration")
 			os.Exit(1)
-		} else {
-			setupLog.Info("Parsed db proxy sidecar config:", "dbproxysidecarconfig", dbProxySidecarConfig)
 		}
 
+		setupLog.Info("Parsed db proxy config:", cfg)
+
 		setupLog.Info("registering with webhook server")
-		webHookServer.Register("/mutate", &webhook.Admission{Handler: &dbproxy.DBProxyInjector{Name: "DB Proxy", Client: mgr.GetClient(), DBProxySidecarConfig: dbProxySidecarConfig}})
+		webHookServer.Register("/mutate", &webhook.Admission{
+			Handler: &dbwebhook.DBProxyInjector{
+				Name:                 "DB Proxy",
+				Client:               mgr.GetClient(),
+				DBProxySidecarConfig: cfg,
+			},
+		})
 	}
 
 	setupLog.Info("starting manager")
