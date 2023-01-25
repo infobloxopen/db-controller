@@ -181,6 +181,10 @@ type DatabaseClaimSpec struct {
 	// +kubebuilder:validation:Enum=Bronze;Silver;Gold
 	BackupPolicy string `json:"backupPolicy,omitempty"`
 
+	// RestoreFrom indicates the snapshot to restore the Database from
+	// +optional
+	RestoreFrom string `json:"restoreFrom,omitempty"`
+
 	// Tags
 	// +optional
 	// +nullable

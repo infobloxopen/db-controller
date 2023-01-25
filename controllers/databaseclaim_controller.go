@@ -1203,6 +1203,11 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 							DBClusterParameterGroupNameRef: &xpv1.Reference{
 								Name: pgName,
 							},
+							RestoreFrom: &crossplanerds.RestoreDBClusterBackupConfiguration{
+								Snapshot: &crossplanerds.SnapshotRestoreBackupConfiguration{
+									SnapshotIdentifier: &dbClaim.Spec.RestoreFrom,
+								},
+							},
 						},
 						// Items from Claim and fragmentKey
 						Engine: &params.Engine,
@@ -1310,6 +1315,11 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
+							RestoreFrom: &crossplanerds.RestoreDBInstanceBackupConfiguration{
+								Snapshot: &crossplanerds.SnapshotRestoreBackupConfiguration{
+									SnapshotIdentifier: &dbClaim.Spec.RestoreFrom,
+								},
+							},
 						},
 						// Items from Claim and fragmentKey
 						Engine:           &params.Engine,
