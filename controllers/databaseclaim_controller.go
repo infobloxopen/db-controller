@@ -1191,7 +1191,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}
 
 	params := &r.Input.HostParams
-
+	r.Mode = r.getMode(dbClaim)
 	encryptStrg := true
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
@@ -1240,6 +1240,10 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						DeletionPolicy:                   params.DeletionPolicy,
 					},
 				},
+			}
+			if r.Mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+				snapshotID := dbClaim.Spec.RestoreFrom
+				dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom.Snapshot.SnapshotIdentifier = &snapshotID
 			}
 			r.Log.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 			if err := r.Client.Create(ctx, dbCluster); err != nil {
@@ -1300,6 +1304,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	multiAZ := r.getMultiAZEnabled()
 	perfIns := true
 	encryptStrg := true
+	r.Mode = r.getMode(dbClaim)
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1353,7 +1358,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 					},
 				},
 			}
-
+			if r.Mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+				snapshotID := dbClaim.Spec.RestoreFrom
+				dbInstance.Spec.ForProvider.CustomDBInstanceParameters.RestoreFrom.Snapshot.SnapshotIdentifier = &snapshotID
+			}
 			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 
 			if err := r.Client.Create(ctx, dbInstance); err != nil {

@@ -82,6 +82,10 @@ spec:
                   If the value is omitted, then the host value from the matching InstanceLabel
                   will be used.
                 type: string
+              restoreFrom:
+                description: RestoreFrom indicates the snapshot to restore the Database
+                  from
+                type: string
               secretName:
                 description: The name of the secret to use for storing the ConnectionInfo.  Must
                   follow a naming convention that ensures it is unique.
