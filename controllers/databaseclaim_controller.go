@@ -1241,6 +1241,10 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 					},
 				},
 			}
+			if r.Mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+				snapshotID := dbClaim.Spec.RestoreFrom
+				dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom.Snapshot.SnapshotIdentifier = &snapshotID
+			}
 			r.Log.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 			if err := r.Client.Create(ctx, dbCluster); err != nil {
 				return false, err
@@ -1353,7 +1357,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 					},
 				},
 			}
-
+			if r.Mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+				snapshotID := dbClaim.Spec.RestoreFrom
+				dbInstance.Spec.ForProvider.CustomDBInstanceParameters.RestoreFrom.Snapshot.SnapshotIdentifier = &snapshotID
+			}
 			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 
 			if err := r.Client.Create(ctx, dbInstance); err != nil {
