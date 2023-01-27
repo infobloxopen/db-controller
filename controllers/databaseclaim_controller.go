@@ -63,6 +63,7 @@ const (
 	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
 	defaultPostgresStr       = "postgres"
 	defaultAuroraPostgresStr = "aurora-postgresql"
+	defaultRestoreFromSource = "Snapshot"
 	defaultBackupPolicyKey   = "backup"
 	tempTargetPassword       = "targetPassword"
 	tempSourceDsn            = "sourceDsn"
@@ -1191,7 +1192,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}
 
 	params := &r.Input.HostParams
-
+	restoreFromSource := defaultRestoreFromSource
 	encryptStrg := true
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
@@ -1243,7 +1244,12 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 			}
 			if r.Mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
 				snapshotID := dbClaim.Spec.RestoreFrom
-				dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom.Snapshot.SnapshotIdentifier = &snapshotID
+				dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom = &crossplanerds.RestoreDBClusterBackupConfiguration{
+					Snapshot: &crossplanerds.SnapshotRestoreBackupConfiguration{
+						SnapshotIdentifier: &snapshotID,
+					},
+					Source: &restoreFromSource,
+				}
 			}
 			r.Log.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 			if err := r.Client.Create(ctx, dbCluster); err != nil {
@@ -1296,7 +1302,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	providerConfigReference := xpv1.Reference{
 		Name: r.getProviderConfig(),
 	}
-
+	restoreFromSource := defaultRestoreFromSource
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := &r.Input.HostParams
@@ -1359,7 +1365,12 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 			}
 			if r.Mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
 				snapshotID := dbClaim.Spec.RestoreFrom
-				dbInstance.Spec.ForProvider.CustomDBInstanceParameters.RestoreFrom.Snapshot.SnapshotIdentifier = &snapshotID
+				dbInstance.Spec.ForProvider.CustomDBInstanceParameters.RestoreFrom = &crossplanerds.RestoreDBInstanceBackupConfiguration{
+					Snapshot: &crossplanerds.SnapshotRestoreBackupConfiguration{
+						SnapshotIdentifier: &snapshotID,
+					},
+					Source: &restoreFromSource,
+				}
 			}
 			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 
