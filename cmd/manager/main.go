@@ -38,11 +38,11 @@ import (
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
+	"github.com/infobloxopen/db-controller/pkg/config"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	dbwebhook "github.com/infobloxopen/db-controller/webhook"
 
 	//+kubebuilder:scaffold:imports
-	"github.com/infobloxopen/db-controller/pkg/config"
-	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 
 	// +kubebuilder:scaffold:imports
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
@@ -144,6 +144,14 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
+		os.Exit(1)
+	}
+	if err = (&controllers.DbRoleClaimReconciler{
+		Class:  class,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

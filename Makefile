@@ -140,12 +140,12 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: build
 build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	cd cmd/manager && go build -o ../../bin/manager main.go
 	cd dbproxy && go build -o ../bin/dbproxy
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	go run ./cmd/manager/main.go
 
 #TODO
 .PHONY: docker-buildx
@@ -234,6 +234,7 @@ endef
 # Updates helm chart db-controller-crds to be in sync
 update_crds: manifests
 	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_databaseclaims.yaml
+	cp ./config/crd/bases/persistance.atlas.infoblox.com_dbroleclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_dbroleclaims.yaml
 
 # find or download controller-gen
 # download controller-gen if necessary
