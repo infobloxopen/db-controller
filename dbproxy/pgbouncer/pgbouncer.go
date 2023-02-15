@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -14,82 +15,115 @@ import (
 )
 
 type DBCredential struct {
-	Host     *string
+	Host     string
 	Port     int
-	DBName   *string
-	User     *string
-	Password *string
+	DBName   string
+	User     string
+	Password string
 }
 
 type PGBouncerConfig struct {
-	LocalDbName *string
-	LocalHost   *string
+	LocalDbName string
+	LocalHost   string
 	LocalPort   int16
-	RemoteHost  *string
+	RemoteHost  string
 	RemotePort  int16
-	UserName    *string
-	Password    *string
+	UserName    string
+	Password    string
 }
 
-func ParseDBCredentials(path *string) (*DBCredential, error) {
-	content, err := ioutil.ReadFile(*path)
+var (
+	errHostNotFound     = errors.New("value not found in db credential")
+	errPortNotFound     = errors.New("port value not found in db credential")
+	errDbNameNotFound   = errors.New("dbname value not found in db credential")
+	errUserNotFound     = errors.New("user value not found in db credential")
+	errPasswordNotFound = errors.New("password value not found in db credential")
+)
+
+func ParseDBCredentials(path string) (*DBCredential, error) {
+	var dbc DBCredential
+	content, err := ioutil.ReadFile(path)
 
 	if err != nil {
 		return nil, err
 	}
 
-	fields := strings.Split(string(content), "' ")
-
-	f := func(c rune) bool {
-		return (c == '=')
-	}
-
-	m := make(map[string]*string)
-
-	for _, field := range fields {
-		fieldPair := strings.FieldsFunc(field, f)
-		fieldPair = strings.SplitN(field, "=", 2)
-		if len(fieldPair) == 2 {
-			unquotedString := strings.Trim(fieldPair[1], `'`)
-			m[fieldPair[0]] = &unquotedString
-		} else if len(fieldPair) == 1 {
-			m[fieldPair[0]] = nil
+	if strings.Contains(string(content), "://") {
+		u, err := url.Parse(string(content))
+		if err != nil {
+			return nil, fmt.Errorf("error parsing URL DNS: %s", err)
 		}
+		dbc.Host = u.Hostname()
+		portStr := u.Port()
+		if portStr == "" {
+			dbc.Port = 5432
+		} else {
+			var err error
+			dbc.Port, err = strconv.Atoi(portStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid port number: %s", portStr)
+			}
+		}
+		if u.User != nil {
+			dbc.User = u.User.String()
+			dbc.Password, _ = u.User.Password()
+		}
+		dbc.DBName = strings.TrimPrefix(u.Path, "/")
+	} else {
+
+		fields := strings.Split(string(content), "' ")
+
+		f := func(c rune) bool {
+			return (c == '=')
+		}
+
+		m := make(map[string]string)
+
+		for _, field := range fields {
+			fieldPair := strings.FieldsFunc(field, f)
+			fieldPair = strings.SplitN(field, "=", 2)
+			if len(fieldPair) == 2 {
+				m[fieldPair[0]] = strings.Trim(fieldPair[1], `'`)
+			} else if len(fieldPair) == 1 {
+				m[fieldPair[0]] = ""
+			}
+		}
+		dbc.Host = m["host"]
+		if m["port"] != "" {
+			dbc.Port, err = strconv.Atoi(m["port"])
+			if err != nil {
+				return nil, fmt.Errorf("invalid port number: %s", m["port"])
+			}
+		}
+		dbc.DBName = m["dbmane"]
+		dbc.User = m["user"]
+		dbc.Password = m["password"]
 	}
 
-	if m["host"] == nil {
-		return nil, errors.New("host value not found in db credential")
+	if dbc.Host == "" {
+		return nil, errHostNotFound
 	}
 
-	if m["port"] == nil {
-		return nil, errors.New("port value not found in db credential")
+	if dbc.Port == 0 {
+		return nil, errPortNotFound
 	}
 
-	if m["dbname"] == nil {
-		return nil, errors.New("dbname value not found in db credential")
+	if dbc.DBName == "" {
+		return nil, errDbNameNotFound
 	}
 
-	if m["user"] == nil {
-		return nil, errors.New("user value not found in db credential")
+	if dbc.User == "" {
+		return nil, errUserNotFound
 	}
 
-	if m["password"] == nil {
-		return nil, errors.New("password value not found in db credential")
+	if dbc.Password == "" {
+		return nil, errPasswordNotFound
 	}
-
-	dbc := DBCredential{}
-	dbc.Host = m["host"]
-	dbc.Port, _ = strconv.Atoi(*m["port"])
-	dbc.DBName = m["dbname"]
-	dbc.User = m["user"]
-	dbc.Password = m["password"]
-
-	// fmt.Println(*dbc.Host, dbc.Port, *dbc.DBName, *dbc.User, *dbc.Password)
 
 	return &dbc, nil
 }
 
-func WritePGBouncerConfig(path *string, config *PGBouncerConfig) error {
+func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 	t, err := template.ParseFiles("./pgbouncer.template")
 	if err != nil {
 		return err
@@ -98,7 +132,7 @@ func WritePGBouncerConfig(path *string, config *PGBouncerConfig) error {
 		os.Stderr.WriteString("could not parse pgbouncer config template")
 	}
 
-	configFile, err := os.OpenFile(*path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	configFile, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -117,7 +151,7 @@ func WritePGBouncerConfig(path *string, config *PGBouncerConfig) error {
 		return err
 	}
 
-	userLine := strconv.Quote(*config.UserName) + " \"" + strings.Replace(*config.Password, "\"", "\"\"", -1) + "\""
+	userLine := strconv.Quote(config.UserName) + " \"" + strings.Replace(config.Password, "\"", "\"\"", -1) + "\""
 
 	userFile.Write([]byte(userLine))
 

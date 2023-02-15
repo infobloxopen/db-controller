@@ -7,20 +7,24 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"infoblox.com/dbproxy/pgbouncer" // go.mod has a replace directive to make this relative path work.
+	"github.com/infobloxopen/db-controller/dbproxy/pgbouncer"
 )
 
-func generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath *string) {
+func generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath string) {
 	dbc, err := pgbouncer.ParseDBCredentials(dbCredentialPath)
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
-	localHost := "127.0.0.1"
-	localPort := 5432
-	err = pgbouncer.WritePGBouncerConfig(pbCredentialPath, &pgbouncer.PGBouncerConfig{
-		LocalDbName: dbc.DBName, LocalHost: &localHost, LocalPort: int16(localPort),
-		RemoteHost: dbc.Host, RemotePort: int16(dbc.Port), UserName: dbc.User, Password: dbc.Password})
+	err = pgbouncer.WritePGBouncerConfig(pbCredentialPath,
+		&pgbouncer.PGBouncerConfig{
+			LocalDbName: dbc.DBName,
+			LocalHost:   "127.0.0.1",
+			LocalPort:   5432,
+			RemoteHost:  dbc.Host,
+			RemotePort:  int16(dbc.Port),
+			UserName:    dbc.User,
+			Password:    dbc.Password})
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -43,13 +47,13 @@ func reloadPGBouncerConfiguration() {
 	}
 }
 
-func waitForDbCredentialFile(path *string) {
+func waitForDbCredentialFile(path string) {
 	for {
 		time.Sleep(time.Second)
 
-		file, err := os.Open(*path)
+		file, err := os.Open(path)
 		if err != nil {
-			log.Println("Waiting for file to appear:", *path, ", error:", err)
+			log.Println("Waiting for file to appear:", path, ", error:", err)
 			continue
 		}
 
@@ -68,9 +72,17 @@ func waitForDbCredentialFile(path *string) {
 	}
 }
 
+var (
+	dbCredentialPath string
+	pbCredentialPath string
+)
+
+func init() {
+	flag.StringVar(&dbCredentialPath, "dbc", "./db-credential", "Location of the DB Credentials")
+	flag.StringVar(&pbCredentialPath, "pbc", "./pgbouncer.ini", "Location of the PGBouncer config file")
+}
+
 func main() {
-	dbCredentialPath := flag.String("dbc", "./db-credential", "Location of the DB Credentials")
-	pbCredentialPath := flag.String("pbc", "./pgbouncer.ini", "Location of the PGBouncer config file")
 
 	flag.Parse()
 
@@ -98,15 +110,15 @@ func main() {
 					return
 				}
 				log.Printf("%s %s\n", event.Name, event.Op)
-				err := watcher.Remove(*dbCredentialPath)
+				err := watcher.Remove(dbCredentialPath)
 				if err != nil {
 					log.Fatal("Remove failed:", err)
 				}
-				err = watcher.Add(*dbCredentialPath)
+				err = watcher.Add(dbCredentialPath)
 				if err != nil {
 					log.Fatal("Add failed:", err)
 				}
-                                // Regenerate pgbouncer configuration and signal pgbouncer to reload cconfiguration
+				// Regenerate pgbouncer configuration and signal pgbouncer to reload cconfiguration
 				generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath)
 				reloadPGBouncerConfiguration()
 			case err, ok := <-watcher.Errors:
@@ -119,7 +131,7 @@ func main() {
 
 	}()
 
-	err = watcher.Add(*dbCredentialPath)
+	err = watcher.Add(dbCredentialPath)
 	if err != nil {
 		log.Fatal("Add failed:", err)
 	}
