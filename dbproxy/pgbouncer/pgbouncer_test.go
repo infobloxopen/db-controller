@@ -33,33 +33,55 @@ func TestParseDBCredentials(t *testing.T) {
 			errString: errHostNotFound.Error(),
 		},
 		{
-			name: " database=foo user=bar password=baz port=1111 dbname=d",
+			name: "host=foo.com user=bar password=baz port=1111 database=d",
 			args: args{
-				path: " database=foo user=bar password=baz port=1111 dbname=d",
+				path: "host=foo user=bar password=baz port=1111 database=d",
 			},
 			wantErr: false,
+			want: &DBCredential{
+				Host:     "foo",
+				DBName:   "d",
+				User:     "bar",
+				Password: "baz",
+				Port:     1111,
+			},
+		},
+		{
+			name: "host=foo.com user=bar password=baz port=1111 dbname=d",
+			args: args{
+				path: "host=foo user=bar password=baz port=1111 dbname=d",
+			},
+			wantErr: false,
+			want: &DBCredential{
+				Host:     "foo",
+				DBName:   "d",
+				User:     "bar",
+				Password: "baz",
+				Port:     1111,
+			},
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseDBCredentials(tt.args.path)
+			got, err := parseDBCredentials(tt.args.path)
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("ParseDBCredentials() error = nil, wantErr = true")
+					t.Errorf("parseDBCredentials() error = nil, wantErr = true")
 					return
 				}
 				errString := err.Error()
 				if errString != "" && !strings.Contains(err.Error(), errString) {
-					t.Errorf("ParseDBCredentials() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("parseDBCredentials() error = %v, wantErr %v", err, tt.wantErr)
 				}
 				return
 			}
 			if err != nil {
-				t.Errorf("ParseDBCredentials() error = %v, wantErr false", err)
+				t.Errorf("parseDBCredentials() error = %v, wantErr false", err)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ParseDBCredentials() = %v, want %v", got, tt.want)
+				t.Errorf("parseDBCredentials() = %v, want %v", got, tt.want)
 			}
 		})
 	}

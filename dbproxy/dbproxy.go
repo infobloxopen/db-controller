@@ -32,8 +32,7 @@ func generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath string) {
 }
 
 func startPGBouncer() {
-	ok, err := pgbouncer.Start()
-	if !ok {
+	if err := pgbouncer.Start(); err != nil {
 		log.Println(err)
 		panic(err)
 	}

@@ -14,6 +14,7 @@ import (
 	"text/template"
 )
 
+// DBCredential represents the information parsed from a connection string.
 type DBCredential struct {
 	Host     string
 	Port     int
@@ -22,6 +23,7 @@ type DBCredential struct {
 	Password string
 }
 
+// PGBouncerConfig represents the required configuration for pgbouncer.
 type PGBouncerConfig struct {
 	LocalDbName string
 	LocalHost   string
@@ -33,23 +35,29 @@ type PGBouncerConfig struct {
 }
 
 var (
-	errHostNotFound     = errors.New("value not found in db credential")
+	errHostNotFound     = errors.New("host not found in db credential")
 	errPortNotFound     = errors.New("port value not found in db credential")
 	errDbNameNotFound   = errors.New("dbname value not found in db credential")
 	errUserNotFound     = errors.New("user value not found in db credential")
 	errPasswordNotFound = errors.New("password value not found in db credential")
 )
 
-func ParseDBCredentials(path string) (*DBCredential, error) {
-	var dbc DBCredential
-	content, err := ioutil.ReadFile(path)
-
+// ParseDBCredentials will open the filename and parse the DBCredential info out of it.
+func ParseDBCredentials(filename string) (*DBCredential, error) {
+	content, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
+	return parseDBCredentials(string(content))
+}
 
-	if strings.Contains(string(content), "://") {
-		u, err := url.Parse(string(content))
+// parseDBCredentials removes the file reading from ParseDBCredentials to make
+// it easier to unit test.
+func parseDBCredentials(content string) (*DBCredential, error) {
+
+	var dbc DBCredential
+	if strings.Contains(content, "://") {
+		u, err := url.Parse(content)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing URL DNS: %s", err)
 		}
@@ -71,33 +79,28 @@ func ParseDBCredentials(path string) (*DBCredential, error) {
 		dbc.DBName = strings.TrimPrefix(u.Path, "/")
 	} else {
 
-		fields := strings.Split(string(content), "' ")
-
-		f := func(c rune) bool {
-			return (c == '=')
+		o := make(values)
+		o["host"] = "localhost"
+		o["port"] = "5432"
+		if err := parseOpts(content, o); err != nil {
+			return nil, fmt.Errorf("could not parse %s from connection string", err)
 		}
 
-		m := make(map[string]string)
-
-		for _, field := range fields {
-			fieldPair := strings.FieldsFunc(field, f)
-			fieldPair = strings.SplitN(field, "=", 2)
-			if len(fieldPair) == 2 {
-				m[fieldPair[0]] = strings.Trim(fieldPair[1], `'`)
-			} else if len(fieldPair) == 1 {
-				m[fieldPair[0]] = ""
-			}
-		}
-		dbc.Host = m["host"]
-		if m["port"] != "" {
-			dbc.Port, err = strconv.Atoi(m["port"])
+		dbc.Host = o["host"]
+		if o["port"] != "" {
+			var err error
+			dbc.Port, err = strconv.Atoi(o["port"])
 			if err != nil {
-				return nil, fmt.Errorf("invalid port number: %s", m["port"])
+				return nil, fmt.Errorf("invalid port number: %s", o["port"])
 			}
 		}
-		dbc.DBName = m["dbmane"]
-		dbc.User = m["user"]
-		dbc.Password = m["password"]
+		// tolerate older spec connection string
+		dbc.DBName = o["dbname"]
+		if dbName, found := o["database"]; found {
+			dbc.DBName = dbName
+		}
+		dbc.User = o["user"]
+		dbc.Password = o["password"]
 	}
 
 	if dbc.Host == "" {
@@ -123,6 +126,7 @@ func ParseDBCredentials(path string) (*DBCredential, error) {
 	return &dbc, nil
 }
 
+// WritePGBouncerConfig will write out the config at the given path.
 func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 	t, err := template.ParseFiles("./pgbouncer.template")
 	if err != nil {
@@ -158,6 +162,7 @@ func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 	return (nil)
 }
 
+// ReloadConfiguration will send a signal to pgbouncer to make it re-read its configuration.
 func ReloadConfiguration() (ok bool, err error) {
 	fmt.Println("Reloading PG Bouncer config")
 
@@ -181,10 +186,9 @@ func ReloadConfiguration() (ok bool, err error) {
 	return ok, err
 }
 
-func Start() (ok bool, err error) {
+// Start will start pgbouncer.
+func Start() error {
 	fmt.Println("Starting PG Bouncer ...")
-
-	ok = true
 
 	cmd := exec.Command("/var/run/dbproxy/start-pgbouncer.sh")
 
@@ -193,13 +197,9 @@ func Start() (ok bool, err error) {
 	cmd.Stdout = &stdOut
 	cmd.Stderr = &stdErr
 
-	err = cmd.Run()
-	if err != nil {
-		ok = false
-	}
-
+	err := cmd.Run()
 	log.Println(stdOut.String())
 	log.Println(stdErr.String())
 
-	return ok, err
+	return err
 }
