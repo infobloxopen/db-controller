@@ -96,6 +96,7 @@ func Test_render(t *testing.T) {
 				ServiceAccountName:   "robot",
 				DatasourceUser:       "data",
 				DatasourceSecretName: "secret/data",
+				DatasourceFileName:   "dsn.txt",
 				Resources: map[string]map[string]string{
 					"requests": {
 						"cpu":    "100m",
@@ -128,6 +129,7 @@ annotations:
 				ServiceAccountName:   "robot",
 				DatasourceUser:       "data",
 				DatasourceSecretName: "secret/data",
+				DatasourceFileName:   "dsn.txt",
 				Values: testReadValues(t, []byte(`
 podLabels:
   keyA: valueA
@@ -179,6 +181,7 @@ func TestRender(t *testing.T) {
 				ServiceAccountName:   "robot",
 				DatasourceUser:       "data",
 				DatasourceSecretName: "secret/data",
+				DatasourceFileName:   "dsn.txt",
 				Resources: map[string]map[string]string{
 					"requests": {
 						"cpu":    "100m",

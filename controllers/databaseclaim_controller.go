@@ -308,6 +308,7 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DepYamlPath = r.MetricsDepYamlPath
 	cfg.ConfigYamlPath = r.MetricsConfigYamlPath
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
+	cfg.DatasourceFileName = dbClaim.Spec.DSNName
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 
