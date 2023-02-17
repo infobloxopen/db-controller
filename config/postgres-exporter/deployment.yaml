@@ -76,7 +76,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: "{{ .DatasourceSecretName }}"
-                key: dsn.txt
+                key: {{ .DatasourceFileName }}
           - name: DATA_SOURCE_USER
             value: {{ .DatasourceUser }}
           image: "{{ .ImageRepo }}:{{ .ImageTag }}"
