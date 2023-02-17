@@ -1,8 +1,8 @@
 controllerConfig:
   region: us-east-1
-  vpcSecurityGroupIDRefs: box-2
-  dbSubnetGroupNameRef: box-2
-  providerConfig: box-2
+  vpcSecurityGroupIDRefs: box-3
+  dbSubnetGroupNameRef: box-3
+  providerConfig: box-3
 zapLogger:
   develMode: true
   level: debug
