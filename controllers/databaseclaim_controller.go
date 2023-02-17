@@ -1194,6 +1194,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	params := &r.Input.HostParams
 	restoreFromSource := defaultRestoreFromSource
 	encryptStrg := true
+	storageType := r.Config.GetString("storageType")
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1233,6 +1234,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						EngineVersion:                   &params.EngineVersion,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						StorageEncrypted:                &encryptStrg,
+						StorageType:                     &storageType,
 						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
@@ -1310,6 +1312,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	multiAZ := r.getMultiAZEnabled()
 	perfIns := true
 	encryptStrg := true
+	storageType := r.Config.GetString("storageType")
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1354,6 +1357,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						EnablePerformanceInsights:       &perfIns,
 						StorageEncrypted:                &encryptStrg,
+						StorageType:                     &storageType,
 						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
