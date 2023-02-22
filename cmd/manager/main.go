@@ -26,6 +26,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"go.uber.org/zap/zapcore"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,7 +45,6 @@ import (
 
 	//+kubebuilder:scaffold:imports
 
-	// +kubebuilder:scaffold:imports
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 )
 
@@ -111,6 +111,7 @@ func main() {
 			"with the infoblox.com/db-secret-path annotation set.")
 	opts := zap.Options{
 		Development: false,
+		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
