@@ -14,4 +14,21 @@ spec:
   sourceDatabaseClaim:
     name: databaseclaim-dynamic-1
     namespace: dbclaim
+---
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DbRoleClaim
+metadata:
+  labels:
+    app.kubernetes.io/name: dbroleclaim
+    app.kubernetes.io/instance: dbroleclaim-sample
+    app.kubernetes.io/part-of: db-role
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: db-role
+  name: dbroleclaim-sample-2
+spec:
+  class: default
+  secretName: mycopiedsecret-2
+  sourceDatabaseClaim:
+    name: databaseclaim-dynamic-1
+    namespace: dbclaim
   

@@ -63,6 +63,9 @@ type DbRoleClaimStatus struct {
 	// Identifies the source secret this claim in inheriting from
 	SourceSecret string `json:"sourceSecret,omitempty"`
 
+	// Tracks the resourceVersion of the source secret. Used to identify changes to the secret and to trigger a sync
+	SourceSecretResourceVersion string `json:"sourceSecretResourceVersion,omitempty"`
+
 	// Time the secret attached to this claim was created
 	SecretCreatedAt *metav1.Time `json:"secretCreatedAt,omitempty"`
 

@@ -82,6 +82,10 @@ spec:
                 description: Identifies the source secret this claim in inheriting
                   from
                 type: string
+              sourceSecretResourceVersion:
+                description: Tracks the resourceVersion of the source secret. Used
+                  to identify changes to the secret and to trigger a sync
+                type: string
             type: object
         type: object
     served: true
