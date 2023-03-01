@@ -45,7 +45,6 @@ const (
 	finalizerName = "dbroleclaims.persistance.atlas.infoblox.com/finalizer"
 )
 
-// DbRoleClaimReconciler reconciles a DbRoleClaim object
 type DbRoleClaimReconciler struct {
 	Class string
 	client.Client
@@ -57,17 +56,8 @@ type DbRoleClaimReconciler struct {
 //+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=dbroleclaims/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=dbroleclaims/finalizers,verbs=update
 //+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims/finalizers,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the DbRoleClaim object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName)
 	var dbRoleClaim persistancev1.DbRoleClaim
@@ -101,7 +91,8 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		log.Error(err, "specified dbclaim not found", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
 		r.Recorder.Event(&dbRoleClaim, "Warning", "Not found", fmt.Sprintf("DatabaseClaim %s/%s", dbclaimNamespace, dbclaimName))
-		return ctrl.Result{}, err
+		dbRoleClaim.Status.MatchedSourceClaim = ""
+		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbclaimName))
 	}
 	log.Info("found dbclaim", "secretName", foundDbClaim.Spec.SecretName)
 	dbRoleClaim.Status.MatchedSourceClaim = foundDbClaim.Namespace + "/" + foundDbClaim.Name
@@ -112,7 +103,8 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		log.Error(err, "specified dbclaimSecret not found", "dbclaim secret name", foundDbClaim.Spec.SecretName, "dbclaimNamespace", dbclaimNamespace)
 		r.Recorder.Event(&dbRoleClaim, "Warning", "Not found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, foundDbClaim.Spec.SecretName))
-		return ctrl.Result{}, err
+		dbRoleClaim.Status.SourceSecret = ""
+		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s source secret not found", foundDbClaim.Spec.SecretName))
 	}
 	log.Info("found dbclaimsecret", "secretName", foundDbClaim.Spec.SecretName, "secret", foundSecret)
 
