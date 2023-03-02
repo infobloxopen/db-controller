@@ -7,7 +7,12 @@ import (
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+
 	"github.com/spf13/viper"
+)
+
+const (
+	defaultAuroraPostgresStr = "aurora-postgresql"
 )
 
 type HostParams struct {
@@ -28,7 +33,13 @@ type HostParams struct {
 }
 
 func (p *HostParams) String() string {
-	return fmt.Sprintf("%s-%s-%s-%s", p.Engine, p.Shape, p.EngineVersion, strconv.Itoa(p.MinStorageGB))
+	if p.Engine == defaultAuroraPostgresStr {
+		//storage does not apply to aurora db. just hardcoding it a random number
+		//why 20? that is the default storage and did not want to trigger an upgrade for any existing rds
+		return fmt.Sprintf("%s-%s-%s-%s", p.Engine, p.Shape, p.EngineVersion, "20")
+	} else {
+		return fmt.Sprintf("%s-%s-%s-%s", p.Engine, p.Shape, p.EngineVersion, strconv.Itoa(p.MinStorageGB))
+	}
 }
 
 func (p *HostParams) Hash() string {
@@ -46,6 +57,10 @@ func (p *HostParams) HasShapeChanged(activeShape string) bool {
 }
 
 func (p *HostParams) HasStorageChanged(activeStorage int) bool {
+	// storage is not applicable to aurora postgres
+	if p.Engine == defaultAuroraPostgresStr {
+		return false
+	}
 	if p.isDefaultStorage {
 		return false
 	}
