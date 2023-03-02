@@ -34,9 +34,8 @@ type HostParams struct {
 
 func (p *HostParams) String() string {
 	if p.Engine == defaultAuroraPostgresStr {
-		//storage does not apply to aurora db. just hardcoding it a random number
-		//why 20? that is the default storage and did not want to trigger an upgrade for any existing rds
-		return fmt.Sprintf("%s-%s-%s-%s", p.Engine, p.Shape, p.EngineVersion, "20")
+		//storage does not apply to aurora db.
+		return fmt.Sprintf("%s-%s-%s", p.Engine, p.Shape, p.EngineVersion)
 	} else {
 		return fmt.Sprintf("%s-%s-%s-%s", p.Engine, p.Shape, p.EngineVersion, strconv.Itoa(p.MinStorageGB))
 	}
