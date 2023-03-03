@@ -1146,7 +1146,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					},
 				},
 			},
-			"dbc-boxing-x-athena-5e8ec24d",
+			"dbc-boxing-x-athena-362c4cd6",
 		},
 	}
 	for _, tt := range tests {
