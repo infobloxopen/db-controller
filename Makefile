@@ -11,8 +11,9 @@ TAG ?= ${GIT_COMMIT}
 IMG_PATH ?= ${REGISTRY}/${IMAGE_NAME}
 DBPROXY_IMG_PATH ?= ${REGISTRY}/${DBPROXY_IMAGE_NAME}
 GOBIN := ~/go/bin
-K8S_VERSION := 1.22.1
-ACK_GINKGO_DEPRECATIONS := 1.16.5
+K8S_VERSION := 1.24
+# ACK_GINKGO_DEPRECATIONS := 1.16.5
+
 
 SHELL := $(shell which bash)
 
@@ -79,7 +80,7 @@ HELM_ENTRYPOINT ?= docker run \
 
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.23
+ENVTEST_K8S_VERSION = 1.24
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

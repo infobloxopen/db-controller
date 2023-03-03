@@ -308,6 +308,7 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DepYamlPath = r.MetricsDepYamlPath
 	cfg.ConfigYamlPath = r.MetricsConfigYamlPath
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
+	cfg.DatasourceFileName = dbClaim.Spec.DSNName
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 
@@ -1310,6 +1311,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	multiAZ := r.getMultiAZEnabled()
 	perfIns := true
 	encryptStrg := true
+	storageType := r.Config.GetString("storageType")
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1354,6 +1356,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						EnablePerformanceInsights:       &perfIns,
 						StorageEncrypted:                &encryptStrg,
+						StorageType:                     &storageType,
 						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{

@@ -38,6 +38,7 @@ type Config struct {
 
 	DatasourceUser       string
 	DatasourceSecretName string
+	DatasourceFileName   string
 
 	Resources map[string]map[string]string
 
@@ -82,9 +83,11 @@ func MustReadValues(data []byte) Values {
 }
 
 var DefaultConfig = Config{
-	Release:   "dbclaim-exporter",
-	ImageRepo: "quay.io/prometheuscommunity/postgres-exporter",
-	ImageTag:  "v0.10.1",
+
+	Release:            "dbclaim-exporter",
+	ImageRepo:          "quay.io/prometheuscommunity/postgres-exporter",
+	ImageTag:           "v0.10.1",
+	DatasourceFileName: "dsn.txt",
 
 	Resources: map[string]map[string]string{
 		"requests": {
