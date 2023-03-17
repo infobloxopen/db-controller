@@ -38,7 +38,7 @@ func ParseDBCredentials(path *string) (*DBCredential, error) {
 		return nil, err
 	}
 
-	fields := strings.Split(string(content), "' ")
+	fields := strings.Split(string(content), " ")
 
 	f := func(c rune) bool {
 		return (c == '=')
