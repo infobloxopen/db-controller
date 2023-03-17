@@ -56,7 +56,9 @@ spec:
             - --health-probe-address={{ .Values.healthProbe.address }}
             - --health-probe-port={{ .Values.healthProbe.port }}
             - --enable-leader-election
+            - --enable-db-proxy={{ .Values.dbproxy.enabled }}
             - --config-file=/etc/config/config.yaml
+            - --sidecar-config-path=config/dbproxy/dbproxysidecar.json
             - --db-identifier-prefix={{ .Values.db.identifier.prefix }}
             - --class={{ .Values.dbController.class }}
             {{ if .Values.zapLogger.develMode }}

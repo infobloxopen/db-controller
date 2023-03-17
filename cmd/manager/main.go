@@ -179,7 +179,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		setupLog.Info("Parsed db proxy config:", cfg)
+		setupLog.Info("Parsed db proxy config:", "dbproxysidecarconfig", cfg)
 
 		setupLog.Info("registering with webhook server")
 		webHookServer.Register("/mutate", &webhook.Admission{
