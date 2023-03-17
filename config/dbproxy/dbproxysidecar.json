@@ -1,7 +1,6 @@
 {
   "containers": [
     {
-      "image": "ghcr.io/infobloxopen/dbproxy:latest",
       "imagePullPolicy": "IfNotPresent",
       "name": "dbproxy",
       "volumeMounts": [

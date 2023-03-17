@@ -100,6 +100,10 @@ postgresql:
 
 dbproxy:
   enabled: true
+  image:
+    repository: ghcr.io/infobloxopen/dbproxy
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
 
 zapLogger:
   develMode: false

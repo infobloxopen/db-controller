@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -23,7 +24,8 @@ type DBProxyInjector struct {
 }
 
 var (
-	dbProxyLog = ctrl.Log.WithName("dbproxy-controller")
+	dbProxyLog   = ctrl.Log.WithName("dbproxy-controller")
+	sidecarImage = os.Getenv("DBPROXY_IMAGE")
 )
 
 type Config struct {
@@ -96,6 +98,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 
 			dbpi.DBProxySidecarConfig.Volumes[0].Secret.SecretName = dbSecretRef
 			dbpi.DBProxySidecarConfig.Volumes[0].Secret.Items[0].Key = dbSecretItem
+			dbpi.DBProxySidecarConfig.Containers[0].Image = sidecarImage
 
 			pod.Spec.Volumes = append(pod.Spec.Volumes, dbpi.DBProxySidecarConfig.Volumes...)
 			pod.Spec.Containers = append(pod.Spec.Containers, dbpi.DBProxySidecarConfig.Containers...)
