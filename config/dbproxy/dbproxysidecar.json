@@ -1,7 +1,6 @@
 {
   "containers": [
     {
-      "image": "...",
       "imagePullPolicy": "IfNotPresent",
       "name": "dbproxy",
       "volumeMounts": [
