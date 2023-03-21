@@ -31,7 +31,7 @@ RUN apk add -U --no-cache --upgrade busybox && \
 
 FROM alpine:3.13
 
-RUN apk add -U --no-cache udns libevent openssl ca-certificates
+RUN apk add -U --no-cache udns libevent openssl ca-certificates postgresql-client
 
 RUN adduser -D -S -s /bin/sh bloxone
 
