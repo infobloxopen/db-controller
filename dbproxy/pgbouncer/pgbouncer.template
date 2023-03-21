@@ -15,5 +15,5 @@ client_tls_sslmode = require
 client_tls_key_file=dbproxy-client.key
 client_tls_cert_file=dbproxy-client.crt
 server_tls_sslmode = require
-server_tls_key_file=dbproxy-server.key
-server_tls_cert_file=dbproxy-server.crt
+#server_tls_key_file=dbproxy-server.key
+#server_tls_cert_file=dbproxy-server.crt
