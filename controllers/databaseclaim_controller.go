@@ -82,6 +82,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		dbClaim.Status.ConnectionInfo = &persistancev1.DatabaseClaimConnectionInfo{}
 	}
 
+	// Grab opriginal host before it changes
+	originalHost := dbClaim.Status.ConnectionInfo.Host
+
 	fragmentKey, err := r.matchInstanceLabel(dbClaim)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
@@ -146,7 +149,8 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		}
 	}
 
-	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime {
+	// Force a user/password refresh if we do not have a user OR the rotation period has expired OR the host has changed
+	if dbClaim.Status.UserUpdatedAt == nil || time.Since(dbClaim.Status.UserUpdatedAt.Time) > rotationTime || originalHost != dbClaim.Status.ConnectionInfo.Host {
 		log.Info("rotating users")
 
 		userPassword, err := r.generatePassword()
@@ -189,14 +193,25 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	minPasswordLength := r.getMinPasswordLength()
 	complEnabled := r.isPasswordComplexity()
 
+	// Customize the list of symbols so we don't have characters that cause encoding issues
+	// To be overly cautious, these are characters that may cause issues when used in the password:
+	// issues with encoding: "`<>
+	// problems when used with connection strings: ;
+	gen, err := gopassword.NewGenerator(&gopassword.GeneratorInput{
+		Symbols: "~!@#$%^&*()_+-={}|[]:<>?,./",
+	})
+	if err != nil {
+		return "", err
+	}
+
 	if complEnabled {
 		count := minPasswordLength / 4
-		pass, err = gopassword.Generate(minPasswordLength, count, count, false, false)
+		pass, err = gen.Generate(minPasswordLength, count, count, false, false)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		pass, err = gopassword.Generate(defaultPassLen, defaultNumDig, defaultNumSimb, false, false)
+		pass, err = gen.Generate(defaultPassLen, defaultNumDig, defaultNumSimb, false, false)
 		if err != nil {
 			return "", err
 		}

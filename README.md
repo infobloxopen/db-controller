@@ -11,3 +11,8 @@ The target code should create:
 * at least two logins that the controller and jump between
 
 Other strategies are possible and may be appropriate to implement.
+
+## Branch: `dbc-v1`
+This branch is used for maintaining the original db-controller code base, that is still used by some projects.
+
+**DO NOT MERGE WITH MASTER**
