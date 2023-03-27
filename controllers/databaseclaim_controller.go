@@ -194,8 +194,11 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	complEnabled := r.isPasswordComplexity()
 
 	// Customize the list of symbols so we don't have characters that cause encoding issues
+	// To be overly cautious, these are characters that may cause issues when used in the password:
+	// issues with encoding: "`<>
+	// problems when used with connection strings: ;
 	gen, err := gopassword.NewGenerator(&gopassword.GeneratorInput{
-		Symbols: "~!$^*()_+-{}|[]:,.",
+		Symbols: "~!@#$%^&*()_+-={}|[]:<>?,./",
 	})
 	if err != nil {
 		return "", err
