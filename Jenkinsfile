@@ -54,6 +54,7 @@ pipeline {
         anyOf {
           branch 'main'
           branch 'release*'
+          branch 'dbc-v1'
           buildingTag()
         }
       }
