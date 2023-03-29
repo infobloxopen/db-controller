@@ -39,7 +39,7 @@ pipeline {
     }
     stage("Push db-controller image") {
       when {
-        anyOf { branch 'main'; buildingTag() }
+        anyOf { branch 'main'; branch 'dbc-v1'; buildingTag() }
       }
       steps {
         withDockerRegistry([credentialsId: "${env.JENKINS_DOCKER_CRED_ID}", url: ""]) {
