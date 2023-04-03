@@ -22,3 +22,6 @@ vendor
 *.swp
 *.swo
 *~
+
+# Exclude build properties files
+*.properties
