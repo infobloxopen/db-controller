@@ -1,7 +1,7 @@
 # Docker hub repo
 REGISTRY ?= infoblox
 # image name
-IMAGE_NAME ?= db-controller-v1
+IMAGE_NAME ?= db-controller-legacy
 # image tag
 TAG ?= latest
 # Image URL to use all building/pushing image targets
