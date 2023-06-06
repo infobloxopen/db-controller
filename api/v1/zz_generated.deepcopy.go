@@ -137,6 +137,11 @@ func (in *DatabaseClaimSpec) DeepCopyInto(out *DatabaseClaimSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.EnableReplicationRole != nil {
+		in, out := &in.EnableReplicationRole, &out.EnableReplicationRole
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Tags != nil {
 		in, out := &in.Tags, &out.Tags
 		*out = make([]Tag, len(*in))
