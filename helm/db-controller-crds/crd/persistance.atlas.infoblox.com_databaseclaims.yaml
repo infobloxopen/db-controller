@@ -64,6 +64,11 @@ spec:
               dsnName:
                 description: DSN key name.
                 type: string
+              enableReplicationRole:
+                default: false
+                description: EnableReplicationRole will grant rds replication role
+                  to the above mentioned Username
+                type: boolean
               host:
                 description: The optional host name where the database instance is
                   located. If the value is omitted, then the host value from the matching

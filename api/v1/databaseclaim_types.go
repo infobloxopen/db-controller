@@ -185,6 +185,11 @@ type DatabaseClaimSpec struct {
 	// +optional
 	RestoreFrom string `json:"restoreFrom,omitempty"`
 
+	// EnableReplicationRole will grant rds replication role to the above mentioned Username
+	// +optional
+	// +kubebuilder:default:=false
+	EnableReplicationRole *bool `json:"enableReplicationRole"`
+
 	// Tags
 	// +optional
 	// +nullable
