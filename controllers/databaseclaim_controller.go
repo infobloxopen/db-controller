@@ -72,14 +72,15 @@ const (
 type ModeEnum int
 
 type input struct {
-	FragmentKey      string
-	ManageCloudDB    bool
-	SharedDBHost     bool
-	MasterConnInfo   persistancev1.DatabaseClaimConnectionInfo
-	TempSecret       string
-	DbHostIdentifier string
-	DbType           string
-	HostParams       hostparams.HostParams
+	FragmentKey           string
+	ManageCloudDB         bool
+	SharedDBHost          bool
+	MasterConnInfo        persistancev1.DatabaseClaimConnectionInfo
+	TempSecret            string
+	DbHostIdentifier      string
+	DbType                string
+	HostParams            hostparams.HostParams
+	EnableReplicationRole bool
 }
 
 const (
@@ -235,6 +236,8 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	if manageCloudDB {
 		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
+	r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
+
 	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
 }
@@ -1132,7 +1135,16 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 				return err
 			}
 		}
+
 		r.updateUserStatus(status, nextUser, userPassword)
+	}
+	err = dbClient.ManageReplicationRole(status.ConnectionInfo.Username, r.Input.EnableReplicationRole)
+	if err != nil {
+		return err
+	}
+	err = dbClient.ManageReplicationRole(dbu.NextUser(status.ConnectionInfo.Username), r.Input.EnableReplicationRole)
+	if err != nil {
+		return err
 	}
 
 	return nil

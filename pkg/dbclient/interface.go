@@ -10,6 +10,7 @@ type Client interface {
 	RenameUser(oldUsername string, newUsername string) error
 	UpdateUser(oldUsername, newUsername, rolename, password string) error
 	UpdatePassword(username string, userPassword string) error
+	ManageReplicationRole(username string, isReplicationRole bool) error
 
 	DBCloser
 }

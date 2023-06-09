@@ -342,6 +342,84 @@ func (pc *client) UpdatePassword(username string, userPassword string) error {
 	return nil
 }
 
+func (pc *client) ManageReplicationRole(username string, enableReplicationRole bool) error {
+	var (
+		exists             bool
+		hasReplicationRole bool
+	)
+
+	err := pc.DB.QueryRow(fmt.Sprintf(`SELECT EXISTS(
+					select  1 from pg_roles where rolname = %s)`, pq.QuoteLiteral(username))).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	err = pc.DB.QueryRow("SELECT EXISTS(select  1 from pg_roles where rolname = 'rds_replication')").Scan(&exists)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		// in AWS environment, we need to use a different mechanism to grant/revoke replication rules
+
+		err = pc.DB.QueryRow(fmt.Sprintf(`SELECT EXISTS( 
+			SELECT 1 from pg_roles
+			WHERE pg_has_role( %s, oid, 'member')
+			AND rolname in ( 'rds_replication'))`, pq.QuoteLiteral(username))).Scan(&hasReplicationRole)
+
+		if err != nil {
+			return err
+		}
+		if hasReplicationRole {
+			if !enableReplicationRole {
+				// remove replication role
+				_, err = pc.DB.Exec(fmt.Sprintf("REVOKE rds_replication FROM %s", pq.QuoteIdentifier(username)))
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			if enableReplicationRole {
+				// add replication role
+				_, err = pc.DB.Exec(fmt.Sprintf("GRANT rds_replication TO %s", pq.QuoteIdentifier(username)))
+				if err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		// not AWS, use normal mechanism
+		//check if username has replication role
+		x := fmt.Sprintf("SELECT EXISTS(select  rolname from pg_roles where rolreplication = 't' and rolname = %s)", pq.QuoteLiteral(username))
+		println(x)
+		err = pc.DB.QueryRow(x).Scan(&hasReplicationRole)
+		if err != nil {
+			pc.log.Error(err, "could not run query"+x)
+			return err
+		}
+		if hasReplicationRole {
+			if !enableReplicationRole {
+				// remove replication role
+				_, err = pc.DB.Exec(fmt.Sprintf("ALTER ROLE %s NOREPLICATION", pq.QuoteIdentifier(username)))
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			if enableReplicationRole {
+				// add replication role
+				_, err = pc.DB.Exec(fmt.Sprintf("ALTER ROLE %s REPLICATION", pq.QuoteIdentifier(username)))
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (pc *client) Close() error {
 	if pc.DB != nil {
 		return pc.DB.Close()
