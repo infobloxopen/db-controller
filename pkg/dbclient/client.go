@@ -347,27 +347,35 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 		exists             bool
 		hasReplicationRole bool
 	)
+	pgRoleStmt, err := pc.DB.Prepare("SELECT EXISTS(select  1 from pg_roles where rolname = $1)")
+	if err != nil {
+		return err
+	}
 
-	err := pc.DB.QueryRow(fmt.Sprintf(`SELECT EXISTS(
-					select  1 from pg_roles where rolname = %s)`, pq.QuoteLiteral(username))).Scan(&exists)
+	err = pgRoleStmt.QueryRow(username).Scan(&exists)
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return nil
 	}
-	err = pc.DB.QueryRow("SELECT EXISTS(select  1 from pg_roles where rolname = 'rds_replication')").Scan(&exists)
+	err = pgRoleStmt.QueryRow("rds_replication").Scan(&exists)
 	if err != nil {
 		return err
 	}
 
 	if exists {
-		// in AWS environment, we need to use a different mechanism to grant/revoke replication rules
 
-		err = pc.DB.QueryRow(fmt.Sprintf(`SELECT EXISTS( 
-			SELECT 1 from pg_roles
-			WHERE pg_has_role( %s, oid, 'member')
-			AND rolname in ( 'rds_replication'))`, pq.QuoteLiteral(username))).Scan(&hasReplicationRole)
+		// in AWS environment, we need to use a different mechanism to grant/revoke replication rules
+		rdsPgRoleStmt, err := pc.DB.Prepare(`SELECT EXISTS(
+								select 1 from pg_roles 
+								WHERE pg_has_role( $1, oid, 'member') 
+								AND rolname in ( 'rds_replication'))`)
+		if err != nil {
+			return err
+		}
+
+		err = rdsPgRoleStmt.QueryRow(username).Scan(&hasReplicationRole)
 
 		if err != nil {
 			return err
@@ -392,11 +400,15 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 	} else {
 		// not AWS, use normal mechanism
 		//check if username has replication role
-		x := fmt.Sprintf("SELECT EXISTS(select  rolname from pg_roles where rolreplication = 't' and rolname = %s)", pq.QuoteLiteral(username))
-		println(x)
-		err = pc.DB.QueryRow(x).Scan(&hasReplicationRole)
+		replEnabledStmt, err := pc.DB.Prepare("SELECT EXISTS(select 1 from pg_roles where rolreplication = 't' and rolname = $1)")
 		if err != nil {
-			pc.log.Error(err, "could not run query"+x)
+			return err
+		}
+
+		err = replEnabledStmt.QueryRow(username).Scan(&hasReplicationRole)
+		if err != nil {
+			pc.log.Error(err, "could not run query SELECT EXISTS(select 1 from pg_roles where rolreplication = 't' and rolname = $1",
+				"$1", username)
 			return err
 		}
 		if hasReplicationRole {
