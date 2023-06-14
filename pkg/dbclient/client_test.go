@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-logr/logr"
 	intg "github.com/infobloxopen/atlas-app-toolkit/integration"
-	"github.com/lib/pq"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
@@ -289,17 +288,17 @@ func TestPostgresClientOperations(t *testing.T) {
 			t.Logf("\t%s UpdateUser() is passed", succeed)
 
 			t.Logf("Disable replication role")
-			replicationQuery := fmt.Sprintf(`select exists (
+			replicationQueryStmt, _ := pc.DB.Prepare(`select exists (
 				SELECT 1
 				FROM pg_roles 
-				WHERE pg_has_role( %s, oid, 'member')
+				WHERE pg_has_role( $1, oid, 'member')
 				AND rolname in ( 'rds_superuser', 'rds_replication')
 				UNION
 				SELECT 1
 				FROM pg_roles 
-				WHERE rolname = %s 
+				WHERE rolname = $1
 				AND rolreplication = 't'
-				)`, pq.QuoteLiteral(tt.args.newUsername), pq.QuoteLiteral(tt.args.newUsername))
+				)`)
 
 			err = pc.ManageReplicationRole(tt.args.newUsername, false)
 			if (err != nil) != tt.wantErr {
@@ -307,7 +306,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				return
 			}
 			// check if user has replication role enabled in AWS and non AWS postgres environments
-			err = pc.DB.QueryRow(replicationQuery).Scan(&exists)
+			err = replicationQueryStmt.QueryRow(tt.args.newUsername).Scan(&exists)
 			if err != nil {
 				t.Errorf("\t%s ManageReplicationRole error = %v", failed, err)
 			}
@@ -323,7 +322,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				return
 			}
 			// check if user has replication role enabled in AWS and non AWS postgres environments
-			err = pc.DB.QueryRow(replicationQuery).Scan(&exists)
+			err = replicationQueryStmt.QueryRow(tt.args.newUsername).Scan(&exists)
 			if err != nil {
 				t.Errorf("\t%s ManageReplicationRole error = %v", failed, err)
 			}
@@ -333,6 +332,46 @@ func TestPostgresClientOperations(t *testing.T) {
 				t.Errorf("\t%s user %v does not have replication role enabled", failed, tt.args.newUsername)
 			}
 			t.Logf("\t%s ManageReplicationRole() is passed", succeed)
+
+			t.Logf("Enable RDS replication role")
+
+			//create rds_replication to simulate RDS replication role
+			_ = pc.ManageReplicationRole(tt.args.newUsername, false)
+			_, _ = pc.DB.Exec("CREATE ROLE rds_replication")
+			err = pc.ManageReplicationRole(tt.args.newUsername, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageReplicationRole() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+			// check if user has replication role enabled in AWS and non AWS postgres environments
+			err = replicationQueryStmt.QueryRow(tt.args.newUsername).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s ManageReplicationRole error = %v", failed, err)
+			}
+			if exists {
+				t.Logf("\t%s user %v has rds replication role enabled", succeed, tt.args.newUsername)
+			} else {
+				t.Errorf("\t%s user %v does not have rds replication role enabled", failed, tt.args.newUsername)
+			}
+
+			t.Logf("Disable RDS replication role")
+			err = pc.ManageReplicationRole(tt.args.newUsername, false)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageReplicationRole() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+			// check if user has replication role enabled in AWS and non AWS postgres environments
+			err = replicationQueryStmt.QueryRow(tt.args.newUsername).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s ManageReplicationRole error = %v", failed, err)
+			}
+			if !exists {
+				t.Logf("\t%s user %v has rds replication role disabled", succeed, tt.args.newUsername)
+			} else {
+				t.Errorf("\t%s user %v does not have rds replication role disabled", failed, tt.args.newUsername)
+			}
+
+			t.Logf("\t%s RDS ManageReplicationRole() is passed", succeed)
 
 			t.Logf("UpdatePassword() can't be updated, want error")
 			wantErr := true
