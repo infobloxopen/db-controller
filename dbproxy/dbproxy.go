@@ -76,6 +76,8 @@ func main() {
 
 	waitForDbCredentialFile(dbCredentialPath)
 
+	waitForDbCredentialFile(dbPasswordPath)
+
 	// First time pgbouncer config generation and start
 	generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath)
 	startPGBouncer()
