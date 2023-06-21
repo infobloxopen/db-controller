@@ -31,7 +31,7 @@ type PGBouncerConfig struct {
 	Password    *string
 }
 
-func ParseDBCredentials(path *string) (*DBCredential, error) {
+func ParseDBCredentials(path *string, passwordPath *string) (*DBCredential, error) {
 	content, err := ioutil.ReadFile(*path)
 
 	if err != nil {
@@ -56,6 +56,15 @@ func ParseDBCredentials(path *string) (*DBCredential, error) {
 			m[fieldPair[0]] = nil
 		}
 	}
+
+	passwordContent, err := ioutil.ReadFile(*passwordPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// override password from db credential file with unescaped password
+	password := string(passwordContent)
+	m["password"] = &password
 
 	if m["host"] == nil {
 		return nil, errors.New("host value not found in db credential")

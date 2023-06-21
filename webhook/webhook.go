@@ -26,6 +26,7 @@ type DBProxyInjector struct {
 var (
 	dbProxyLog   = ctrl.Log.WithName("dbproxy-controller")
 	sidecarImage = os.Getenv("DBPROXY_IMAGE")
+	passwordKey  = "password"
 )
 
 type Config struct {
@@ -98,6 +99,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 
 			dbpi.DBProxySidecarConfig.Volumes[0].Secret.SecretName = dbSecretRef
 			dbpi.DBProxySidecarConfig.Volumes[0].Secret.Items[0].Key = dbSecretItem
+			dbpi.DBProxySidecarConfig.Volumes[0].Secret.Items[1].Key = passwordKey
 			dbpi.DBProxySidecarConfig.Containers[0].Image = sidecarImage
 
 			pod.Spec.Volumes = append(pod.Spec.Volumes, dbpi.DBProxySidecarConfig.Volumes...)
