@@ -10,8 +10,8 @@ import (
 	"infoblox.com/dbproxy/pgbouncer" // go.mod has a replace directive to make this relative path work.
 )
 
-func generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath *string) {
-	dbc, err := pgbouncer.ParseDBCredentials(dbCredentialPath)
+func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, pbCredentialPath *string) {
+	dbc, err := pgbouncer.ParseDBCredentials(dbCredentialPath, dbPasswordPath)
 	if err != nil {
 		log.Println(err)
 		panic(err)
@@ -70,6 +70,7 @@ func waitForDbCredentialFile(path *string) {
 
 func main() {
 	dbCredentialPath := flag.String("dbc", "./db-credential", "Location of the DB Credentials")
+	dbPasswordPath := flag.String("dbp", "./db-password", "Location of the unescaped DB Password")
 	pbCredentialPath := flag.String("pbc", "./pgbouncer.ini", "Location of the PGBouncer config file")
 
 	flag.Parse()
@@ -79,7 +80,7 @@ func main() {
 	waitForDbCredentialFile(dbPasswordPath)
 
 	// First time pgbouncer config generation and start
-	generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath)
+	generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, pbCredentialPath)
 	startPGBouncer()
 
 	// Watch for ongoing changes and regenerate pgbouncer config
@@ -108,8 +109,8 @@ func main() {
 				if err != nil {
 					log.Fatal("Add failed:", err)
 				}
-                                // Regenerate pgbouncer configuration and signal pgbouncer to reload cconfiguration
-				generatePGBouncerConfiguration(dbCredentialPath, pbCredentialPath)
+				// Regenerate pgbouncer configuration and signal pgbouncer to reload cconfiguration
+				generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, pbCredentialPath)
 				reloadPGBouncerConfiguration()
 			case err, ok := <-watcher.Errors:
 				if !ok {

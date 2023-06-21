@@ -20,6 +20,10 @@
           {
             "key": "...",
             "path": "db-credential"
+          },
+          {
+            "key": "...",
+            "path": "db-password"
           }
         ],
         "optional": false,
