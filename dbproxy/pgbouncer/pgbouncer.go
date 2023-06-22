@@ -31,8 +31,8 @@ type PGBouncerConfig struct {
 	Password    *string
 }
 
-func ParseDBCredentials(path *string, passwordPath *string) (*DBCredential, error) {
-	content, err := ioutil.ReadFile(*path)
+func ParseDBCredentials(path string, passwordPath string) (*DBCredential, error) {
+	content, err := ioutil.ReadFile(path)
 
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func ParseDBCredentials(path *string, passwordPath *string) (*DBCredential, erro
 		}
 	}
 
-	passwordContent, err := ioutil.ReadFile(*passwordPath)
+	passwordContent, err := ioutil.ReadFile(passwordPath)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func ParseDBCredentials(path *string, passwordPath *string) (*DBCredential, erro
 	return &dbc, nil
 }
 
-func WritePGBouncerConfig(path *string, config *PGBouncerConfig) error {
+func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 	t, err := template.ParseFiles("./pgbouncer.template")
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func WritePGBouncerConfig(path *string, config *PGBouncerConfig) error {
 		os.Stderr.WriteString("could not parse pgbouncer config template")
 	}
 
-	configFile, err := os.OpenFile(*path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	configFile, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
