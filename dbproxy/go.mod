@@ -1,9 +1,7 @@
-module infoblox.com/dbproxy
+module github.com/infobloxopen/db-controller/dbproxy
 
-go 1.18
+go 1.20
 
-replace infoblox.com/dbproxy/pgbouncer => ./pgbouncer
+require github.com/fsnotify/fsnotify v1.6.0
 
-require github.com/fsnotify/fsnotify v1.5.4
-
-require golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+require golang.org/x/sys v0.0.0-20220908164124-27713097b956 // indirect

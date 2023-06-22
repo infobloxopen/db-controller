@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"infoblox.com/dbproxy/pgbouncer" // go.mod has a replace directive to make this relative path work.
+	"github.com/infobloxopen/db-controller/dbproxy/pgbouncer"
 )
 
 func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, pbCredentialPath *string) {
