@@ -7,9 +7,10 @@ replicaCount: 1
 secrets:
   enabled: false
 
+env: local
 db:
   identifier:
-    prefix: local
+    prefix: "{{ .Values.env }}"
 dbController:
   class: default
 
@@ -140,3 +141,4 @@ controllerConfig:
   athena-shared:
     masterUsername: root
   storageType: gp3
+  supportSuperUserElevation: true

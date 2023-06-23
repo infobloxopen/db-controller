@@ -67,7 +67,13 @@ spec:
               enableReplicationRole:
                 default: false
                 description: EnableReplicationRole will grant rds replication role
-                  to the above mentioned Username
+                  to Username This value is ignored if EnableSuperUser is set to true
+                type: boolean
+              enableSuperUser:
+                default: false
+                description: EnableSuperUser will grant rds_superuser and createrole
+                  role to Username This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation
+                  }} is set to false
                 type: boolean
               host:
                 description: The optional host name where the database instance is
