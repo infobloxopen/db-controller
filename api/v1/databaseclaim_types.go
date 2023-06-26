@@ -185,10 +185,17 @@ type DatabaseClaimSpec struct {
 	// +optional
 	RestoreFrom string `json:"restoreFrom,omitempty"`
 
-	// EnableReplicationRole will grant rds replication role to the above mentioned Username
+	// EnableReplicationRole will grant rds replication role to Username
+	// This value is ignored if EnableSuperUser is set to true
 	// +optional
 	// +kubebuilder:default:=false
 	EnableReplicationRole *bool `json:"enableReplicationRole"`
+
+	// EnableSuperUser will grant rds_superuser and createrole role to Username
+	// This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false
+	// +optional
+	// +kubebuilder:default:=false
+	EnableSuperUser *bool `json:"enableSuperUser"`
 
 	// Tags
 	// +optional
