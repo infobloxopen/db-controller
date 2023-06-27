@@ -81,6 +81,7 @@ type input struct {
 	DbType                string
 	HostParams            hostparams.HostParams
 	EnableReplicationRole bool
+	EnableSuperUser       bool
 }
 
 const (
@@ -236,7 +237,15 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	if manageCloudDB {
 		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
-	r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
+	if r.Config.GetBool("supportSuperUserElevation") {
+		r.Input.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
+	}
+	if r.Input.EnableSuperUser {
+		// if superuser elevation is enabled, enabling replication role is redundant
+		r.Input.EnableReplicationRole = false
+	} else {
+		r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
+	}
 
 	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
@@ -1137,6 +1146,18 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 		}
 
 		r.updateUserStatus(status, nextUser, userPassword)
+	}
+	err = dbClient.ManageSuperUserRole(baseUsername, r.Input.EnableSuperUser)
+	if err != nil {
+		return err
+	}
+	err = dbClient.ManageCreateRole(status.ConnectionInfo.Username, r.Input.EnableSuperUser)
+	if err != nil {
+		return err
+	}
+	err = dbClient.ManageCreateRole(dbu.NextUser(status.ConnectionInfo.Username), r.Input.EnableSuperUser)
+	if err != nil {
+		return err
 	}
 	err = dbClient.ManageReplicationRole(status.ConnectionInfo.Username, r.Input.EnableReplicationRole)
 	if err != nil {

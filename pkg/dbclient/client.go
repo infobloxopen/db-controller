@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	PostgresType = "postgres"
+	PostgresType       = "postgres"
+	RDSReplicationRole = "rds_replication"
+	RDSSuperUserRole   = "rds_superuser"
 )
 
 var extensions = []string{"citext", "uuid-ossp",
@@ -341,6 +343,99 @@ func (pc *client) UpdatePassword(username string, userPassword string) error {
 
 	return nil
 }
+func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) error {
+	var (
+		hasSuperUser bool
+	)
+	roleStmt, err := pc.DB.Prepare(`SELECT EXISTS(
+								select 1 from pg_roles 
+								WHERE pg_has_role( $1, oid, 'member') 
+								AND rolname in ( $2))`)
+	if err != nil {
+		return err
+	}
+	err = roleStmt.QueryRow(username, RDSSuperUserRole).Scan(&hasSuperUser)
+	if err != nil {
+		pc.log.Error(err, "could not query pg_roles", "username", username, "role", RDSSuperUserRole)
+		return err
+	}
+	if hasSuperUser {
+		if !enableSuperUser {
+			// remove superuser role
+			_, err = pc.DB.Exec(fmt.Sprintf("REVOKE %s FROM  %s", RDSSuperUserRole, pq.QuoteIdentifier(username)))
+			if err != nil {
+				pc.log.Error(err, "could not revoke superuser role")
+				return err
+			}
+		}
+	} else {
+		if enableSuperUser {
+			// add superuser role
+			// _, err = pc.DB.Exec(`GRANT $1 TO $2`, pq.QuoteIdentifier(RDSSuperUserRole), pq.QuoteIdentifier(username))
+			_, err = pc.DB.Exec(fmt.Sprintf("GRANT %s TO  %s", RDSSuperUserRole, pq.QuoteIdentifier(username)))
+			// _, err = pc.DB.Exec(`GRANT rds_superuser TO "new-test-user"`)
+			if err != nil {
+				pc.log.Error(err, "could not grant superuser role")
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (pc *client) ManageCreateRole(username string, enableCreateRole bool) error {
+	var (
+		exists        bool
+		hasCreateRole bool
+	)
+	//return nil if username does not exists in postgres
+	pgRoleStmt, err := pc.DB.Prepare("SELECT EXISTS(select  1 from pg_roles where rolname = $1)")
+	if err != nil {
+		return err
+	}
+	err = pgRoleStmt.QueryRow(username).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		//username does not exist, nothing to do
+		pc.log.Info("username does not exist, no need to manageCreateRole", "username", username)
+		return nil
+	}
+	createRoleStmt, err := pc.DB.Prepare(`SELECT EXISTS(
+								SELECT 1 FROM pg_roles 
+								WHERE rolcreaterole = 't'
+								AND rolname = $1 )`)
+	if err != nil {
+		return err
+	}
+
+	err = createRoleStmt.QueryRow(username).Scan(&hasCreateRole)
+	if err != nil {
+		return err
+	}
+	if hasCreateRole {
+		if !enableCreateRole {
+			// remove create role
+			_, err = pc.DB.Exec(fmt.Sprintf("ALTER ROLE  %s NOCREATEROLE", pq.QuoteIdentifier(username)))
+			if err != nil {
+				pc.log.Error(err, "could not remove create role")
+				return err
+			}
+		}
+	} else {
+		if enableCreateRole {
+			// add create role
+			_, err = pc.DB.Exec(fmt.Sprintf("ALTER ROLE  %s CREATEROLE", pq.QuoteIdentifier(username)))
+			if err != nil {
+				pc.log.Error(err, "could not add create role")
+				return err
+			}
+		}
+	}
+	return nil
+}
 
 func (pc *client) ManageReplicationRole(username string, enableReplicationRole bool) error {
 	var (
@@ -357,9 +452,10 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 		return err
 	}
 	if !exists {
+		//username does not exist, nothing to do
 		return nil
 	}
-	err = pgRoleStmt.QueryRow("rds_replication").Scan(&exists)
+	err = pgRoleStmt.QueryRow(RDSReplicationRole).Scan(&exists)
 	if err != nil {
 		return err
 	}
@@ -370,12 +466,12 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 		rdsPgRoleStmt, err := pc.DB.Prepare(`SELECT EXISTS(
 								select 1 from pg_roles 
 								WHERE pg_has_role( $1, oid, 'member') 
-								AND rolname in ( 'rds_replication'))`)
+								AND rolname in ( $2 ))`)
 		if err != nil {
 			return err
 		}
 
-		err = rdsPgRoleStmt.QueryRow(username).Scan(&hasReplicationRole)
+		err = rdsPgRoleStmt.QueryRow(username, RDSReplicationRole).Scan(&hasReplicationRole)
 
 		if err != nil {
 			return err
