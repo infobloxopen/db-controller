@@ -90,7 +90,13 @@ func setupSqlDB(t *testing.T) *testDB {
 	// Create a new pool for docker containers
 	pool, err := dockertest.NewPool("")
 	if err != nil {
-		t.Fatalf("Could not connect to docker: %s", err)
+		t.Fatalf("Could not construct pool: %s", err)
+	}
+
+	// uses pool to try to connect to Docker
+	err = pool.Client.Ping()
+	if err != nil {
+		t.Fatalf("Could not connect to Docker: %s", err)
 	}
 
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
@@ -287,6 +293,49 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s UpdateUser() is passed", succeed)
 
+			t.Logf("Enable superuser access")
+			//setup rds_superuser to simulate RDS superuser
+			_, _ = pc.DB.Exec("CREATE ROLE rds_superuser")
+			err = pc.ManageSuperUserRole(tt.args.newUsername, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageSuperUserRole() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+			// check if user has superuser access enabled in AWS
+			err = pc.DB.QueryRow(`SELECT EXISTS (SELECT 1
+				FROM pg_roles 
+				WHERE pg_has_role( $1, oid, 'member')
+				AND rolname in ( 'rds_superuser'))`, tt.args.newUsername).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s ManageSuperUserRole error = %v", failed, err)
+				return
+			}
+			if !exists {
+				t.Errorf("\t%s user %v has superuser access disabled, wantErr %v", failed, tt.args.newUsername, tt.want)
+				return
+			}
+			t.Logf("\t%s Enable superuser access passed", succeed)
+			t.Logf("Disable superuser access")
+			err = pc.ManageSuperUserRole(tt.args.newUsername, false)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageSuperUserRole() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+			// check if user has superuser access enabled in AWS
+			err = pc.DB.QueryRow(`SELECT EXISTS (SELECT 1
+				FROM pg_roles 
+				WHERE pg_has_role( $1, oid, 'member')
+				AND rolname in ( 'rds_superuser'))`, tt.args.newUsername).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s ManageSuperUserRole error = %v", failed, err)
+				return
+			}
+			if exists {
+				t.Errorf("\t%s user %v has superuser access Enabled, wantErr %v", failed, tt.args.newUsername, tt.want)
+				return
+			}
+			t.Logf("\t%s Disable superuser access passed", succeed)
+
 			t.Logf("Disable replication role")
 			replicationQueryStmt, _ := pc.DB.Prepare(`select exists (
 				SELECT 1
@@ -370,8 +419,46 @@ func TestPostgresClientOperations(t *testing.T) {
 			} else {
 				t.Errorf("\t%s user %v does not have rds replication role disabled", failed, tt.args.newUsername)
 			}
-
 			t.Logf("\t%s RDS ManageReplicationRole() is passed", succeed)
+
+			t.Logf("Disable createRole access")
+			err = pc.ManageCreateRole(tt.args.newUsername, false)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageCreateRole() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+			// check if user has createrole access enabled in AWS
+			err = pc.DB.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1 AND rolcreaterole = 't' )`, tt.args.newUsername).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s ManageSuperUserRole error = %v", failed, err)
+				return
+			}
+			if exists {
+				t.Errorf("\t%s user %v has create role  access enabled, wantErr %v", failed, tt.args.newUsername, tt.want)
+				return
+			}
+			t.Logf("\t%s Disable createrole passed", succeed)
+
+			t.Logf("Enable createrole access")
+			err = pc.ManageCreateRole(tt.args.newUsername, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageCreateRole() error = %v, wantErr %v", failed, err, tt.wantErr)
+				return
+			}
+
+			err = pc.DB.QueryRow(`SELECT EXISTS (SELECT 1
+				FROM pg_roles 
+				WHERE rolname = $1 
+				and rolcreaterole = 'f' )`, tt.args.newUsername).Scan(&exists)
+			if err != nil {
+				t.Errorf("\t%s ManageSuperUserRole error = %v", failed, err)
+				return
+			}
+			if exists {
+				t.Errorf("\t%s user %v has createrole access disabled, wantErr %v", failed, tt.args.newUsername, tt.want)
+				return
+			}
+			t.Logf("\t%s Enable createrole access passed", succeed)
 
 			t.Logf("UpdatePassword() can't be updated, want error")
 			wantErr := true
