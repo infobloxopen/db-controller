@@ -273,6 +273,11 @@ type DatabaseClaimConnectionInfo struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:printcolumn:name="DB",type=string,JSONPath=`.spec.databaseName`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.activeDB.DbState`
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="MigrationState",type="string",priority=1,JSONPath=".status.migrationState"
+// +kubebuilder:resource:shortName=dbc
 // +kubebuilder:subresource:status
 
 // DatabaseClaim is the Schema for the databaseclaims API

@@ -12,10 +12,26 @@ spec:
     kind: DatabaseClaim
     listKind: DatabaseClaimList
     plural: databaseclaims
+    shortNames:
+    - dbc
     singular: databaseclaim
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.databaseName
+      name: DB
+      type: string
+    - jsonPath: .status.activeDB.DbState
+      name: State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.migrationState
+      name: MigrationState
+      priority: 1
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         description: DatabaseClaim is the Schema for the databaseclaims API
