@@ -223,6 +223,9 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	if connInfo.DatabaseName == "" {
 		return fmt.Errorf("invalid DatabaseName")
 	}
+	if strings.Contains(connInfo.DatabaseName, " ") {
+		return fmt.Errorf("invalid DatabaseName (contains space)")
+	}
 	if connInfo.Host == "" {
 		manageCloudDB = true
 	}
@@ -266,9 +269,15 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
 		return ctrl.Result{}, nil
 	}
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
+		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
+	if dbClaim.Status.NewDB.ConnectionInfo == nil {
+		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
 
 	if err := r.setReqInfo(&dbClaim); err != nil {
-		return ctrl.Result{}, err
+		return r.manageError(ctx, &dbClaim, err)
 	}
 
 	// name of our custom finalizer
@@ -326,13 +335,6 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-
-	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
-		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
-	}
-	if dbClaim.Status.NewDB.ConnectionInfo == nil {
-		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
-	}
 
 	r.Mode = r.getMode(dbClaim)
 

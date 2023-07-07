@@ -227,6 +227,7 @@ spec:
                 type: string
             required:
             - appId
+            - databaseName
             - dsnName
             - type
             - userName
