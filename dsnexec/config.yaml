@@ -1,0 +1,9 @@
+configs:
+  default:
+    files:
+      foo: /tmp/foo
+      bar: /tmp/bar
+    sql_template: |
+      SELECT * FROM {{ .TableName }}
+    sql_dsn: |
+      postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
