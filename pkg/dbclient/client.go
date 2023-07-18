@@ -166,10 +166,9 @@ func (pc *client) CreateDefaultExtentions(dbName string) error {
 func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 	start := time.Now()
 	var exists bool
-	db := pc.DB
 	created := false
 
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for role")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
@@ -178,10 +177,14 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 
 	if !exists {
 		pc.log.Info("creating a ROLE", "role", rolename)
-		grant := `
+		grantDB := `
 			GRANT ALL PRIVILEGES ON DATABASE %s TO %s;
 			GRANT ALL ON SCHEMA public TO %s;
-			GRANT ALL ON ALL TABLES IN SCHEMA public TO %s
+			GRANT ALL ON ALL TABLES IN SCHEMA public TO %s;
+		`
+		grantSchemaPrivileges := `
+			GRANT ALL ON SCHEMA public TO %s;
+			GRANT ALL ON ALL TABLES IN SCHEMA public TO %s;
 		`
 		_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
 		if err != nil {
@@ -190,14 +193,30 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 			return created, err
 		}
 
-		if _, err := db.Exec(fmt.Sprintf(grant, pq.QuoteIdentifier(dbName),
-			pq.QuoteIdentifier(rolename),
-			pq.QuoteIdentifier(rolename),
-			pq.QuoteIdentifier(rolename))); err != nil {
+		_, err := pc.DB.Exec(fmt.Sprintf(grantDB, pq.QuoteIdentifier(dbName),
+			pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(rolename),
+			pq.QuoteIdentifier(rolename)))
+		if err != nil {
 			pc.log.Error(err, "could not set permissions to role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 			return created, err
 		}
+
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(rolename),
+			pq.QuoteIdentifier(rolename)))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+
 		created = true
 		pc.log.Info("role has been created", "role", rolename)
 		metrics.UsersCreated.Inc()
