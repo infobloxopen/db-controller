@@ -451,7 +451,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				WHERE rolname = $1 
 				and rolcreaterole = 'f' )`, tt.args.newUsername).Scan(&exists)
 			if err != nil {
-				t.Errorf("\t%s ManageSuperUserRole error = %v", failed, err)
+				t.Errorf("\t%s ManageCreateRole error = %v", failed, err)
 				return
 			}
 			if exists {
@@ -483,8 +483,19 @@ func TestPostgresClientOperations(t *testing.T) {
 			if err != nil {
 				t.Errorf("could not login with updated password %s", err)
 			}
-			db.Close()
+
 			t.Logf("\t%s OpenUser() is passed", succeed)
+
+			t.Logf("create table")
+
+			_, err = db.Exec("CREATE TABLE IF NOT EXISTS test_table (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)")
+			if err != nil {
+				t.Errorf("\t%s create table error = %v", failed, err)
+			} else {
+				t.Logf("\t%s create table is passed", succeed)
+			}
+			db.Close()
+
 			// login as user
 			db, err = testDB.OpenUserWithURI(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
 			if err != nil {
