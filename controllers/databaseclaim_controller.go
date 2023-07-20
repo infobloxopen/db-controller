@@ -52,13 +52,13 @@ import (
 )
 
 const (
-	defaultPassLen = 32
-	defaultNumDig  = 10
-	defaultNumSimb = 10
-	// rotation time in minutes
-	minRotationTime          = 60
+	defaultPassLen           = 32
+	defaultNumDig            = 10
+	defaultNumSimb           = 10
+	minRotationTime          = 60 // rotation time in minutes
 	maxRotationTime          = 1440
 	maxWaitTime              = 10
+	maxNameLen               = 44 // max length of dbclaim name
 	defaultRotationTime      = minRotationTime
 	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
 	defaultPostgresStr       = "postgres"
@@ -238,6 +238,12 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		DbType: string(dbClaim.Spec.Type), HostParams: *hostParams,
 	}
 	if manageCloudDB {
+		//check if dbclaim.name is > maxNameLen and if so, error out
+		if len(dbClaim.Name) > maxNameLen {
+			return fmt.Errorf("dbclaim name is too long. max length is %v characters", maxNameLen)
+
+		}
+
 		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
 	if r.Config.GetBool("supportSuperUserElevation") {
@@ -1009,13 +1015,12 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secret
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *persistancev1.DatabaseClaim) string {
-	prefix := "dbc-"
+	var prefix string
 	suffix := "-" + r.Input.HostParams.Hash()
 
 	if r.DbIdentifierPrefix != "" {
-		prefix = prefix + r.DbIdentifierPrefix + "-"
+		prefix = r.DbIdentifierPrefix + "-"
 	}
-
 	if r.Input.FragmentKey == "" {
 		return prefix + dbClaim.Name + suffix
 	}
