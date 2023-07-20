@@ -51,6 +51,10 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 )
 
+type Error string
+
+func (e Error) Error() string { return string(e) }
+
 const (
 	defaultPassLen           = 32
 	defaultNumDig            = 10
@@ -67,6 +71,7 @@ const (
 	defaultBackupPolicyKey   = "backup"
 	tempTargetPassword       = "targetPassword"
 	tempSourceDsn            = "sourceDsn"
+	ErrMaxNameLen            = Error("dbclaim name is too long. max length is 44 characters")
 )
 
 type ModeEnum int
@@ -240,8 +245,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	if manageCloudDB {
 		//check if dbclaim.name is > maxNameLen and if so, error out
 		if len(dbClaim.Name) > maxNameLen {
-			return fmt.Errorf("dbclaim name is too long. max length is %v characters", maxNameLen)
-
+			return ErrMaxNameLen
 		}
 
 		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
