@@ -38,7 +38,7 @@ func TestHandler_UpdateDSN(t *testing.T) {
 					},
 					Commands: []Command{
 						{
-							CommandStr: "select 1",
+							Command: "select 1",
 						},
 					},
 				},
@@ -62,7 +62,7 @@ func TestHandler_UpdateDSN(t *testing.T) {
 					},
 					Commands: []Command{
 						{
-							CommandStr: "select 1",
+							Command: "select 1",
 							Args: []string{
 								"{{ .test.host }}",
 								"int64:{{ .test.port }}",
@@ -94,7 +94,7 @@ func TestHandler_UpdateDSN(t *testing.T) {
 					},
 					Commands: []Command{
 						{
-							CommandStr: "select 1",
+							Command: "select 1",
 							Args: []string{
 								"{{ .test.raw_dsn }}",
 							},

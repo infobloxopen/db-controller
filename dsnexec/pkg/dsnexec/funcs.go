@@ -1,14 +1,54 @@
 package dsnexec
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/infobloxopen/dsnutil/pg"
+	"gopkg.in/yaml.v2"
 )
 
-// parseDSN parses a dsn string into a map of options. The DSN can be
+var (
+	parsers map[string]func(string) (map[string]string, error)
+)
+
+func init() {
+	parsers = make(map[string]func(string) (map[string]string, error))
+	parsers["postgres"] = parsePostgresDSN
+	parsers["json"] = parseJSON
+	parsers["yaml"] = parseYAML
+}
+
+func parseJSON(dsn string) (map[string]string, error) {
+	var imap map[string]interface{}
+
+	if err := json.Unmarshal([]byte(dsn), &imap); err != nil {
+		return nil, err
+	}
+	value := make(map[string]string)
+	for k, v := range imap {
+		value[k] = fmt.Sprintf("%s", v)
+	}
+	return value, nil
+}
+
+func parseYAML(dsn string) (map[string]string, error) {
+	var imap map[string]interface{}
+
+	if err := yaml.Unmarshal([]byte(dsn), &imap); err != nil {
+		return nil, err
+	}
+	value := make(map[string]string)
+	for k, v := range imap {
+		value[k] = fmt.Sprintf("%s", v)
+	}
+	return value, nil
+}
+
+// parsePostgresDSN parses a dsn string into a map of options. The DSN can be
 // in a URI or key=value format.
-func parseDSN(dsn string) (map[string]string, error) {
+func parsePostgresDSN(dsn string) (map[string]string, error) {
 	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 		var err error
 		dsn, err = pg.ParseURL(dsn)

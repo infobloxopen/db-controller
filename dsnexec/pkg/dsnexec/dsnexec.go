@@ -9,6 +9,10 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+
+	"github.com/Masterminds/sprig/v3"
+	_ "github.com/infobloxopen/db-controller/dsnexec/pkg/shelldb"
+	_ "github.com/lib/pq"
 )
 
 // Hanlder is an instance of dsnexec.
@@ -21,9 +25,10 @@ type Handler struct {
 type HandlerOption func(*Handler) error
 
 // WithConfig sets the config for the dnsexec handler.
-func WithConfig(c Config) func(w *Handler) {
-	return func(w *Handler) {
+func WithConfig(c Config) HandlerOption {
+	return func(w *Handler) error {
 		w.config = c
+		return nil
 	}
 }
 
@@ -65,18 +70,17 @@ func (w *Handler) exec() error {
 	argContext := make(map[string]interface{})
 
 	for name, source := range w.config.Sources {
-		switch source.Driver {
-		case "postgres":
-			parsedOpts, err := parseDSN(source.DSN)
-			if err != nil {
-				return fmt.Errorf("failed to parse dsn: %v", err)
-			}
-			parsedOpts["raw_dsn"] = source.DSN
-			argContext[name] = parsedOpts
-
-		default:
+		parse, found := parsers[source.Driver]
+		if !found {
 			return fmt.Errorf("unsupported source driver: %s", source.Driver)
 		}
+
+		parsedOpts, err := parse(source.DSN)
+		if err != nil {
+			return fmt.Errorf("failed to parse dsn: %v", err)
+		}
+		parsedOpts["raw_dsn"] = source.DSN
+		argContext[name] = parsedOpts
 	}
 	db, err := sql.Open(w.config.Destination.Driver, w.config.Destination.DSN)
 	if err != nil {
@@ -86,14 +90,14 @@ func (w *Handler) exec() error {
 
 	for i, v := range w.config.Commands {
 		if len(v.Args) == 0 {
-			if _, err := db.Exec(v.CommandStr); err != nil {
+			if _, err := db.Exec(v.Command); err != nil {
 				return fmt.Errorf("failed to execute sql: %v", err)
 			}
 			continue
 		}
 		var args []interface{}
 		for j, arg := range v.Args {
-			t, err := template.New(fmt.Sprintf("arg(%d, %d)", i, j)).Parse(arg)
+			t, err := template.New(fmt.Sprintf("arg(%d, %d)", i, j)).Funcs(sprig.FuncMap()).Parse(arg)
 			if err != nil {
 				return fmt.Errorf("failed to parse argument template %v: %v", arg, err)
 			}
@@ -107,8 +111,8 @@ func (w *Handler) exec() error {
 			}
 			args = append(args, val)
 		}
-		if _, err := db.Exec(v.CommandStr, args...); err != nil {
-			return fmt.Errorf("failed to execute command: %v", err)
+		if _, err := db.Exec(v.Command, args...); err != nil {
+			return fmt.Errorf("failed to execute command: command %s %v", v.Command, err)
 		}
 	}
 	return nil

@@ -1,0 +1,20 @@
+configs:
+  # this is an example config to use the shelldb driver
+  test:
+    sources:
+    - driver: json
+      filename: test/source.json
+    - driver: yaml
+      filename: test/source.yaml
+    - driver: postgres
+      filename: test/source.pg.dsn
+    - driver: postgres
+      filename: test/source.pg.uri
+    destination:
+      driver: shelldb
+      dsn: my shell program
+    commands:
+    - command: /bin/bash
+      args:
+      - "-c"
+      - echo "{{ index . "test/source.json" }}"
