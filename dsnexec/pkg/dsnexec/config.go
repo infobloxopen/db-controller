@@ -6,21 +6,21 @@ import (
 
 // Command is a command to execute
 type Command struct {
-	CommandStr string
-	Args       []string
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args,omitempty"`
 }
 
 // DBConnInfo is a database connection info
 type DBConnInfo struct {
-	Driver string
-	DSN    string
+	Driver string `yaml:"driver"`
+	DSN    string `yaml:"dsn,omitempty"`
 }
 
 // Config is the configuration for the dsnexec
 type Config struct {
 	Sources     map[string]DBConnInfo `yaml:"sources"`
 	Destination DBConnInfo            `yaml:"destination"`
-	Commands    []Command             `yaml:"commands"`
+	Commands    []Command             `yaml:"commands,omitempty"`
 }
 
 // Validate validates the db conn info
@@ -48,7 +48,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("commands must be set")
 	}
 	for _, v := range c.Commands {
-		if v.CommandStr == "" {
+		if v.Command == "" {
 			return fmt.Errorf("command_str must be set")
 		}
 	}

@@ -32,7 +32,7 @@ func TestConfig_Validate(t *testing.T) {
 				},
 				Commands: []Command{
 					{
-						CommandStr: "SELECT 1",
+						Command: "SELECT 1",
 					},
 				},
 			},
