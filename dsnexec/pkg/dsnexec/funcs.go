@@ -18,6 +18,13 @@ func init() {
 	parsers["postgres"] = parsePostgresDSN
 	parsers["json"] = parseJSON
 	parsers["yaml"] = parseYAML
+	parsers["none"] = parseNone
+	parsers[""] = parseNone
+}
+
+func parseNone(dsn string) (map[string]string, error) {
+	value := make(map[string]string)
+	return value, nil
 }
 
 func parseJSON(dsn string) (map[string]string, error) {

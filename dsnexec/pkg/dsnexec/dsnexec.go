@@ -89,8 +89,17 @@ func (w *Handler) exec() error {
 	defer db.Close()
 
 	for i, v := range w.config.Commands {
+		t, err := template.New("command").Funcs(sprig.FuncMap()).Parse(v.Command)
+		if err != nil {
+			return fmt.Errorf("failed to parse command template %v: %v", v.Command, err)
+		}
+		bs := bytes.NewBuffer(nil)
+		if err := t.Execute(bs, argContext); err != nil {
+			return fmt.Errorf("failed to render command template: %v: %v", v.Command, err)
+		}
+		cmd := bs.String()
 		if len(v.Args) == 0 {
-			if _, err := db.Exec(v.Command); err != nil {
+			if _, err := db.Exec(cmd); err != nil {
 				return fmt.Errorf("failed to execute sql: %v", err)
 			}
 			continue
@@ -111,7 +120,7 @@ func (w *Handler) exec() error {
 			}
 			args = append(args, val)
 		}
-		if _, err := db.Exec(v.Command, args...); err != nil {
+		if _, err := db.Exec(cmd, args...); err != nil {
 			return fmt.Errorf("failed to execute command: command %s %v", v.Command, err)
 		}
 	}
