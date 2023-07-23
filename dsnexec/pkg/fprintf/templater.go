@@ -9,6 +9,8 @@ var (
 	templaters map[string]Templater = make(map[string]Templater)
 )
 
+// Templater is a function that will write the formatted string to the writer. The
+// templater is responsible for handling the templating.
 type Templater func(io.Writer, string, ...interface{}) (int, error)
 
 func init() {

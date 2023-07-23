@@ -13,6 +13,8 @@ var (
 	fileHandlers map[string]FileHandler = make(map[string]FileHandler)
 )
 
+// FileHandler returns an io.WriteCloser that will handle the details of writing to the given
+// filename. The filename could respresent a resource, such as a database, or a file.
 type FileHandler func(ctx context.Context, filename string) (io.WriteCloser, error)
 
 func init() {
