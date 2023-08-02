@@ -17,6 +17,7 @@ func init() {
 	sql.Register("fprintf", &d{})
 }
 
+// Open a new connection to the fprintf driver.
 func (d *d) Open(name string) (driver.Conn, error) {
 	uri, err := url.Parse(name)
 	if err != nil {
@@ -44,10 +45,14 @@ type conn struct {
 	templater   Templater
 }
 
+// Exec a query against the fprintf driver. The query represents the format string
+// to use. The args are passed to the format arguments.
 func (c *conn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	return c.ExecContext(context.Background(), query, args)
 }
 
+// ExecContext a query against the fprintf driver. The query represents the format string
+// to use. The args are passed to the format arguments. The context is ignored.
 func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Value) (driver.Result, error) {
 
 	log := log.WithFields(log.Fields{
@@ -84,22 +89,27 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Valu
 
 type result struct{}
 
+// LastInsertId is used to implement the fprintf driver. It is not supported.
 func (r *result) LastInsertId() (int64, error) {
 	return 0, fmt.Errorf("unsupported LastInsertId in shell driver")
 }
 
+// RowsAffected is used to implement the fprintf driver. It is not supported.
 func (r *result) RowsAffected() (int64, error) {
 	return 0, fmt.Errorf("unsupported RowsAffected in shell driver")
 }
 
+// Prepare is used to implement the fprintf driver. It is not supported.
 func (c *conn) Prepare(query string) (driver.Stmt, error) {
 	return nil, fmt.Errorf("unsupported Prepare in shell driver")
 }
 
+// Begin is used to implement the fprintf driver. It is not supported.
 func (c *conn) Begin() (driver.Tx, error) {
 	return nil, fmt.Errorf("unsupported Begin in shell driver")
 }
 
+// Close is used to implement the fprintf driver. It is not supported.
 func (c *conn) Close() error {
 	return nil
 }

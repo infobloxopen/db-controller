@@ -17,6 +17,7 @@ func init() {
 	sql.Register("shelldb", &d{})
 }
 
+// Open a new connection to the shell driver.
 func (d *d) Open(name string) (driver.Conn, error) {
 	return &conn{
 		name: name,
@@ -27,11 +28,8 @@ type conn struct {
 	name string
 }
 
-type ExecArgs struct {
-	Query string
-	Args  []driver.Value
-}
-
+// Exec a query against the shell driver. The query represents the command to
+// run. The args are passed to the command as arguments.
 func (c *conn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	return c.ExecContext(context.Background(), query, args)
 }
@@ -45,6 +43,9 @@ func (lw logWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// ExecContext a query against the shell driver. The query represents the command to
+// run. The args are passed to the command as arguments. The context is used to
+// cancel the command if the context is canceled.
 func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Value) (driver.Result, error) {
 
 	var cmd *exec.Cmd
@@ -71,22 +72,27 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Valu
 
 type result struct{}
 
+// LastInsertId is not supported by the shell driver.
 func (r *result) LastInsertId() (int64, error) {
 	return 0, fmt.Errorf("unsupported LastInsertId in shell driver")
 }
 
+// RowsAffected is not supported by the shell driver.
 func (r *result) RowsAffected() (int64, error) {
 	return 0, fmt.Errorf("unsupported RowsAffected in shell driver")
 }
 
+// Prepare is not supported by the shell driver.
 func (c *conn) Prepare(query string) (driver.Stmt, error) {
 	return nil, fmt.Errorf("unsupported Prepare in shell driver")
 }
 
+// Begin is not supported by the shell driver.
 func (c *conn) Begin() (driver.Tx, error) {
 	return nil, fmt.Errorf("unsupported Begin in shell driver")
 }
 
+// Close implements the driver.Conn interface. This is a no-op for the shell.
 func (c *conn) Close() error {
 	return nil
 }
