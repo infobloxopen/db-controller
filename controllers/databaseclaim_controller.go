@@ -1271,13 +1271,13 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 							DBClusterParameterGroupNameRef: &xpv1.Reference{
 								Name: pgName,
 							},
+							EngineVersion: &params.EngineVersion,
 						},
 						// Items from Claim and fragmentKey
 						Engine: &params.Engine,
 						Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
-						EngineVersion:                   &params.EngineVersion,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						StorageEncrypted:                &encryptStrg,
 						Port:                            &params.Port,
@@ -1388,6 +1388,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
+							EngineVersion:               &params.EngineVersion,
 						},
 						// Items from Claim and fragmentKey
 						Engine:           &params.Engine,
@@ -1397,7 +1398,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
-						EngineVersion:                   &params.EngineVersion,
 						PubliclyAccessible:              &params.PubliclyAccessible,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						EnablePerformanceInsights:       &perfIns,
@@ -1487,6 +1487,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						Region: region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
+							EngineVersion:     &params.EngineVersion,
 						},
 						DBParameterGroupName: &pgName,
 						// Items from Claim and fragmentKey
@@ -1494,7 +1495,6 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBInstanceClass: &params.Shape,
 						Tags:            DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
-						EngineVersion:             &params.EngineVersion,
 						PubliclyAccessible:        &params.PubliclyAccessible,
 						DBClusterIdentifier:       &dbClusterIdentifier,
 						EnablePerformanceInsights: &perfIns,
@@ -1571,7 +1571,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 								Engine:        params.Engine,
 								EngineVersion: &params.EngineVersion,
 							},
-							Parameters: []crossplanerds.Parameter{
+							Parameters: []crossplanerds.CustomParameter{
 								{ParameterName: &logical,
 									ParameterValue: &one,
 									ApplyMethod:    &reboot,
@@ -1653,7 +1653,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 								Engine:        params.Engine,
 								EngineVersion: &params.EngineVersion,
 							},
-							Parameters: []crossplanerds.Parameter{
+							Parameters: []crossplanerds.CustomParameter{
 								{ParameterName: &transactionTimeout,
 									ParameterValue: &transactionTimeoutValue,
 									ApplyMethod:    &immediate,
@@ -1731,7 +1731,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 								Engine:        params.Engine,
 								EngineVersion: &params.EngineVersion,
 							},
-							Parameters: []crossplanerds.Parameter{
+							Parameters: []crossplanerds.CustomParameter{
 								{ParameterName: &logical,
 									ParameterValue: &one,
 									ApplyMethod:    &reboot,
@@ -1894,22 +1894,13 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+	ms64 := int64(dbClaim.Spec.MinStorageGB)
 
-	// TODO:currently ignoring changes to shape and minStorage if a CR already exists.
-	/*
-		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
-
-		// Update Shape and MinGibStorage for now
-		if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
-			rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
-			update = true
-		}
-
-		if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
-			rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
-			update = true
-		}
-	*/
+	if dbInstance.Spec.ForProvider.AllocatedStorage != &ms64 {
+		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
+		dbInstance.Spec.ForProvider.IOPS = nil
+		dbInstance.Spec.ForProvider.StorageThroughput = nil
+	}
 
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
@@ -1939,6 +1930,10 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	// Update DBCluster
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+	// if
+
+	// dbCluster.Spec.ForProvider.IOPS = nil
+	// dbCluster.Spec.ForProvider.StorageEncrypted = nil
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)

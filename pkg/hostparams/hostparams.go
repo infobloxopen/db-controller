@@ -33,12 +33,7 @@ type HostParams struct {
 }
 
 func (p *HostParams) String() string {
-	if p.Engine == defaultAuroraPostgresStr {
-		//storage does not apply to aurora db.
-		return fmt.Sprintf("%s-%s-%s", p.Engine, p.Shape, p.EngineVersion)
-	} else {
-		return fmt.Sprintf("%s-%s-%s-%s", p.Engine, p.Shape, p.EngineVersion, strconv.Itoa(p.MinStorageGB))
-	}
+	return fmt.Sprintf("%s-%s-%s", p.Engine, p.Shape, p.EngineVersion)
 }
 
 func (p *HostParams) Hash() string {
@@ -83,7 +78,7 @@ func (p *HostParams) HasVersionChanged(activeVersion string) bool {
 func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 	return p.HasEngineChanged(np.Engine) ||
 		p.HasShapeChanged(np.Shape) ||
-		p.HasStorageChanged(np.MinStorageGB) ||
+		// p.HasStorageChanged(np.MinStorageGB) ||
 		p.HasVersionChanged(np.EngineVersion)
 
 }
