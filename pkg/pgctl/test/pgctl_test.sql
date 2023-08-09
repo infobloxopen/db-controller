@@ -49,7 +49,7 @@ CREATE EXTENSION IF NOT EXISTS "hstore";
 
 DO $$
 BEGIN
-    IF NOT EXISTS (
+    IF NOT EXISTS(
         SELECT
             *
         FROM
@@ -63,7 +63,7 @@ $$;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (
+    IF NOT EXISTS(
         SELECT
             *
         FROM
@@ -81,7 +81,7 @@ CREATE TYPE blox_text AS (
     f1 text
 );
 
-CREATE FUNCTION fn_get_val (bigint)
+CREATE FUNCTION fn_get_val(bigint)
     RETURNS blox_text
     AS $$
     SELECT
@@ -89,26 +89,26 @@ CREATE FUNCTION fn_get_val (bigint)
 $$
 LANGUAGE SQL;
 
-CREATE TABLE tab_1 (
+CREATE TABLE tab_1(
     id int PRIMARY KEY,
     name blox_text
 );
 
-CREATE UNIQUE INDEX ind_1_tab_1 ON tab_1 (id);
+CREATE UNIQUE INDEX ind_1_tab_1 ON tab_1(id);
 
-CREATE INDEX ind_2_tab_1 ON tab_1 (name);
+CREATE INDEX ind_2_tab_1 ON tab_1(name);
 
-CREATE TABLE tab_1_audits (
+CREATE TABLE tab_1_audits(
     book_id int NOT NULL,
     entry_date text NOT NULL
 );
 
-CREATE OR REPLACE FUNCTION auditfunc ()
+CREATE OR REPLACE FUNCTION auditfunc()
     RETURNS TRIGGER
     AS $my_table$
 BEGIN
-    INSERT INTO tab_1_audits (book_id, entry_date)
-        VALUES (NEW.ID, CURRENT_TIMESTAMP);
+    INSERT INTO tab_1_audits(book_id, entry_date)
+        VALUES(NEW.ID, CURRENT_TIMESTAMP);
     RETURN NEW;
 END;
 $my_table$
@@ -117,23 +117,23 @@ LANGUAGE plpgsql;
 CREATE TRIGGER price_trigger
     AFTER INSERT ON tab_1
     FOR EACH ROW
-    EXECUTE PROCEDURE auditfunc ();
+    EXECUTE PROCEDURE auditfunc();
 
 INSERT INTO tab_1
-    VALUES (generate_series(1, :end), fn_get_val (nextval('tab_1_seq')));
+    VALUES (generate_series(1, :end), fn_get_val(nextval('tab_1_seq')));
 
 CREATE SEQUENCE IF NOT EXISTS tab_2_seq;
 
-CREATE TABLE tab_2 (
+CREATE TABLE tab_2(
     id int PRIMARY KEY,
     name blox_text,
-    tab_1_ref int REFERENCES tab_1 (id)
+    tab_1_ref int REFERENCES tab_1(id)
 );
 
-CREATE INDEX ind_1_tab_2 ON tab_2 (name, tab_1_ref);
+CREATE INDEX ind_1_tab_2 ON tab_2(name, tab_1_ref);
 
 INSERT INTO tab_2
-    VALUES (generate_series(1, :end), fn_get_val (nextval('tab_2_seq')), generate_series(1, :end));
+    VALUES (generate_series(1, :end), fn_get_val(nextval('tab_2_seq')), generate_series(1, :end));
 
 CREATE OR REPLACE VIEW vw_tab_1_2 AS
 SELECT
@@ -161,18 +161,18 @@ WHERE
 -- Trigger
 CREATE SEQUENCE IF NOT EXISTS tab_3_seq;
 
-CREATE TABLE tab_3 (
+CREATE TABLE tab_3(
     id int PRIMARY KEY,
     name blox_text,
-    tab_2_ref int REFERENCES tab_1 (id)
+    tab_2_ref int REFERENCES tab_1(id)
 );
 
-CREATE INDEX ind_1_tab_3 ON tab_3 (name, tab_2_ref);
+CREATE INDEX ind_1_tab_3 ON tab_3(name, tab_2_ref);
 
 INSERT INTO tab_3
-    VALUES (generate_series(1, :end), fn_get_val (nextval('tab_3_seq')), generate_series(1, :end));
+    VALUES (generate_series(1, :end), fn_get_val(nextval('tab_3_seq')), generate_series(1, :end));
 
-CREATE TABLE tab_4 (
+CREATE TABLE tab_4(
     id int PRIMARY KEY,
     name varchar
 );
@@ -180,7 +180,7 @@ CREATE TABLE tab_4 (
 INSERT INTO tab_4
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE TABLE tab_5 (
+CREATE TABLE tab_5(
     id int PRIMARY KEY,
     name varchar
 );
@@ -188,7 +188,7 @@ CREATE TABLE tab_5 (
 INSERT INTO tab_5
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE TABLE tab_6 (
+CREATE TABLE tab_6(
     id int PRIMARY KEY,
     name varchar
 );
@@ -196,7 +196,7 @@ CREATE TABLE tab_6 (
 INSERT INTO tab_6
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE TABLE tab_7 (
+CREATE TABLE tab_7(
     id int PRIMARY KEY,
     name varchar
 );
@@ -204,7 +204,7 @@ CREATE TABLE tab_7 (
 INSERT INTO tab_7
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE TABLE tab_8 (
+CREATE TABLE tab_8(
     id int PRIMARY KEY,
     name varchar
 );
@@ -212,7 +212,7 @@ CREATE TABLE tab_8 (
 INSERT INTO tab_8
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE TABLE tab_9 (
+CREATE TABLE tab_9(
     id int PRIMARY KEY,
     name varchar
 );
@@ -220,7 +220,7 @@ CREATE TABLE tab_9 (
 INSERT INTO tab_9
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE TABLE tab_10 (
+CREATE TABLE tab_10(
     id int PRIMARY KEY,
     name varchar
 );
@@ -228,7 +228,7 @@ CREATE TABLE tab_10 (
 INSERT INTO tab_10
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
-CREATE OR REPLACE FUNCTION count_rows (schema text, tablename text)
+CREATE OR REPLACE FUNCTION count_rows(schema text, tablename text)
     RETURNS integer
     AS $body$
 DECLARE
@@ -243,6 +243,58 @@ $body$
 LANGUAGE plpgsql;
 
 GRANT SELECT ON tab_1 TO appuser;
+
+--OPERATOR, OPERATOR CLASS, OPERATOR FAMILY and FUNCTION
+CREATE DOMAIN soa_serial_number AS BIGINT
+-- serial value should be in [0..2^32-1] range according to RFC-1982
+CONSTRAINT soa_serial_number_check CHECK (VALUE >= 0
+    AND VALUE <= 4294967295);
+
+CREATE OR REPLACE FUNCTION soa_serial_number_le(soa_serial_number, soa_serial_number)
+    RETURNS boolean
+    AS $$
+BEGIN
+    --serial value s1 is said to be less than s2 if, and only if, s1 is not equal to s2, and
+    --(i1 < i2 and i2 - i1 < 2^(32 - 1)) or
+    --(i1 > i2 and i1 - i2 > 2^(32 - 1))
+    RETURN $1::bigint <> $2::bigint
+        AND($1::bigint < $2::bigint
+            AND($2::bigint - $1::bigint) < 2147483648)
+        OR($1::bigint > $2::bigint
+            AND($1::bigint - $2::bigint) > 2147483648);
+END;
+$$ IMMUTABLE
+LANGUAGE plpgsql;
+
+CREATE OPERATOR <(
+    LEFTARG = soa_serial_number,
+    RIGHTARG = soa_serial_number,
+    PROCEDURE = soa_serial_number_le
+);
+
+CREATE OR REPLACE FUNCTION soa_serial_number_cmp(soa_serial_number, soa_serial_number)
+    RETURNS integer
+    AS $$
+BEGIN
+    RETURN CASE WHEN $1::bigint = $2::bigint THEN
+        0
+    WHEN($1::bigint < $2::bigint
+        AND($2::bigint - $1::bigint) < 2147483648)
+        OR($1::bigint > $2::bigint
+            AND($1::bigint - $2::bigint) > 2147483648) THEN
+        -1
+    ELSE
+        1
+    END;
+END;
+$$ IMMUTABLE
+LANGUAGE plpgsql;
+
+CREATE OPERATOR CLASS soa_serial_number_ops DEFAULT FOR TYPE soa_serial_number
+    USING btree AS
+    OPERATOR 1 <,
+    FUNCTION 1 soa_serial_number_cmp( soa_serial_number, soa_serial_number
+);
 
 --CREATE publication mypub FOR ALL tables;
 /*create subscription mysub connection 'dbname=pub host=localhost user=bjeevan port=5433' publication mypub;
