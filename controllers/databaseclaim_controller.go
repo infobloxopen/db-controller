@@ -286,6 +286,17 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			// check if the claim is in the middle of rds migration, if so, wait for it to complete
+			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
+				logr.Info("migration is in progress. object cannot be deleted")
+				dbClaim.Status.Error = "dbc cannot be deleted while migration is in progress"
+				err := r.Client.Status().Update(ctx, &dbClaim)
+				if err != nil {
+					logr.Error(err, "unable to update status. ignoring this error")
+				}
+				//ignore delete request, continue to process rds migration
+				return r.updateStatus(ctx, &dbClaim)
+			}
 			// our finalizer is present, so lets handle any external dependency
 			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
 				// if fail to delete the external dependency here, return with error
@@ -2123,8 +2134,12 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 		}
 		return ctrl.Result{}, err
 	}
-
-	return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
+	//if object is getting deleted then call requeue immediately
+	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		return ctrl.Result{Requeue: true}, nil
+	} else {
+		return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
+	}
 }
 
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {

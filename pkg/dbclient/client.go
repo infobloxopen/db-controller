@@ -184,7 +184,6 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 		`
 		grantSchemaPrivileges := `
 			GRANT ALL ON SCHEMA public TO %s;
-			GRANT ALL ON ALL TABLES IN SCHEMA public TO %s;
 		`
 		_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
 		if err != nil {
@@ -209,8 +208,7 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 		}
 		defer db.Close()
 		//grant schema privileges
-		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(rolename),
-			pq.QuoteIdentifier(rolename)))
+		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(rolename)))
 		if err != nil {
 			pc.log.Error(err, "could not set schema privileges to role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
