@@ -67,6 +67,8 @@ const (
 	defaultBackupPolicyKey   = "backup"
 	tempTargetPassword       = "targetPassword"
 	tempSourceDsn            = "sourceDsn"
+	masterSecretSuffix       = "-master"
+	masterPasswordKey        = "password"
 )
 
 type ModeEnum int
@@ -848,6 +850,18 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
+func generateMasterPassword() (string, error) {
+	var pass string
+	var err error
+	minPasswordLength := 30
+
+	pass, err = gopassword.Generate(minPasswordLength, 3, 0, false, true)
+	if err != nil {
+		return "", err
+	}
+	return pass, nil
+}
+
 var (
 	instanceLableKey = ".spec.instanceLabel"
 )
@@ -1206,6 +1220,37 @@ func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tag
 	}
 	return tags
 }
+func (r *DatabaseClaimReconciler) manageMasterPassword(ctx context.Context, secret *xpv1.SecretKeySelector) error {
+	logr := r.Log.WithValues("func", "manageMasterPassword")
+	masterSecret := &corev1.Secret{}
+	password, err := generateMasterPassword()
+	if err != nil {
+		return err
+	}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name:      secret.SecretReference.Name,
+		Namespace: secret.SecretReference.Namespace,
+	}, masterSecret)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		//master secret not found, create it
+		masterSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: secret.SecretReference.Namespace,
+				Name:      secret.SecretReference.Name,
+			},
+			Data: map[string][]byte{
+				secret.Key: []byte(password),
+			},
+		}
+		logr.Info("creating master secret", "name", secret.Name, "namespace", secret.Namespace)
+		return r.Client.Create(ctx, masterSecret)
+	}
+	logr.Info("master secret exists")
+	return nil
+}
 
 func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
@@ -1228,10 +1273,10 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 
 	dbMasterSecretCluster := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
-			Name:      dbHostName + "-master",
+			Name:      dbHostName + masterSecretSuffix,
 			Namespace: serviceNS,
 		},
-		Key: "password",
+		Key: masterPasswordKey,
 	}
 	dbCluster := &crossplanerds.DBCluster{}
 	providerConfigReference := xpv1.Reference{
@@ -1298,6 +1343,11 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 					Source: &restoreFromSource,
 				}
 			}
+			//create master password secret, before calling create on DBInstance
+			err := r.manageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef)
+			if err != nil {
+				return false, err
+			}
 			r.Log.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 			if err := r.Client.Create(ctx, dbCluster); err != nil {
 				return false, err
@@ -1333,10 +1383,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
-			Name:      dbHostName + "-master",
+			Name:      dbHostName + masterSecretSuffix,
 			Namespace: serviceNS,
 		},
-		Key: "password",
+		Key: masterPasswordKey,
 	}
 
 	pgName, err := r.managePostgresParamGroup(ctx, dbClaim)
@@ -1421,8 +1471,14 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 					Source: &restoreFromSource,
 				}
 			}
-			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 
+			//create master password secret, before calling create on DBInstance
+			err := r.manageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef)
+			if err != nil {
+				return false, err
+			}
+			//create DBInstance
+			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 			if err := r.Client.Create(ctx, dbInstance); err != nil {
 				return false, err
 			}
@@ -1431,7 +1487,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 			return false, err
 		}
 	}
-
 	// Deletion is long running task check that is not being deleted.
 	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
 		err = fmt.Errorf("can not create Cloud DB instance %s it is being deleted", dbHostName)
@@ -1443,7 +1498,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	if err != nil {
 		return false, err
 	}
-
 	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
 }
 
