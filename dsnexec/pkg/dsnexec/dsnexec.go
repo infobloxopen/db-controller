@@ -58,6 +58,12 @@ func (w *Handler) UpdateDSN(path, content string) error {
 	w.l.RLock()
 	defer w.l.RUnlock()
 
+	// update the local state
+	w.config.Sources[path] = DBConnInfo{
+		Driver: w.config.Sources[path].Driver,
+		DSN:    content,
+	}
+
 	if err := w.exec(); err != nil {
 		return fmt.Errorf("failed initial execute: %v", err)
 	}

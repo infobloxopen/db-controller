@@ -71,12 +71,16 @@ func TestHandler_UpdateDSN(t *testing.T) {
 					},
 				},
 			},
+			args: args{
+				path:    "test",
+				content: "postgres://user:pass@myhost:1234/dbname?sslmode=disable",
+			},
 			expectedExecCalls: []tdb.ExecArgs{
 				{
 					Query: "select 1",
 					Args: []driver.Value{
-						"localhost",
-						int64(5432),
+						"myhost",
+						int64(1234),
 					},
 				},
 			},
