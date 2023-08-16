@@ -5,10 +5,54 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/infobloxopen/db-controller/dsnexec/pkg/tdb"
 )
+
+func TestHandler_UpdateDSN_Concurrency(t *testing.T) {
+	w := &Handler{
+		config: Config{
+			Sources: map[string]DBConnInfo{
+				"test": {
+					Driver: "postgres",
+					DSN:    "postgres://user:pass@localhost:5432/dbname?sslmode=disable",
+				},
+			},
+			Commands: []Command{
+				{
+					Command: "select 1",
+				},
+			},
+		},
+	}
+
+	// setup the destination DSN to use the test driver
+	w.config.Destination = DBConnInfo{
+		Driver: "nulldb",
+		DSN:    fmt.Sprintf("nulldb://%s", t.Name()),
+	}
+
+	// launch 100 goroutines to update the DSN concurrently
+	c := make(chan struct{})
+	wg := sync.WaitGroup{}
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			<-c
+			for j := 0; j < 100; j++ {
+				dsn := fmt.Sprintf("postgres://user:%s@localhost:5432/dbname?sslmode=disable", uuid.New())
+				w.UpdateDSN("test", dsn)
+			}
+			wg.Done()
+		}()
+	}
+	// launch the goroutines
+	close(c)
+	wg.Wait()
+}
 
 func TestHandler_UpdateDSN(t *testing.T) {
 	type fields struct {
