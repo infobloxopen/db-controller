@@ -8,15 +8,21 @@ import (
 	"testing"
 	"time"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
+
+	"github.com/stretchr/testify/assert"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -130,6 +136,10 @@ type mockClient struct {
 	client.Client
 }
 
+var opts = zap.Options{
+	Development: true,
+}
+
 func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	_ = ctx
 	if (key.Namespace == "testNamespace") &&
@@ -154,8 +164,22 @@ func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		return nil
 	}
-
-	return fmt.Errorf("not found")
+	return errors.NewNotFound(schema.GroupResource{Group: "core", Resource: "secret"}, key.Name)
+}
+func (m mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	_ = ctx
+	if (obj.GetNamespace() == "testNamespace") &&
+		(obj.GetName() == "create-master-secret") {
+		sec, ok := obj.(*corev1.Secret)
+		if !ok {
+			return fmt.Errorf("can't assert type")
+		}
+		sec.Data = map[string][]byte{
+			"password": []byte("masterpassword"),
+		}
+		return nil
+	}
+	return fmt.Errorf("can't create object")
 }
 
 func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
@@ -1124,7 +1148,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					},
 				},
 			},
-			"dbc-boxing-x-identity-dbclaim-name-1620c8de",
+			"dbc-boxing-x-identity-dbclaim-name-d391a72a",
 		},
 		{
 			"OK",
@@ -1171,9 +1195,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 	tru := true
 	flse := false
-	opts := zap.Options{
-		Development: true,
-	}
+
 	type fields struct {
 		Client             client.Client
 		Log                logr.Logger
@@ -1607,6 +1629,97 @@ func TestDatabaseClaimReconciler_BackupPolicy(t *testing.T) {
 			if got[0] != tt.want {
 				t.Errorf("configureBackupPolicy() got = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func Test_generateMasterPassword(t *testing.T) {
+	tests := []struct {
+		name    string
+		want    int
+		wantErr bool
+	}{
+		{
+			"generateMasterPassword",
+			30,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := generateMasterPassword()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateMasterPassword() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(got) < tt.want {
+				t.Errorf("generateMasterPassword() = %v len = %v, want len >= %v", got, len(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestManageMasterPassword(t *testing.T) {
+	type mockReconciler struct {
+		Client client.Client
+		Log    logr.Logger
+		Scheme *runtime.Scheme
+		Config *viper.Viper
+	}
+	type args struct {
+		secret *xpv1.SecretKeySelector
+	}
+	tests := []struct {
+		name       string
+		reconciler mockReconciler
+		args       args
+		want       error
+	}{
+		{"use existing master secret",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(multiConfig),
+				Log:    zap.New(zap.UseFlagOptions(&opts)),
+			},
+			args{
+				secret: &xpv1.SecretKeySelector{
+					SecretReference: xpv1.SecretReference{
+						Name:      "sample-master-secret",
+						Namespace: "testNamespace",
+					},
+					Key: "password",
+				},
+			},
+			nil,
+		},
+		{"create master secret",
+			mockReconciler{
+				Client: &mockClient{},
+				Config: NewConfig(multiConfig),
+				Log:    zap.New(zap.UseFlagOptions(&opts)),
+			},
+			args{
+				secret: &xpv1.SecretKeySelector{
+					SecretReference: xpv1.SecretReference{
+						Name:      "create-master-secret",
+						Namespace: "testNamespace",
+					},
+					Key: "password",
+				},
+			},
+			nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client: tt.reconciler.Client,
+				Log:    tt.reconciler.Log,
+				Scheme: tt.reconciler.Scheme,
+				Config: tt.reconciler.Config,
+			}
+			got := r.manageMasterPassword(context.Background(), tt.args.secret)
+			assert.NoError(t, got)
 		})
 	}
 }

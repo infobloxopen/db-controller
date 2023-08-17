@@ -67,6 +67,8 @@ const (
 	defaultBackupPolicyKey   = "backup"
 	tempTargetPassword       = "targetPassword"
 	tempSourceDsn            = "sourceDsn"
+	masterSecretSuffix       = "-master"
+	masterPasswordKey        = "password"
 )
 
 type ModeEnum int
@@ -848,6 +850,18 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	return pass, nil
 }
 
+func generateMasterPassword() (string, error) {
+	var pass string
+	var err error
+	minPasswordLength := 30
+
+	pass, err = gopassword.Generate(minPasswordLength, 3, 0, false, true)
+	if err != nil {
+		return "", err
+	}
+	return pass, nil
+}
+
 var (
 	instanceLableKey = ".spec.instanceLabel"
 )
@@ -1206,6 +1220,37 @@ func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tag
 	}
 	return tags
 }
+func (r *DatabaseClaimReconciler) manageMasterPassword(ctx context.Context, secret *xpv1.SecretKeySelector) error {
+	logr := r.Log.WithValues("func", "manageMasterPassword")
+	masterSecret := &corev1.Secret{}
+	password, err := generateMasterPassword()
+	if err != nil {
+		return err
+	}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name:      secret.SecretReference.Name,
+		Namespace: secret.SecretReference.Namespace,
+	}, masterSecret)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		//master secret not found, create it
+		masterSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: secret.SecretReference.Namespace,
+				Name:      secret.SecretReference.Name,
+			},
+			Data: map[string][]byte{
+				secret.Key: []byte(password),
+			},
+		}
+		logr.Info("creating master secret", "name", secret.Name, "namespace", secret.Namespace)
+		return r.Client.Create(ctx, masterSecret)
+	}
+	logr.Info("master secret exists")
+	return nil
+}
 
 func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostName string,
 	dbClaim *persistancev1.DatabaseClaim) (bool, error) {
@@ -1228,10 +1273,10 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 
 	dbMasterSecretCluster := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
-			Name:      dbHostName + "-master",
+			Name:      dbHostName + masterSecretSuffix,
 			Namespace: serviceNS,
 		},
-		Key: "password",
+		Key: masterPasswordKey,
 	}
 	dbCluster := &crossplanerds.DBCluster{}
 	providerConfigReference := xpv1.Reference{
@@ -1298,6 +1343,11 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 					Source: &restoreFromSource,
 				}
 			}
+			//create master password secret, before calling create on DBInstance
+			err := r.manageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef)
+			if err != nil {
+				return false, err
+			}
 			r.Log.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 			if err := r.Client.Create(ctx, dbCluster); err != nil {
 				return false, err
@@ -1333,10 +1383,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
-			Name:      dbHostName + "-master",
+			Name:      dbHostName + masterSecretSuffix,
 			Namespace: serviceNS,
 		},
-		Key: "password",
+		Key: masterPasswordKey,
 	}
 
 	pgName, err := r.managePostgresParamGroup(ctx, dbClaim)
@@ -1355,8 +1405,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	params := &r.Input.HostParams
 	ms64 := int64(params.MinStorageGB)
 	multiAZ := r.getMultiAZEnabled()
-	perfIns := true
-	encryptStrg := true
+	trueVal := true
 	storageType := r.Config.GetString("storageType")
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
@@ -1376,6 +1425,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 					ForProvider: crossplanerds.DBInstanceParameters{
 						Region: region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
+							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 							VPCSecurityGroupIDRefs: []xpv1.Reference{
 								{Name: r.getVpcSecurityGroupIDRefs()},
@@ -1400,8 +1450,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-						EnablePerformanceInsights:       &perfIns,
-						StorageEncrypted:                &encryptStrg,
+						EnablePerformanceInsights:       &trueVal,
+						StorageEncrypted:                &trueVal,
 						StorageType:                     &storageType,
 						Port:                            &params.Port,
 					},
@@ -1421,8 +1471,14 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 					Source: &restoreFromSource,
 				}
 			}
-			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 
+			//create master password secret, before calling create on DBInstance
+			err := r.manageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef)
+			if err != nil {
+				return false, err
+			}
+			//create DBInstance
+			r.Log.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 			if err := r.Client.Create(ctx, dbInstance); err != nil {
 				return false, err
 			}
@@ -1431,7 +1487,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 			return false, err
 		}
 	}
-
 	// Deletion is long running task check that is not being deleted.
 	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
 		err = fmt.Errorf("can not create Cloud DB instance %s it is being deleted", dbHostName)
@@ -1443,7 +1498,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	if err != nil {
 		return false, err
 	}
-
 	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
 }
 
@@ -1466,7 +1520,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := &r.Input.HostParams
-	perfIns := true
+	trueVal := true
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1486,6 +1540,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 					ForProvider: crossplanerds.DBInstanceParameters{
 						Region: region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
+							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 							EngineVersion:     &params.EngineVersion,
 						},
@@ -1497,7 +1552,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						// Items from Config
 						PubliclyAccessible:        &params.PubliclyAccessible,
 						DBClusterIdentifier:       &dbClusterIdentifier,
-						EnablePerformanceInsights: &perfIns,
+						EnablePerformanceInsights: &trueVal,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -1894,14 +1949,10 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
-	ms64 := int64(dbClaim.Spec.MinStorageGB)
-
-	if dbInstance.Spec.ForProvider.AllocatedStorage != &ms64 {
+	if dbClaim.Spec.Type == defaultPostgresStr {
+		ms64 := int64(dbClaim.Spec.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
-		dbInstance.Spec.ForProvider.IOPS = nil
-		dbInstance.Spec.ForProvider.StorageThroughput = nil
 	}
-
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
 	if err != nil {
@@ -1909,7 +1960,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	}
 	// an empty json patch will be {}, we can assert that no update is required if len == 2
 	// we could also just apply the empty patch if additional call to apiserver isn't an issue
-	if len(dbInstancePatchData) == 2 {
+	if len(dbInstancePatchData) <= 2 {
 		return false, nil
 	}
 	r.Log.Info("updating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
@@ -1930,10 +1981,6 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	// Update DBCluster
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
-	// if
-
-	// dbCluster.Spec.ForProvider.IOPS = nil
-	// dbCluster.Spec.ForProvider.StorageEncrypted = nil
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
@@ -1942,7 +1989,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	}
 	// an empty json patch will be {}, we can assert that no update is required if len == 2
 	// we could also just apply the empty patch if additional call to apiserver isn't an issue
-	if len(dbClusterPatchData) == 2 {
+	if len(dbClusterPatchData) <= 2 {
 		return false, nil
 	}
 	r.Log.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)

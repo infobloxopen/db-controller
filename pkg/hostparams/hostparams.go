@@ -78,7 +78,6 @@ func (p *HostParams) HasVersionChanged(activeVersion string) bool {
 func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 	return p.HasEngineChanged(np.Engine) ||
 		p.HasShapeChanged(np.Shape) ||
-		// p.HasStorageChanged(np.MinStorageGB) ||
 		p.HasVersionChanged(np.EngineVersion)
 
 }
