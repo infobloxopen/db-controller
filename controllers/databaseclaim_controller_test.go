@@ -1148,7 +1148,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					},
 				},
 			},
-			"dbc-boxing-x-identity-dbclaim-name-d391a72a",
+			"boxing-x-identity-dbclaim-name-d391a72a",
 		},
 		{
 			"OK",
@@ -1170,7 +1170,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					},
 				},
 			},
-			"dbc-boxing-x-athena-362c4cd6",
+			"boxing-x-athena-362c4cd6",
 		},
 	}
 	for _, tt := range tests {
@@ -1187,6 +1187,95 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 			}
 			if got := r.getDynamicHostName(tt.args.dbClaim); got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.getDynamicHostName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
+	opts := zap.Options{
+		Development: true,
+	}
+	flse := false
+	type fields struct {
+		Client             client.Client
+		Log                logr.Logger
+		Scheme             *runtime.Scheme
+		Config             *viper.Viper
+		MasterAuth         *rdsauth.MasterAuth
+		DbIdentifierPrefix string
+		Mode               ModeEnum
+		Input              *input
+	}
+	type args struct {
+		dbClaim *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   error
+	}{
+		{
+			"OK",
+			fields{
+				Config:             NewConfig(multiConfig),
+				Log:                zap.New(zap.UseFlagOptions(&opts)),
+				DbIdentifierPrefix: "boxing-x",
+				Input: &input{FragmentKey: "",
+					HostParams: hostparams.HostParams{Engine: "postgres",
+						EngineVersion: "12.11",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20}},
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
+					Spec: persistancev1.DatabaseClaimSpec{
+						AppID:                 "identity",
+						DatabaseName:          "identity",
+						EnableReplicationRole: &flse},
+				},
+			},
+			nil,
+		},
+		{
+			"Dbname too long",
+			fields{
+				Config:             NewConfig(multiConfig),
+				Log:                zap.New(zap.UseFlagOptions(&opts)),
+				DbIdentifierPrefix: "boxing-x",
+				Input: &input{FragmentKey: "",
+					HostParams: hostparams.HostParams{Engine: "postgres",
+						EngineVersion: "12.11",
+						Shape:         "db.t4g.medium",
+						MinStorageGB:  20}},
+			},
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "nametooooooooooooooooooloooooooooooooooooooong"},
+					Spec: persistancev1.DatabaseClaimSpec{
+						AppID:                 "identity",
+						DatabaseName:          "identity",
+						EnableReplicationRole: &flse},
+				},
+			},
+			ErrMaxNameLen,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DatabaseClaimReconciler{
+				Client:             tt.fields.Client,
+				Log:                tt.fields.Log,
+				Scheme:             tt.fields.Scheme,
+				Config:             tt.fields.Config,
+				MasterAuth:         tt.fields.MasterAuth,
+				DbIdentifierPrefix: tt.fields.DbIdentifierPrefix,
+				Mode:               tt.fields.Mode,
+				Input:              tt.fields.Input,
+			}
+			if got := r.setReqInfo(tt.args.dbClaim); got != tt.want {
+				t.Errorf("DatabaseClaimReconciler.setReqInfo() = %v, want %v", got, tt.want)
 			}
 		})
 	}

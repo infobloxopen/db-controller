@@ -121,9 +121,9 @@ controllerConfig:
   dbSubnetGroupNameRef:
   dynamicHostWaitTimeMin: 1
   defaultShape: db.t4g.medium
-  defaultMinStorageGB: 20
+  defaultMinStorageGB: 50
   defaultEngine: postgres
-  defaultEngineVersion: 13.8
+  defaultEngineVersion: 15.3
   defaultMasterPort: 5432
   defaultSslMode: require
   defaultMasterUsername: root
