@@ -51,14 +51,18 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 )
 
+type Error string
+
+func (e Error) Error() string { return string(e) }
+
 const (
-	defaultPassLen = 32
-	defaultNumDig  = 10
-	defaultNumSimb = 10
-	// rotation time in minutes
-	minRotationTime          = 60
+	defaultPassLen           = 32
+	defaultNumDig            = 10
+	defaultNumSimb           = 10
+	minRotationTime          = 60 // rotation time in minutes
 	maxRotationTime          = 1440
 	maxWaitTime              = 10
+	maxNameLen               = 44 // max length of dbclaim name
 	defaultRotationTime      = minRotationTime
 	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
 	defaultPostgresStr       = "postgres"
@@ -69,6 +73,7 @@ const (
 	tempSourceDsn            = "sourceDsn"
 	masterSecretSuffix       = "-master"
 	masterPasswordKey        = "password"
+	ErrMaxNameLen            = Error("dbclaim name is too long. max length is 44 characters")
 )
 
 type ModeEnum int
@@ -240,6 +245,11 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		DbType: string(dbClaim.Spec.Type), HostParams: *hostParams,
 	}
 	if manageCloudDB {
+		//check if dbclaim.name is > maxNameLen and if so, error out
+		if len(dbClaim.Name) > maxNameLen {
+			return ErrMaxNameLen
+		}
+
 		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
 	if r.Config.GetBool("supportSuperUserElevation") {
@@ -508,6 +518,9 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 
 	if r.Input.MasterConnInfo.Host == dbClaim.Status.ActiveDB.ConnectionInfo.Host {
 		dbClaim.Status.NewDB = *dbClaim.Status.ActiveDB.DeepCopy()
+		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
+			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
+		}
 	} else {
 		updateClusterStatus(&dbClaim.Status.NewDB, &r.Input.HostParams)
 	}
@@ -1034,13 +1047,12 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secret
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *persistancev1.DatabaseClaim) string {
-	prefix := "dbc-"
+	var prefix string
 	suffix := "-" + r.Input.HostParams.Hash()
 
 	if r.DbIdentifierPrefix != "" {
-		prefix = prefix + r.DbIdentifierPrefix + "-"
+		prefix = r.DbIdentifierPrefix + "-"
 	}
-
 	if r.Input.FragmentKey == "" {
 		return prefix + dbClaim.Name + suffix
 	}
@@ -1405,8 +1417,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	params := &r.Input.HostParams
 	ms64 := int64(params.MinStorageGB)
 	multiAZ := r.getMultiAZEnabled()
-	perfIns := true
-	encryptStrg := true
+	trueVal := true
 	storageType := r.Config.GetString("storageType")
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
@@ -1426,6 +1437,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 					ForProvider: crossplanerds.DBInstanceParameters{
 						Region: region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
+							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 							VPCSecurityGroupIDRefs: []xpv1.Reference{
 								{Name: r.getVpcSecurityGroupIDRefs()},
@@ -1450,8 +1462,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-						EnablePerformanceInsights:       &perfIns,
-						StorageEncrypted:                &encryptStrg,
+						EnablePerformanceInsights:       &trueVal,
+						StorageEncrypted:                &trueVal,
 						StorageType:                     &storageType,
 						Port:                            &params.Port,
 					},
@@ -1520,7 +1532,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := &r.Input.HostParams
-	perfIns := true
+	trueVal := true
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1540,6 +1552,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 					ForProvider: crossplanerds.DBInstanceParameters{
 						Region: region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
+							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 							EngineVersion:     &params.EngineVersion,
 						},
@@ -1551,7 +1564,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						// Items from Config
 						PubliclyAccessible:        &params.PubliclyAccessible,
 						DBClusterIdentifier:       &dbClusterIdentifier,
-						EnablePerformanceInsights: &perfIns,
+						EnablePerformanceInsights: &trueVal,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -1948,23 +1961,11 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
-
-	// TODO:currently ignoring changes to shape and minStorage if a CR already exists.
-	/*
-		params := r.getDynamicHostParams(ctx, fragmentKey, dbClaim)
-
-		// Update Shape and MinGibStorage for now
-		if rdsInstance.Spec.ForProvider.DBInstanceClass != params.Shape {
-			rdsInstance.Spec.ForProvider.DBInstanceClass = params.Shape
-			update = true
-		}
-
-		if *rdsInstance.Spec.ForProvider.AllocatedStorage != params.MinStorageGB {
-			rdsInstance.Spec.ForProvider.AllocatedStorage = &params.MinStorageGB
-			update = true
-		}
-	*/
-
+	if dbClaim.Spec.Type == defaultPostgresStr {
+		params := &r.Input.HostParams
+		ms64 := int64(params.MinStorageGB)
+		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
+	}
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
 	if err != nil {
@@ -1972,7 +1973,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	}
 	// an empty json patch will be {}, we can assert that no update is required if len == 2
 	// we could also just apply the empty patch if additional call to apiserver isn't an issue
-	if len(dbInstancePatchData) == 2 {
+	if len(dbInstancePatchData) <= 2 {
 		return false, nil
 	}
 	r.Log.Info("updating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
@@ -2001,7 +2002,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	}
 	// an empty json patch will be {}, we can assert that no update is required if len == 2
 	// we could also just apply the empty patch if additional call to apiserver isn't an issue
-	if len(dbClusterPatchData) == 2 {
+	if len(dbClusterPatchData) <= 2 {
 		return false, nil
 	}
 	r.Log.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
