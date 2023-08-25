@@ -839,9 +839,10 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	complEnabled := r.isPasswordComplexity()
 
 	// Customize the list of symbols.
-	// Removed \ from the default list as the encoding/decoding was treating it as an escape character
+	// Removed \ ` @ ! from the default list as the encoding/decoding was treating it as an escape character
+	// In some cases downstream application was not able to handle it
 	gen, err := gopassword.NewGenerator(&gopassword.GeneratorInput{
-		Symbols: "~!@#$%^&*()_+`-={}|[]:<>?,./",
+		Symbols: "~#%^&*()_+-={}|[]:<>?,.",
 	})
 	if err != nil {
 		return "", err
