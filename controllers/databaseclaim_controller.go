@@ -79,16 +79,18 @@ const (
 type ModeEnum int
 
 type input struct {
-	FragmentKey           string
-	ManageCloudDB         bool
-	SharedDBHost          bool
-	MasterConnInfo        persistancev1.DatabaseClaimConnectionInfo
-	TempSecret            string
-	DbHostIdentifier      string
-	DbType                string
-	HostParams            hostparams.HostParams
-	EnableReplicationRole bool
-	EnableSuperUser       bool
+	FragmentKey                string
+	ManageCloudDB              bool
+	SharedDBHost               bool
+	MasterConnInfo             persistancev1.DatabaseClaimConnectionInfo
+	TempSecret                 string
+	DbHostIdentifier           string
+	DbType                     string
+	HostParams                 hostparams.HostParams
+	EnableReplicationRole      bool
+	EnableSuperUser            bool
+	EnablePerfInsight          bool
+	EnableCloudwatchLogsExport []*string
 }
 
 const (
@@ -203,11 +205,27 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 
 	r.Input = &input{}
 	var (
-		fragmentKey   string
-		err           error
-		manageCloudDB bool
-		sharedDBHost  bool
+		fragmentKey          string
+		err                  error
+		manageCloudDB        bool
+		sharedDBHost         bool
+		enablePerfInsight    bool
+		cloudwatchLogsExport []*string
 	)
+
+	enablePerfInsight = r.Config.GetBool("enablePerfInsight")
+	enableCloudwatchLogsExport := r.Config.GetString("enableCloudwatchLogsExport")
+	postgresCloudwatchLogsExportLabels := []string{"postgresql", "upgrade"}
+	switch enableCloudwatchLogsExport {
+	case "all":
+		for _, export := range postgresCloudwatchLogsExportLabels {
+			cloudwatchLogsExport = append(cloudwatchLogsExport, &export)
+		}
+	case "none":
+		cloudwatchLogsExport = nil
+	default:
+		cloudwatchLogsExport = append(cloudwatchLogsExport, &enableCloudwatchLogsExport)
+	}
 
 	if dbClaim.Spec.InstanceLabel != "" {
 		fragmentKey, err = r.matchInstanceLabel(dbClaim)
@@ -243,6 +261,8 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	r.Input = &input{ManageCloudDB: manageCloudDB, SharedDBHost: sharedDBHost,
 		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
 		DbType: string(dbClaim.Spec.Type), HostParams: *hostParams,
+		EnablePerfInsight:          enablePerfInsight,
+		EnableCloudwatchLogsExport: cloudwatchLogsExport,
 	}
 	if manageCloudDB {
 		//check if dbclaim.name is > maxNameLen and if so, error out
@@ -1463,7 +1483,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-						EnablePerformanceInsights:       &trueVal,
+						EnablePerformanceInsights:       &r.Input.EnablePerfInsight,
+						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
 						StorageEncrypted:                &trueVal,
 						StorageType:                     &storageType,
 						Port:                            &params.Port,
@@ -1534,7 +1555,6 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 
 	params := &r.Input.HostParams
 	trueVal := true
-
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -1563,9 +1583,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBInstanceClass: &params.Shape,
 						Tags:            DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
-						PubliclyAccessible:        &params.PubliclyAccessible,
-						DBClusterIdentifier:       &dbClusterIdentifier,
-						EnablePerformanceInsights: &trueVal,
+						PubliclyAccessible:          &params.PubliclyAccessible,
+						DBClusterIdentifier:         &dbClusterIdentifier,
+						EnablePerformanceInsights:   &r.Input.EnablePerfInsight,
+						EnableCloudwatchLogsExports: r.Input.EnableCloudwatchLogsExport,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -1967,6 +1988,11 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
 	}
+	enablePerfInsight := r.Input.EnablePerfInsight
+	enableCloudwatchLogsExport := r.Input.EnableCloudwatchLogsExport
+	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
+	dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = enableCloudwatchLogsExport
+
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
 	if err != nil {

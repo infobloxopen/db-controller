@@ -142,3 +142,6 @@ controllerConfig:
     masterUsername: root
   storageType: gp3
   supportSuperUserElevation: true
+  enablePerfInsight: true
+  # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
+  enableCloudwatchLogsExport: "none"
