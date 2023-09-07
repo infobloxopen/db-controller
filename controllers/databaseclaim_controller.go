@@ -91,6 +91,7 @@ type input struct {
 	EnableSuperUser            bool
 	EnablePerfInsight          bool
 	EnableCloudwatchLogsExport []*string
+	BackupRetentionDays        int64
 }
 
 const (
@@ -211,8 +212,10 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		sharedDBHost         bool
 		enablePerfInsight    bool
 		cloudwatchLogsExport []*string
+		backupRetentionDays  int64
 	)
 
+	backupRetentionDays = r.Config.GetInt64("backupRetentionDays")
 	enablePerfInsight = r.Config.GetBool("enablePerfInsight")
 	enableCloudwatchLogsExport := r.Config.GetString("enableCloudwatchLogsExport")
 	postgresCloudwatchLogsExportLabels := []string{"postgresql", "upgrade"}
@@ -263,6 +266,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		DbType: string(dbClaim.Spec.Type), HostParams: *hostParams,
 		EnablePerfInsight:          enablePerfInsight,
 		EnableCloudwatchLogsExport: cloudwatchLogsExport,
+		BackupRetentionDays:        backupRetentionDays,
 	}
 	if manageCloudDB {
 		//check if dbclaim.name is > maxNameLen and if so, error out
@@ -1320,6 +1324,13 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	restoreFromSource := defaultRestoreFromSource
 	encryptStrg := true
 
+	var auroraBackupRetentionPeriod *int64
+	if r.Input.BackupRetentionDays != 0 {
+		auroraBackupRetentionPeriod = &r.Input.BackupRetentionDays
+	} else {
+		auroraBackupRetentionPeriod = nil
+	}
+
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -1335,7 +1346,8 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 				},
 				Spec: crossplanerds.DBClusterSpec{
 					ForProvider: crossplanerds.DBClusterParameters{
-						Region: r.getRegion(),
+						Region:                r.getRegion(),
+						BackupRetentionPeriod: auroraBackupRetentionPeriod,
 						CustomDBClusterParameters: crossplanerds.CustomDBClusterParameters{
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 							VPCSecurityGroupIDRefs: []xpv1.Reference{
@@ -1485,6 +1497,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						EnablePerformanceInsights:       &r.Input.EnablePerfInsight,
 						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
+						BackupRetentionPeriod:           &r.Input.BackupRetentionDays,
 						StorageEncrypted:                &trueVal,
 						StorageType:                     &storageType,
 						Port:                            &params.Port,
@@ -2020,6 +2033,9 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	// Update DBCluster
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+	if r.Input.BackupRetentionDays != 0 {
+		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &r.Input.BackupRetentionDays
+	}
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
