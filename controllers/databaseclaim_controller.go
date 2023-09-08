@@ -1987,11 +1987,10 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		params := &r.Input.HostParams
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
+		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
 	}
 	enablePerfInsight := r.Input.EnablePerfInsight
-	enableCloudwatchLogsExport := r.Input.EnableCloudwatchLogsExport
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
-	dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = enableCloudwatchLogsExport
 
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
