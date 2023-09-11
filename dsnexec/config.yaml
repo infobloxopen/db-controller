@@ -1,53 +1,23 @@
 configs:
   # this is an example config to use the shelldb driver
-  test:
-    sources:
-    - driver: json
-      filename: test/source.json
-    - driver: yaml
-      filename: test/source.yaml
-    - driver: postgres
-      filename: test/source.pg.dsn
-    - driver: postgres
-      filename: test/source.pg.uri
-    destination:
-      driver: shelldb
-      dsn: my shell program
-    commands:
-    - command: /bin/bash
-      args:
-      - "-c"
-      - echo "{{ index . "test/source.json" }}"
 
   # this is an example config to use the fprintf driver
   # it will write json of the sources to a file
   filewrite:
     sources:
-    - driver: json
-      filename: test/source.json
+    - driver: postgres
+      filename: test/source.pg.dsn
     destination:
       driver: fprintf
       # The $tmp variable is a special variable that is the path to a temporary directory
       # The hostname endcodes the rendering driver. fmt.Fprintf is the default driver
       # which can be specificed by 'fprintf' 
-      dsn: file:///$tmp/myfile.json
+      dsn: file:////Users/bjeevan/git/github.com/Infobloxopen/db-controller/dsnexec/myfile.json
     commands:
     - command: "%s" # commands can have text/templates also
                     # this is the format string for the fprintf driver
       args:
       # these are arguments to the fmt.Fprintf function
-      - '{{ index . "test/source.json" | toJson }}'
+      - '{{ index . "test/source.pg.json" }}'
+      # - '{{ . }}'
 
-  # This is an example of executing sql commands in response to a change.
-  sql:
-    disabled: true
-    sources:
-    - driver: json
-      filename: test/source.json
-    destination:
-      driver: hotload
-      dsn: fsnotify://postgres/path/to/myfile.txt
-    commands:
-    - command: ALTER SERVER myserver OPTIONS (SET host=?);
-      args:
-      - '{{ index . "test/source.json" "host" }}'

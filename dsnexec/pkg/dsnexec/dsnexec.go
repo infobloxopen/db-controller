@@ -114,6 +114,7 @@ func (w *Handler) exec() error {
 		}
 		var args []interface{}
 		for j, arg := range v.Args {
+			fmt.Println("i, j arg :", i, j, arg)
 			t, err := template.New(fmt.Sprintf("arg(%d, %d)", i, j)).Funcs(sprig.FuncMap()).Parse(arg)
 			if err != nil {
 				return fmt.Errorf("failed to parse argument template %v: %v", arg, err)
@@ -122,10 +123,12 @@ func (w *Handler) exec() error {
 			if err := t.Execute(bs, argContext); err != nil {
 				return fmt.Errorf("failed to render argument template: %v: %v", arg, err)
 			}
+			fmt.Println("bs.String() :", bs.String())
 			val, err := cast(bs.String())
 			if err != nil {
 				return fmt.Errorf("failt to cast argument: %v: %v", bs.String(), err)
 			}
+			fmt.Println("val :", val)
 			args = append(args, val)
 		}
 		if _, err := db.Exec(cmd, args...); err != nil {

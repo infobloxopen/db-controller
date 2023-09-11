@@ -61,6 +61,9 @@ func (c *conn) ExecContext(ctx context.Context, query string, args []driver.Valu
 
 	log.Debug("executing query")
 
+	fmt.Printf("executing query: %s\n", query)
+	fmt.Printf("args: %v\n", args)
+
 	ctx, abort := context.WithCancel(ctx)
 	defer abort()
 
