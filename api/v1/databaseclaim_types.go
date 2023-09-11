@@ -179,7 +179,7 @@ type DatabaseClaimSpec struct {
 
 	// BackupPolicy specifies the duration at which db backups are taken
 	// +optional
-	// +kubebuilder:validation:Enum=Bronze;Silver;Gold
+	// +kubebuilder:validation:Enum=Bronze;Silver;Gold;Platinum
 	BackupPolicy string `json:"backupPolicy,omitempty"`
 
 	// RestoreFrom indicates the snapshot to restore the Database from
