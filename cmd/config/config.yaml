@@ -22,6 +22,9 @@ defaultSkipFinalSnapshotBeforeDeletion: true
 defaultPubliclyAccessible: false
 defaultDeletionPolicy: Orphan
 defaultBackupPolicyValue: Bronze
+backupRetentionDays: 0
+enablePerfInsight: false
+enableCloudwatchLogsExport: "none"
 
 passwordConfig:
   passwordComplexity: enabled
