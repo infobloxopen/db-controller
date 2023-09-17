@@ -252,6 +252,12 @@ type Status struct {
 
 	// DbState of the DB. inprogress, "", ready
 	DbState DbState `json:"DbState,omitempty"`
+
+	// SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+	// if the dbclaim has already provisioned a database, this field is ignored
+	// This field used when claim is use-existing-db and attempting to migrate to newdb
+	// +optional
+	SourceDataFrom *SourceDataFrom `json:"sourceDataFrom,omitempty"`
 }
 
 // DbState keeps track of state of the DB.
