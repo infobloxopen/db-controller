@@ -1329,6 +1329,66 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 			M_NotSupported,
 		},
 		{
+			"useExistingFalse-WithNoSource-WithStatusUsingExistingDB",
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					SharedDBHost: false,
+				},
+			},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom:    nil,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{DbState: "using-existing-db",
+							SourceDataFrom: &persistancev1.SourceDataFrom{
+								Type: persistancev1.SourceDataType("database"),
+								Database: &persistancev1.Database{DSN: "postgres://r@h:5432/pub?sslmode=require",
+									SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+								},
+							},
+						},
+					},
+				},
+			},
+			M_MigrateExistingToNewDB,
+		},
+		{
+			"useExistingFalse-WithNoSource-WithStatusUsingExistingDB-noSourceDataFromInStatus",
+			fields{
+				Log: zap.New(zap.UseFlagOptions(&opts)),
+				Input: &input{
+					SharedDBHost: false,
+				},
+			},
+
+			args{
+				dbClaim: &persistancev1.DatabaseClaim{
+					ObjectMeta: v1.ObjectMeta{Name: "identity-dbclaim-name",
+						Namespace: "unitest"},
+
+					Spec: persistancev1.DatabaseClaimSpec{
+						UseExistingSource: &flse,
+						SourceDataFrom:    nil,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{DbState: "using-existing-db",
+							SourceDataFrom: nil,
+						},
+					},
+				},
+			},
+			M_NotSupported,
+		},
+
+		{
 			"useExisting_DatabaseType",
 			fields{
 				Log: zap.New(zap.UseFlagOptions(&opts)),
@@ -1614,7 +1674,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
-					SharedDBHost: false,
+					SharedDBHost: true,
 				},
 			},
 
@@ -1628,7 +1688,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					},
 					Status: persistancev1.DatabaseClaimStatus{
 						ActiveDB: persistancev1.Status{
-							DbState:      persistancev1.UsingExistingDB,
+							DbState:      persistancev1.Ready,
 							Type:         "aurora-postgres",
 							DBVersion:    "13.11",
 							Shape:        "db.t4g.medium",

@@ -165,7 +165,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	if dbClaim.Spec.SourceDataFrom != nil {
 		if dbClaim.Spec.SourceDataFrom.Type == "database" {
 			if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingExistingDB {
-				if dbClaim.Status.MigrationState == "" {
+				if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
 					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
 					return M_MigrateExistingToNewDB
 				} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
@@ -177,7 +177,28 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 			return M_NotSupported
 		}
 	}
+	// use existing is false // source data is not present
+	if dbClaim.Spec.SourceDataFrom == nil {
+		if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingExistingDB {
+			//make sure status contains all the requires sourceDataFrom info
+			if dbClaim.Status.ActiveDB.SourceDataFrom != nil {
+				dbClaim.Spec.SourceDataFrom = dbClaim.Status.ActiveDB.SourceDataFrom.DeepCopy()
+				if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
+					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
+					return M_MigrateExistingToNewDB
+				} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
+					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
+					return M_MigrationInProgress
+				}
+			} else {
+				logr.Info("something is wrong. use existing is false // source data is not present. sourceDataFrom is not present in status")
+				return M_NotSupported
+			}
+		}
+	}
+
 	// use existing is false; source data is not present ; active status is using-existing-db or ready
+	// activeDB does not have sourceDataFrom info
 	if dbClaim.Status.ActiveDB.DbState == persistancev1.Ready {
 		activeHostParams := hostparams.GetActiveHostParams(dbClaim)
 		if r.Input.HostParams.IsUpgradeRequested(activeHostParams) {
@@ -185,7 +206,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 				dbClaim.Status.NewDB.DbState = persistancev1.InProgress
 				dbClaim.Status.MigrationState = ""
 			}
-			if dbClaim.Status.MigrationState == "" {
+			if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
 				logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_InitiateDBUpgrade")
 				return M_InitiateDBUpgrade
 			} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
@@ -295,8 +316,13 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	var dbClaim persistancev1.DatabaseClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
-		logr.Error(err, "unable to fetch DatabaseClaim")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if client.IgnoreNotFound(err) != nil {
+			logr.Error(err, "unable to fetch DatabaseClaim")
+			return ctrl.Result{}, err
+		} else {
+			logr.Info("DatabaseClaim not found. Ignoring since object might have been deleted")
+			return ctrl.Result{}, nil
+		}
 	}
 
 	logr.Info("object information", "uid", dbClaim.ObjectMeta.UID)
@@ -305,6 +331,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
 		return ctrl.Result{}, nil
 	}
+
 	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
 		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
 	}
@@ -315,7 +342,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.setReqInfo(&dbClaim); err != nil {
 		return r.manageError(ctx, &dbClaim, err)
 	}
-
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
@@ -349,7 +375,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// Stop reconciliation as the item is being deleted
 		return ctrl.Result{}, nil
 	}
-
 	// The object is not being deleted, so if it does not have our finalizer,
 	// then lets add the finalizer and update the object. This is equivalent
 	// registering our finalizer.
@@ -364,7 +389,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
 		return ctrl.Result{}, err
 	}
-
 	return r.updateStatus(ctx, &dbClaim)
 }
 
@@ -382,9 +406,14 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 
 func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
+		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
+	if dbClaim.Status.NewDB.ConnectionInfo == nil {
+		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
 
 	r.Mode = r.getMode(dbClaim)
-
 	if r.Mode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
 		err := r.reconcileUseExistingDB(ctx, dbClaim)
@@ -392,6 +421,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			return r.manageError(ctx, dbClaim, err)
 		}
 		dbClaim.Status.ActiveDB.DbState = persistancev1.UsingExistingDB
+		dbClaim.Status.ActiveDB.SourceDataFrom = dbClaim.Spec.SourceDataFrom.DeepCopy()
 		logr.Info("existing db reconcile complete")
 		return r.manageSuccess(ctx, dbClaim)
 	}
@@ -482,10 +512,9 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	if err != nil {
 		return err
 	}
-	if err := r.Status().Update(ctx, dbClaim); err != nil {
-		logr.Error(err, "could not update db claim")
+	if err = r.updateClientStatus(ctx, dbClaim); err != nil {
 		return err
-	} // create connection info secret
+	}
 	if r.Input.TempSecret != "" {
 		logr.Info("password reset. updating secret")
 		activeDBConnInfo := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
@@ -564,6 +593,13 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 
+	if dbClaim.Status.MigrationState == "" {
+		dbClaim.Status.MigrationState = pgctl.S_Initial.String()
+		if err := r.updateClientStatus(ctx, dbClaim); err != nil {
+			r.Log.Error(err, "could not update db claim")
+			return r.manageError(ctx, dbClaim, err)
+		}
+	}
 	result, err := r.reconcileNewDB(ctx, dbClaim)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
@@ -681,28 +717,27 @@ loop:
 			logr.Info("wait called")
 			s = next
 			dbClaim.Status.MigrationState = s.String()
-			if err := r.Status().Update(ctx, dbClaim); err != nil {
-				logr.Error(err, "could not update db claim status")
+			if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim")
 				return r.manageError(ctx, dbClaim, err)
 			}
 			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
 
 		case pgctl.S_RerouteTargetSecret:
-			if err := r.rerouteTargetSecret(ctx, sourceAppDsn, targetAppConn, dbClaim); err != nil {
+			if err = r.rerouteTargetSecret(ctx, sourceAppDsn, targetAppConn, dbClaim); err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
 			s = next
 			dbClaim.Status.MigrationState = s.String()
-			if err := r.Status().Update(ctx, dbClaim); err != nil {
-				logr.Error(err, "could not update db claim status")
+			if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim")
 				return r.manageError(ctx, dbClaim, err)
 			}
-
 		default:
 			s = next
 			dbClaim.Status.MigrationState = s.String()
-			if err := r.Status().Update(ctx, dbClaim); err != nil {
-				logr.Error(err, "could not update db claim status")
+			if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+				logr.Error(err, "could not update db claim")
 				return r.manageError(ctx, dbClaim, err)
 			}
 		}
@@ -714,7 +749,7 @@ loop:
 	dbClaim.Status.ActiveDB.DbState = persistancev1.Ready
 	dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 
-	if err := r.Status().Update(ctx, dbClaim); err != nil {
+	if err = r.updateClientStatus(ctx, dbClaim); err != nil {
 		logr.Error(err, "could not update db claim")
 		return r.manageError(ctx, dbClaim, err)
 	}
@@ -734,6 +769,14 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, lo
 	secretKey := "password"
 	gs := &corev1.Secret{}
 
+	if connInfo == nil {
+		return nil, fmt.Errorf("invalid connection info")
+	}
+
+	if connInfo.Host == "" {
+		return nil, fmt.Errorf("invalid host name")
+	}
+
 	if connInfo.Port == "" {
 		return nil, fmt.Errorf("cannot get master port")
 	}
@@ -750,7 +793,7 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, lo
 
 	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
 	if ns == "" {
-		ns = "default"
+		ns = dbClaim.Namespace
 	}
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: ns,
@@ -2239,6 +2282,19 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 	}
 }
 
+func (r *DatabaseClaimReconciler) updateClientStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
+
+	err := r.Client.Status().Update(ctx, dbClaim)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func GetDBName(dbClaim *persistancev1.DatabaseClaim) string {
 	if dbClaim.Spec.DBNameOverride != "" {
 		return dbClaim.Spec.DBNameOverride
@@ -2291,7 +2347,7 @@ func (r *DatabaseClaimReconciler) getSrcAdminPasswdFromSecret(ctx context.Contex
 
 	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
 	if ns == "" {
-		ns = "default"
+		ns = dbClaim.Namespace
 	}
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: ns,
