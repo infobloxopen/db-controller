@@ -2040,10 +2040,12 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
 	if dbClaim.Spec.Type == defaultPostgresStr {
+		multiAZ := r.getMultiAZEnabled()
 		params := &r.Input.HostParams
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
 	enablePerfInsight := r.Input.EnablePerfInsight
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
