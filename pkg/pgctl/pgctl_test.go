@@ -113,6 +113,10 @@ func realTestMain(m *testing.M) int {
 		fmt.Println(err)
 		return 1
 	}
+	if err = loadTargetTestData(TargetDBAdminDsn); err != nil {
+		fmt.Println(err)
+		return 1
+	}
 
 	rc := m.Run()
 
@@ -235,7 +239,15 @@ func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.R
 }
 
 func loadSourceTestData(dsn string) error {
-	_, err := Exec("psql", dsn, "-f", "./test/pgctl_test.sql", "-v", "end=50")
+	_, err := Exec("psql", dsn, "-f", "./test/pgctl_source_test_data.sql", "-v", "end=50")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadTargetTestData(dsn string) error {
+	_, err := Exec("psql", dsn, "-f", "./test/pgctl_target_test_data.sql")
 	if err != nil {
 		return err
 	}

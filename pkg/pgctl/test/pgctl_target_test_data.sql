@@ -1,0 +1,6 @@
+\set ON_ERROR_STOP on
+-- DROP DATABASE IF EXISTS pub;
+-- CREATE DATABASE pub;
+-- \c pub
+CREATE ROLE rds_superuser WITH SUPERUSER;
+

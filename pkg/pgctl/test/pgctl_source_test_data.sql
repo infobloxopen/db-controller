@@ -43,6 +43,8 @@ set     rds.logical_replication static parameter to 1
 -- DROP DATABASE IF EXISTS pub;
 -- CREATE DATABASE pub;
 -- \c pub
+CREATE ROLE rds_superuser WITH SUPERUSER;
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE EXTENSION IF NOT EXISTS "hstore";
@@ -302,6 +304,7 @@ CREATE OPERATOR CLASS soa_serial_number_ops DEFAULT FOR TYPE soa_serial_number
 select * from pg_stat_replication;
 
 SELECT * FROM pg_publication;
+drop publication mypub;
 
 select * from pg_create_logical_replication_slot('test_slot', 'test_decoding')
 select * from pg_replication_slots
