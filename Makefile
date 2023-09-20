@@ -3,6 +3,7 @@ REGISTRY ?= ghcr.io/infobloxopen
 # image name
 IMAGE_NAME ?= db-controller
 DBPROXY_IMAGE_NAME ?= dbproxy
+DSNEXEC_IMAGE_NAME ?= dsnexec
 # commit tag info from git repo
 GIT_COMMIT	   := $(shell git describe --always || echo pre-commit)
 # image tag
@@ -10,6 +11,7 @@ TAG ?= ${GIT_COMMIT}
 # Image Path to use all building/pushing image targets
 IMG_PATH ?= ${REGISTRY}/${IMAGE_NAME}
 DBPROXY_IMG_PATH ?= ${REGISTRY}/${DBPROXY_IMAGE_NAME}
+DSNEXEC_IMG_PATH ?= ${REGISTRY}/${DSNEXEC_IMAGE_NAME}
 GOBIN := ~/go/bin
 K8S_VERSION := 1.24
 # ACK_GINKGO_DEPRECATIONS := 1.16.5
@@ -143,6 +145,8 @@ test: manifests generate fmt vet envtest ## Run tests.
 build: generate fmt vet ## Build manager binary.
 	cd cmd/manager && go build -o ../../bin/manager main.go
 	cd dbproxy && go build -o ../bin/dbproxy
+	cd dsnexec && go build -o ../bin/dsnexec
+
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -160,6 +164,10 @@ docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-a
 docker-build-dbproxy:
 	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} .
 
+docker-build-dsnexec:
+	cd dsnexec && docker build -t ${DSNEXEC_IMG_PATH}:${TAG} .
+
+
 .PHONY: docker-build
 docker-build: .image-${TAG} #test ## Build docker image with the manager.
 
@@ -170,6 +178,9 @@ docker-build: .image-${TAG} #test ## Build docker image with the manager.
 
 docker-push-dbproxy: docker-build-dbproxy
 	docker push ${DBPROXY_IMG_PATH}:${TAG}
+
+docker-push-dsnexec: docker-build-dsnexec
+	docker push ${DSNEXEC_IMG_PATH}:${TAG}
 
 .push-${TAG}: docker-build
 	docker push ${IMG_PATH}:${TAG}
