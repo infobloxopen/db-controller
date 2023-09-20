@@ -1,4 +1,4 @@
-{{- if .Values.dbproxy.enabled }}
+{{- if or ( .Values.dbproxy.enabled ) ( .Values.dsnexec.enabled ) }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
