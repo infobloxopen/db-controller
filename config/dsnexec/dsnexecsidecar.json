@@ -1,0 +1,35 @@
+{
+  "containers": [
+    {
+      "imagePullPolicy": "IfNotPresent",
+      "args": ["run","-c","/var/run/dsn-exec/config.yaml"],
+      "name": "dsn-exec",
+      "volumeMounts": [
+        {
+          "mountPath": "/var/run/db-dsn",
+          "name": "remote-db-dsn-volume"
+        },
+        {
+          "mountPath": "/var/run/dsn-exec",
+          "name": "dsnexec-config-volume"
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "remote-db-dsn-volume",
+      "secret": {
+        "optional": false,
+        "secretName": "..."
+      }
+    },
+    {
+      "name": "dsnexec-config-volume",
+      "secret": {
+        "optional": false,
+        "secretName": "..."
+      }
+    }
+  ]
+}

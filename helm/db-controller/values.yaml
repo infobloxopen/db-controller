@@ -106,6 +106,12 @@ dbproxy:
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
 
+dsnexec:
+  enabled: true
+  image:
+    repository: ""
+    tag: ""
+
 zapLogger:
   develMode: false
   level: info

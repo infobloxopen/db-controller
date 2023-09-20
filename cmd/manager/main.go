@@ -82,10 +82,12 @@ func main() {
 	var metricsPort int
 	var enableLeaderElection bool
 	var configFile string
-	var sidecarConfigPath string
+	var dBProxySidecarConfigPath string
+	var dsnExecSidecarConfigPath string
 	var probeAddr string
 	var probePort int
 	var enableDBProxyWebhook bool
+	var enableDsnExecWebhook bool
 	var dbIdentifierPrefix string
 	var class string
 	var metricsDepYamlPath string
@@ -101,13 +103,18 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml", "Database connection string to with root credentials.")
-	flag.StringVar(&sidecarConfigPath, "sidecar-config-path", "/etc/config/sidecar.yaml", "Mutating webhook sidecar configuration.")
+	flag.StringVar(&dBProxySidecarConfigPath, "db-proxy-sidecar-config-path", "/etc/config/sidecar.yaml", "Mutating webhook sidecar configuration.")
+	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/sidecar.yaml", "Mutating webhook sidecar configuration.")
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
 	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
 		"Enable DB Proxy webhook. "+
 			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
 			"with the infoblox.com/db-secret-path annotation set.")
+	flag.BoolVar(&enableDsnExecWebhook, "enable-dsnexec", false,
+		"Enable Dsnexec webhook. "+
+			"Enabling this option will cause the db-controller to inject dsnexec container into pods "+
+			"with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
 	opts := zap.Options{
 		Development: false,
 		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
@@ -166,26 +173,47 @@ func main() {
 		os.Exit(1)
 	}
 
+	webHookServer := mgr.GetWebhookServer()
+
+	webHookServer.Port = 7443
+	webHookServer.CertDir = "./certs/"
+
 	if enableDBProxyWebhook {
-		webHookServer := mgr.GetWebhookServer()
 
-		webHookServer.Port = 7443
-		webHookServer.CertDir = "./certs/"
+		cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)
 
-		cfg, err := dbwebhook.ParseConfig(sidecarConfigPath)
 		if err != nil {
 			setupLog.Error(err, "could not parse db proxy sidecar configuration")
 			os.Exit(1)
 		}
+		setupLog.Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
 
-		setupLog.Info("Parsed db proxy config:", "dbproxysidecarconfig", cfg)
-
-		setupLog.Info("registering with webhook server")
+		setupLog.Info("registering with webhook server for DbProxy")
 		webHookServer.Register("/mutate", &webhook.Admission{
 			Handler: &dbwebhook.DBProxyInjector{
 				Name:                 "DB Proxy",
 				Client:               mgr.GetClient(),
 				DBProxySidecarConfig: cfg,
+			},
+		})
+	}
+
+	if enableDsnExecWebhook {
+
+		cfg, err := dbwebhook.ParseConfig(dsnExecSidecarConfigPath)
+
+		if err != nil {
+			setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
+			os.Exit(1)
+		}
+		setupLog.Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
+
+		setupLog.Info("registering with webhook server for DsnExec")
+		webHookServer.Register("/mutate-dsnexec", &webhook.Admission{
+			Handler: &dbwebhook.DsnExecInjector{
+				Name:                 "Dsnexec",
+				Client:               mgr.GetClient(),
+				DsnExecSidecarConfig: cfg,
 			},
 		})
 	}
