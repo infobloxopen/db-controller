@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -115,12 +116,21 @@ func main() {
 				if !ok {
 					return
 				}
+
+				if !event.Op.Has(fsnotify.Create) {
+					continue
+				}
+
+				if event.Name != filepath.Base(dbCredentialPath) {
+					continue
+				}
+
 				log.Printf("%s %s\n", event.Name, event.Op)
-				err := watcher.Remove(dbCredentialPath)
+				err := watcher.Remove(filepath.Dir(dbCredentialPath))
 				if err != nil {
 					log.Fatal("Remove failed:", err)
 				}
-				err = watcher.Add(dbCredentialPath)
+				err = watcher.Add(filepath.Dir(dbCredentialPath))
 				if err != nil {
 					log.Fatal("Add failed:", err)
 				}
@@ -137,7 +147,7 @@ func main() {
 
 	}()
 
-	err = watcher.Add(dbCredentialPath)
+	err = watcher.Add(filepath.Dir(dbCredentialPath))
 	if err != nil {
 		log.Fatal("Add failed:", err)
 	}
