@@ -34,7 +34,7 @@ webhooks:
 - clientConfig:
     caBundle: Cg==
     service:
-      name: {{ include "db-controller.fullname" . }}
+      name: {{ include "db-controller.fullname" . }}-dsnexec
       path: /mutate-dsnexec
       port: 7443
       namespace: {{ .Release.Namespace }}
