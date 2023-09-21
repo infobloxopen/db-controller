@@ -32,6 +32,7 @@ jobs:
         echo 'db-controller-namespace' > .id
         make docker-build
         make docker-build-dbproxy
+        make docker-build-dsnexec
 
     - name: Push to GHCR
       env:
@@ -39,6 +40,7 @@ jobs:
       run: |
         make docker-push
         make docker-push-dbproxy
+        make docker-push-dsnexec
     - uses: act10ns/slack@v1
       with:
         status: ${{ job.status }}
