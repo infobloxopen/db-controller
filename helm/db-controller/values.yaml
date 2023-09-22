@@ -109,7 +109,7 @@ dbproxy:
 dsnexec:
   enabled: true
   image:
-    repository: ""
+    repository: "ghcr.io/infobloxopen/dsnexec"
     tag: ""
 
 zapLogger:

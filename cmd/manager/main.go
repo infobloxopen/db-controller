@@ -173,49 +173,48 @@ func main() {
 		os.Exit(1)
 	}
 
-	webHookServer := mgr.GetWebhookServer()
+	if enableDBProxyWebhook || enableDsnExecWebhook {
+		webHookServer := mgr.GetWebhookServer()
+		webHookServer.Port = 7443
+		webHookServer.CertDir = "./certs/"
+		if enableDBProxyWebhook {
 
-	webHookServer.Port = 7443
-	webHookServer.CertDir = "./certs/"
+			cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)
 
-	if enableDBProxyWebhook {
+			if err != nil {
+				setupLog.Error(err, "could not parse db proxy sidecar configuration")
+				os.Exit(1)
+			}
+			setupLog.Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
 
-		cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)
-
-		if err != nil {
-			setupLog.Error(err, "could not parse db proxy sidecar configuration")
-			os.Exit(1)
+			setupLog.Info("registering with webhook server for DbProxy")
+			webHookServer.Register("/mutate", &webhook.Admission{
+				Handler: &dbwebhook.DBProxyInjector{
+					Name:                 "DB Proxy",
+					Client:               mgr.GetClient(),
+					DBProxySidecarConfig: cfg,
+				},
+			})
 		}
-		setupLog.Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
+		if enableDsnExecWebhook {
 
-		setupLog.Info("registering with webhook server for DbProxy")
-		webHookServer.Register("/mutate", &webhook.Admission{
-			Handler: &dbwebhook.DBProxyInjector{
-				Name:                 "DB Proxy",
-				Client:               mgr.GetClient(),
-				DBProxySidecarConfig: cfg,
-			},
-		})
-	}
+			cfg, err := dbwebhook.ParseConfig(dsnExecSidecarConfigPath)
 
-	if enableDsnExecWebhook {
+			if err != nil {
+				setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
+				os.Exit(1)
+			}
+			setupLog.Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
 
-		cfg, err := dbwebhook.ParseConfig(dsnExecSidecarConfigPath)
-
-		if err != nil {
-			setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
-			os.Exit(1)
+			setupLog.Info("registering with webhook server for DsnExec")
+			webHookServer.Register("/mutate-dsnexec", &webhook.Admission{
+				Handler: &dbwebhook.DsnExecInjector{
+					Name:                 "Dsnexec",
+					Client:               mgr.GetClient(),
+					DsnExecSidecarConfig: cfg,
+				},
+			})
 		}
-		setupLog.Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
-
-		setupLog.Info("registering with webhook server for DsnExec")
-		webHookServer.Register("/mutate-dsnexec", &webhook.Admission{
-			Handler: &dbwebhook.DsnExecInjector{
-				Name:                 "Dsnexec",
-				Client:               mgr.GetClient(),
-				DsnExecSidecarConfig: cfg,
-			},
-		})
 	}
 
 	setupLog.Info("starting manager")
