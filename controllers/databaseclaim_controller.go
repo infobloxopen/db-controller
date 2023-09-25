@@ -68,7 +68,7 @@ const (
 	defaultPostgresStr       = "postgres"
 	defaultAuroraPostgresStr = "aurora-postgresql"
 	defaultRestoreFromSource = "Snapshot"
-	defaultBackupPolicyKey   = "backup"
+	defaultBackupPolicyKey   = "Backup"
 	tempTargetPassword       = "targetPassword"
 	tempSourceDsn            = "sourceDsn"
 	masterSecretSuffix       = "-master"
