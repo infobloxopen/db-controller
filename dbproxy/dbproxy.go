@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -10,7 +11,24 @@ import (
 	"github.com/infobloxopen/db-controller/dbproxy/pgbouncer"
 )
 
-func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath string, port int, pbCredentialPath string) {
+type cachedCredentials struct {
+	currUser string
+	currPass string
+}
+
+func (cached *cachedCredentials) verifyIfNewCreds(newUser, newPass string) bool {
+	if cached.currPass != newPass || cached.currUser != newUser {
+		return true
+	}
+	return false
+}
+
+func (cached *cachedCredentials) setNewCreds(newUser, newPass string) {
+	cached.currUser = newUser
+	cached.currPass = newPass
+}
+
+func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath string, port int, pbCredentialPath string) (string, string) {
 	dbc, err := pgbouncer.ParseDBCredentials(dbCredentialPath, dbPasswordPath)
 	if err != nil {
 		log.Println(err)
@@ -25,6 +43,7 @@ func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath string, por
 		log.Println(err)
 		panic(err)
 	}
+	return *dbc.User, *dbc.Password
 }
 
 func startPGBouncer() {
@@ -90,13 +109,16 @@ func main() {
 		log.Fatal("Invalid port number")
 	}
 
+	cachedCreds := cachedCredentials{}
+
 	waitForDbCredentialFile(dbCredentialPath)
 
 	waitForDbCredentialFile(dbPasswordPath)
 
 	// First time pgbouncer config generation and start
-	generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, port, pbCredentialPath)
+	user, pass := generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, port, pbCredentialPath)
 	startPGBouncer()
+	cachedCreds.setNewCreds(user, pass)
 
 	// Watch for ongoing changes and regenerate pgbouncer config
 	watcher, err := fsnotify.NewWatcher()
@@ -118,15 +140,24 @@ func main() {
 				log.Printf("%s %s\n", event.Name, event.Op)
 				err := watcher.Remove(dbCredentialPath)
 				if err != nil {
-					log.Fatal("Remove failed:", err)
+					if !errors.Is(err, fsnotify.ErrNonExistentWatch) {
+						log.Fatal("Remove failed:", err)
+					}
 				}
+
+				waitForDbCredentialFile(dbCredentialPath)
+				waitForDbCredentialFile(dbPasswordPath)
+
 				err = watcher.Add(dbCredentialPath)
 				if err != nil {
 					log.Fatal("Add failed:", err)
 				}
 				// Regenerate pgbouncer configuration and signal pgbouncer to reload cconfiguration
-				generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, port, pbCredentialPath)
-				reloadPGBouncerConfiguration()
+				newUser, newPass := generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, port, pbCredentialPath)
+				if cachedCreds.verifyIfNewCreds(newUser, newPass) {
+					reloadPGBouncerConfiguration()
+					cachedCreds.setNewCreds(newUser, newPass)
+				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
