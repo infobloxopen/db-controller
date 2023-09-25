@@ -460,7 +460,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
-		if result.Requeue {
+		if result.RequeueAfter > 0 {
 			logr.Info("requeuing request")
 			return result, nil
 		}
@@ -540,13 +540,13 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		}
 		if !isReady {
 			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
 		logr.Info("cloud instance ready. reading generated master secret")
 		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier, dbClaim)
 		if err != nil {
 			logr.Info("unable to read the complete secret. requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
 		r.Input.MasterConnInfo.Host = connInfo.Host
 		r.Input.MasterConnInfo.Password = connInfo.Password
@@ -604,7 +604,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
 	}
-	if result.Requeue {
+	if result.RequeueAfter > 0 {
 		return result, nil
 	}
 	//store a temp secret to beused by migration process
@@ -628,7 +628,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier, dbClaim)
 	if err != nil {
 		logr.Info("unable to read the complete secret. requeueing")
-		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime(), Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 	}
 	r.Input.MasterConnInfo.Host = connInfo.Host
 	r.Input.MasterConnInfo.Password = connInfo.Password
@@ -711,7 +711,7 @@ loop:
 
 		case pgctl.S_Retry:
 			logr.Info("retry called")
-			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 
 		case pgctl.S_WaitToDisableSource:
 			logr.Info("wait called")
@@ -721,7 +721,7 @@ loop:
 				logr.Error(err, "could not update db claim")
 				return r.manageError(ctx, dbClaim, err)
 			}
-			return ctrl.Result{RequeueAfter: 60 * time.Second, Requeue: true}, nil
+			return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 
 		case pgctl.S_RerouteTargetSecret:
 			if err = r.rerouteTargetSecret(ctx, sourceAppDsn, targetAppConn, dbClaim); err != nil {
