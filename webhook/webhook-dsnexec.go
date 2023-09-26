@@ -26,12 +26,16 @@ var (
 	sidecarImageForDsnExec = os.Getenv("DSNEXEC_IMAGE")
 )
 
-func dsnExecSideCardInjectionRequired(pod *corev1.Pod) (bool, string, string) {
+func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 	remoteDbSecretName, ok := pod.Annotations["infoblox.com/remote-db-dsn-secret"]
-	dsnExecConfigSecret, ok2 := pod.Annotations["infoblox.com/dsnexec-config-secret"]
+	if !ok {
+		dsnexecLog.Info("remote-db-dsn-secret can not be seen in the annotations.", pod.Name)
+		return false, "", ""
+	}
 
-	if !ok || !ok2 {
-		dsnexecLog.Info("either or both remote-db-dsn-secret, dsnexec-config-secret can not be seen in the annotations.", pod.Name)
+	dsnExecConfigSecret, ok := pod.Annotations["infoblox.com/dsnexec-config-secret"]
+	if !ok {
+		dsnexecLog.Info("dsnexec-config-secret can not be seen in the annotations.", pod.Name)
 		return false, "", ""
 	}
 
@@ -61,7 +65,7 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 		pod.Annotations = map[string]string{}
 	}
 
-	shoudInjectDsnExec, remoteDbSecretName, dsnExecConfigSecret := dsnExecSideCardInjectionRequired(pod)
+	shoudInjectDsnExec, remoteDbSecretName, dsnExecConfigSecret := dsnExecSideCarInjectionRequired(pod)
 
 	if shoudInjectDsnExec {
 		dsnexecLog.Info("Injecting sidecar...")
