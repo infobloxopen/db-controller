@@ -42,11 +42,11 @@ func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 	alreadyInjected, err := strconv.ParseBool(pod.Annotations["infoblox.com/dsnexec-injected"])
 
 	if err == nil && alreadyInjected {
-		dsnexecLog.Info("DsnExec sidecar already injected: ", pod.Name, remoteDbSecretName, pod.Name, dsnExecConfigSecret)
+		dsnexecLog.Info("DsnExec sidecar already injected: ", pod.Name, pod.Annotations)
 		return false, remoteDbSecretName, dsnExecConfigSecret
 	}
 
-	dsnexecLog.Info("DsnExec sidecar Injection required: ", pod.Name, remoteDbSecretName, pod.Name, dsnExecConfigSecret)
+	dsnexecLog.Info("DsnExec sidecar Injection required: ", pod.Name, pod.Annotations)
 
 	return true, remoteDbSecretName, dsnExecConfigSecret
 }
