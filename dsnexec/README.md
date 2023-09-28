@@ -35,4 +35,7 @@ Commands:
 
     args:       An array of arguments to the SQL command. The args are parsed with
                 the golang text/template package with the sources map as the
-                template context.
+                template context. 
+                (Note - If you intent to fire DDL queries, then put full go template expressions in the command. 
+                As unlike for DML queries, underlying prepare statement does not consider arguments passed when the query is DDL.)
+

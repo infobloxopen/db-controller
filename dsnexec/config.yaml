@@ -48,6 +48,12 @@ configs:
       driver: hotload
       dsn: fsnotify://postgres/path/to/myfile.txt
     commands:
-    - command: ALTER SERVER myserver OPTIONS (SET host=?);
+    - command: INSERT INTO table1 values ($1, $2);
       args:
       - '{{ index . "test/source.json" "host" }}'
+      - '{{ index . "test/source.json" "port" }}'
+
+    # As the below query is DDL, unlike insert (DML) written above, we can not pass arguments here. 
+    # We need to put full go template expressions in the command itself
+    - command: ALTER SERVER myserver OPTIONS (SET host '{{ index . "test/source.json" "host" }}' );
+      args: []
