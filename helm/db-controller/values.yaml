@@ -115,6 +115,9 @@ dsnexec:
 zapLogger:
   develMode: false
   level: info
+  # The level of verbosity required for logging. Possible values are 0 and 1. Default is 0 and to enable debug level logs
+  # set it to 1. Refer: https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+  verbosity: 0
 
 controllerConfig:
   authSource: secret
