@@ -260,13 +260,23 @@ func (s *create_publication_state) String() string {
 	return S_CreatePublication.String()
 }
 
+// The following var is used only by copy_schema_state. This is provided so that it can be overridden during unit test.
+var grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+	_, err := DBAdmin.Exec(fmt.Sprintf("GRANT rds_superuser TO %s;", pq.QuoteIdentifier(getParentRole(role))))
+	return err
+}
+var revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+	_, err := DBAdmin.Exec(fmt.Sprintf("REVOKE rds_superuser FROM %s;", pq.QuoteIdentifier(getParentRole(role))))
+	return err
+}
+
 func (s *copy_schema_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
 	log.Info("started")
 
 	//grant rds_superuser to target db user temporarily
 	//this is required to copy schema from source to target and take ownership of the objects
-	log.Info("grant temp superuser to ", "user", s.config.SourceDBAdminDsn)
+	log.Info("grant temp superuser to ", "user", s.config.TargetDBUserDsn)
 
 	var (
 		err           error
@@ -285,16 +295,11 @@ func (s *copy_schema_state) Execute() (State, error) {
 		return nil, err
 	}
 	rolename := url.User.Username()
-	//check if rolename ends with "_a" or "_b" and remove the last 2 characters
-	if len(rolename) > 2 {
-		if string(rolename[len(rolename)-2]) == "_" {
-			rolename = rolename[:len(rolename)-2]
-		}
-	}
+	log.Info("granting super user acesss role to \"" + rolename + "\"")
 
-	_, err = targetDBAdmin.Exec(fmt.Sprintf("GRANT rds_superuser TO %s;", pq.QuoteIdentifier(rolename)))
+	err = grantSuperUserAccess(targetDBAdmin, rolename)
 	if err != nil {
-		log.Error(err, "could not grant super user acesss role to"+rolename)
+		log.Error(err, "could not grant super user acesss role to \""+rolename+"\"")
 		metrics.UsersUpdatedErrors.WithLabelValues("grant error").Inc()
 		return nil, err
 	}
@@ -313,7 +318,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 	})
 
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
-	log.Info("executing", "full command", dumpExec.FullCommand)
+	log.Info("executed dump with", "full command", dumpExec.FullCommand)
 
 	if dumpExec.Error != nil {
 		return nil, dumpExec.Error.Err
@@ -324,12 +329,12 @@ func (s *copy_schema_state) Execute() (State, error) {
 	restore.Path = s.config.ExportFilePath
 	restoreExec := restore.Exec(dumpExec.FileName, ExecOptions{StreamPrint: true})
 
-	log.Info("restore", "full command", restoreExec.FullCommand)
+	log.Info("restored with", "full command", restoreExec.FullCommand)
 
 	if restoreExec.Error != nil {
 		return nil, restoreExec.Error.Err
 	}
-	_, err = targetDBAdmin.Exec(fmt.Sprintf("REVOKE rds_superuser FROM %s;", pq.QuoteIdentifier(rolename)))
+	err = revokeSuperUserAccess(targetDBAdmin, rolename)
 	if err != nil {
 		log.Error(err, "could not revoke super user acesss role from"+rolename)
 		metrics.UsersUpdatedErrors.WithLabelValues("revoke error").Inc()
@@ -656,12 +661,7 @@ func (s *disable_source_access_state) Execute() (State, error) {
 	//if rolename name is sample_user_a, the role inherited is sample_user
 	//remove "_x" to get role name
 	//the role has all the permission - which needs to be removed now
-	rolename := u.User.Username()
-	if len(rolename) > 2 {
-		if string(rolename[len(rolename)-2]) == "_" {
-			rolename = rolename[:len(rolename)-2]
-		}
-	}
+	rolename := getParentRole(u.User.Username())
 	stmt := `
 		REVOKE insert, delete, update
 		ON ALL TABLES IN SCHEMA PUBLIC FROM %s;`
@@ -744,7 +744,8 @@ func (s *validate_migration_status_state) Execute() (State, error) {
 
 		if targetTableCount < sourceTableCount {
 			deuce = false
-			log.Error(fmt.Errorf("warning: table count not matching. intervention required if this message repeates idenfinetly"),
+			log.Error(fmt.Errorf("warning: table count not matching"),
+				"intervention required if this message repeates idenfinetly",
 				"tableName", sourceTableName,
 				"sourceTableCount", sourceTableCount,
 				"targetTableCount", targetTableCount,

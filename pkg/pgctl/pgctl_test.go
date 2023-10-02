@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/lib/pq"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -94,7 +95,7 @@ func realTestMain(m *testing.M) int {
 		return 1
 	}
 
-	TargetDBUserDsn = TargetDBAdminDsn
+	TargetDBUserDsn = fmt.Sprintf("postgres://appuser_b:secret@localhost:%s/sub?sslmode=disable", targetPort)
 
 	SourceDBAdminDsn, sourceResource, err = setUpSourceDatabase(pool)
 	defer pool.Purge(sourceResource)
@@ -140,8 +141,8 @@ func realTestMain(m *testing.M) int {
 func setUpTargetDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, error) {
 
 	pgInfo := PgInfo{
-		user:     "postgres",
-		password: "secret",
+		user:     "targetAdmin",
+		password: "targetSecret",
 		db:       "sub",
 		dbHost:   "subHost",
 		version:  targetVersion,
@@ -165,8 +166,8 @@ func setUpTargetDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, e
 func setUpSourceDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, error) {
 
 	pgInfo := PgInfo{
-		user:     "postgres",
-		password: "secret",
+		user:     "sourceAdmin",
+		password: "sourceSecret",
 		db:       "pub",
 		dbHost:   "pubHost",
 		version:  sourceVersion,
@@ -295,15 +296,28 @@ func testEndToEnd(t *testing.T) {
 		err error
 	)
 	oldGetSourceAdminDSN := getSourceDbAdminDSNForCreateSubscription
+	oldGrantSuper := grantSuperUserAccess
+	oldRevokeSuper := revokeSuperUserAccess
 	defer func() {
 		getSourceDbAdminDSNForCreateSubscription = oldGetSourceAdminDSN
+		grantSuperUserAccess = oldGrantSuper
+		revokeSuperUserAccess = oldRevokeSuper
 	}()
 	// This overrides a var getSourceDbAdminDSNForCreateSubscription to handle the special case of unit test
-	// where 2 docker databases has to communicated using docker bridge network and needs the host name and port as
+	// where 2 docker databases has to communicate using docker bridge network and needs the host name and port as
 	// defined in docker.
 	getSourceDbAdminDSNForCreateSubscription = func(c *Config) string {
-		return "postgres://postgres:secret@pubHost:5432/pub?sslmode=disable"
+		return "postgres://sourceAdmin:sourceSecret@pubHost:5432/pub?sslmode=disable"
 	}
+	grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH SUPERUSER;", pq.QuoteIdentifier(role)))
+		return err
+	}
+	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH NOSUPERUSER;", pq.QuoteIdentifier(role)))
+		return err
+	}
+
 	//s = &initial_state{config}
 	s, err = GetReplicatorState("", config)
 	if err != nil {
@@ -418,7 +432,7 @@ func test_validate_connection_state_Execute(t *testing.T) {
 		{name: "test_validate_connection_state_Execute_no_admin_access", wantErr: true,
 			fields: fields{Config{
 				Log:              logger,
-				SourceDBAdminDsn: "postgres://invalid:secret@localhost:%s/pub?sslmode=disable",
+				SourceDBAdminDsn: "postgres://noadminaccess:secret@localhost:" + sourcePort + "/pub?sslmode=disable",
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
@@ -494,6 +508,25 @@ func test_create_publication_state_Execute(t *testing.T) {
 
 func test_copy_schema_state_Execute(t *testing.T) {
 
+	oldGrantSuper := grantSuperUserAccess
+	oldRevokeSuper := revokeSuperUserAccess
+	defer func() {
+		grantSuperUserAccess = oldGrantSuper
+		revokeSuperUserAccess = oldRevokeSuper
+	}()
+	// This overrides a var grantSuperUserAccess to handle the special case in unit test
+	// unit test uses different method to set and unset super user permission
+	// the difference is related to using posgtres vs RDS - the superuser permission are handled differently in AWS RDS
+	grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH SUPERUSER;", pq.QuoteIdentifier(role)))
+
+		return err
+	}
+	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH NOSUPERUSER;", pq.QuoteIdentifier(role)))
+		return err
+	}
+
 	type fields struct {
 		config Config
 	}
@@ -547,7 +580,7 @@ func test_create_subscription_state_Execute(t *testing.T) {
 				// During subscription creation, SourceDBAdminDsn is used to configure subscription in the target database to connect to source
 				// pub postgres db. In the unit test scenario, since the docker is setup with bridge network (during pool setup time), the SourceDBAdminDsn is set with the docker host name and port.
 				// In a real scenario - the regular DSN will be good enough
-				SourceDBAdminDsn: "postgres://postgres:secret@pubHost:5432/pub?sslmode=disable",
+				SourceDBAdminDsn: "postgres://sourceAdmin:sourceSecret@pubHost:5432/pub?sslmode=disable",
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
@@ -782,6 +815,8 @@ func test_wait_to_disable_source_state_Execute(t *testing.T) {
 				config: tt.fields.config,
 			}
 			got, err := s.Execute()
+			//simulate the wait
+			time.Sleep(20 * time.Second)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("test_wait_to_disable_source_state_Execute error = %v, wantErr %v", err, tt.wantErr)
 				return
