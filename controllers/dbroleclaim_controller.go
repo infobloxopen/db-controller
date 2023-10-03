@@ -59,7 +59,7 @@ type DbRoleClaimReconciler struct {
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName)
+	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName).V(InfoLevel)
 	var dbRoleClaim persistancev1.DbRoleClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbRoleClaim); err != nil {
 		log.Error(err, "unable to fetch DatabaseClaim")
@@ -106,7 +106,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		dbRoleClaim.Status.SourceSecret = ""
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s source secret not found", foundDbClaim.Spec.SecretName))
 	}
-	log.Info("found dbclaimsecret", "secretName", foundDbClaim.Spec.SecretName, "secret", foundSecret)
+	log.V(DebugLevel).Info("found dbclaimsecret", "secretName", foundDbClaim.Spec.SecretName, "secret", foundSecret)
 
 	dbRoleClaim.Status.SourceSecret = foundSecret.Namespace + "/" + foundSecret.Name
 	r.Recorder.Event(&dbRoleClaim, "Normal", "Found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, foundDbClaim.Spec.SecretName))

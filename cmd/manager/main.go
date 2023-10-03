@@ -49,7 +49,7 @@ import (
 
 var (
 	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	setupLog = ctrl.Log.WithName("setup").V(controllers.InfoLevel)
 )
 
 func init() {
@@ -92,6 +92,7 @@ func main() {
 	var class string
 	var metricsDepYamlPath string
 	var metricsConfigYamlPath string
+	var verbosity int
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
 	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "", "The prefix to be added to the DbHost. Ideally this is the env name.")
@@ -115,9 +116,12 @@ func main() {
 		"Enable Dsnexec webhook. "+
 			"Enabling this option will cause the db-controller to inject dsnexec container into pods "+
 			"with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
+	flag.IntVar(&verbosity, "verbosity", 0, "Configures the verbosity of the logging. "+
+		"By default it's set to 0, set to 1 to enable debug logs.")
 	opts := zap.Options{
 		Development: false,
 		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
+		Level:       zapcore.Level(-1 * verbosity),
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -144,7 +148,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		Config:                ctlConfig,
 		DbIdentifierPrefix:    dbIdentifierPrefix,
-		Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim"),
+		Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
 		MasterAuth:            rdsauth.NewMasterAuth(),
 		MetricsDepYamlPath:    metricsDepYamlPath,
 		MetricsConfigYamlPath: metricsConfigYamlPath,
@@ -185,7 +189,7 @@ func main() {
 				setupLog.Error(err, "could not parse db proxy sidecar configuration")
 				os.Exit(1)
 			}
-			setupLog.Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
+			setupLog.V(controllers.DebugLevel).Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
 
 			setupLog.Info("registering with webhook server for DbProxy")
 			webHookServer.Register("/mutate", &webhook.Admission{
@@ -204,7 +208,7 @@ func main() {
 				setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
 				os.Exit(1)
 			}
-			setupLog.Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
+			setupLog.V(controllers.DebugLevel).Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
 
 			setupLog.Info("registering with webhook server for DsnExec")
 			webHookServer.Register("/mutate-dsnexec", &webhook.Admission{

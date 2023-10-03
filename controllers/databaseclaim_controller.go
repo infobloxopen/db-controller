@@ -74,6 +74,12 @@ const (
 	masterSecretSuffix       = "-master"
 	masterPasswordKey        = "password"
 	ErrMaxNameLen            = Error("dbclaim name is too long. max length is 44 characters")
+	// InfoLevel is used to set V level to 0 as suggested by official docs
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+	InfoLevel = 0
+	// DebugLevel is used to set V level to 1 as suggested by official docs
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+	DebugLevel = 1
 )
 
 type ModeEnum int
@@ -147,7 +153,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 				logr.Info("upgrade requested for a shared host. shared host upgrades are not supported. ignoring upgrade request")
 			}
 		}
-		logr.Info("selected mode for shared db host", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
+		logr.V(DebugLevel).Info("selected mode for shared db host", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
 
 		return M_UseNewDB
 	}
@@ -155,7 +161,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	// use existing is true
 	if *dbClaim.Spec.UseExistingSource {
 		if dbClaim.Spec.SourceDataFrom != nil && dbClaim.Spec.SourceDataFrom.Type == "database" {
-			logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "use existing db")
+			logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "use existing db")
 			return M_UseExistingDB
 		} else {
 			return M_NotSupported
@@ -166,10 +172,10 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 		if dbClaim.Spec.SourceDataFrom.Type == "database" {
 			if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingExistingDB {
 				if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
+					logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
 					return M_MigrateExistingToNewDB
 				} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
+					logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
 					return M_MigrationInProgress
 				}
 			}
@@ -184,10 +190,10 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 			if dbClaim.Status.ActiveDB.SourceDataFrom != nil {
 				dbClaim.Spec.SourceDataFrom = dbClaim.Status.ActiveDB.SourceDataFrom.DeepCopy()
 				if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
+					logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
 					return M_MigrateExistingToNewDB
 				} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-					logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
+					logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
 					return M_MigrationInProgress
 				}
 			} else {
@@ -207,17 +213,17 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 				dbClaim.Status.MigrationState = ""
 			}
 			if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-				logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_InitiateDBUpgrade")
+				logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_InitiateDBUpgrade")
 				return M_InitiateDBUpgrade
 			} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-				logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UpgradeDBInProgress")
+				logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UpgradeDBInProgress")
 				return M_UpgradeDBInProgress
 
 			}
 		}
 	}
 
-	logr.Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
+	logr.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
 
 	return M_UseNewDB
 }
@@ -307,7 +313,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
 	}
 
-	logr.Info("setup values of ", "DatabaseClaimReconciler", r)
+	logr.V(DebugLevel).Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
 }
 
@@ -679,8 +685,8 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		err := fmt.Errorf("unsupported mode %v", r.Mode)
 		return r.manageError(ctx, dbClaim, err)
 	}
-	logr.Info("DSN", "sourceAppDsn", sourceAppDsn)
-	logr.Info("DSN", "sourceMasterConn", sourceMasterConn)
+	logr.V(DebugLevel).Info("DSN", "sourceAppDsn", sourceAppDsn)
+	logr.V(DebugLevel).Info("DSN", "sourceMasterConn", sourceMasterConn)
 
 	config := pgctl.Config{
 		Log:              r.Log,
@@ -691,7 +697,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		ExportFilePath:   r.Config.GetString("pgTemp"),
 	}
 
-	logr.Info("DSN", "config", config)
+	logr.V(DebugLevel).Info("DSN", "config", config)
 
 	s, err := pgctl.GetReplicatorState(migrationState, config)
 	if err != nil {
@@ -826,7 +832,7 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *persistancev1.DatabaseC
 func (r *DatabaseClaimReconciler) getDBClient(dbClaim *persistancev1.DatabaseClaim) (dbclient.Client, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
-	logr.Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
+	logr.V(DebugLevel).Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
 	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: r.getMasterDefaultDsn()})
 }

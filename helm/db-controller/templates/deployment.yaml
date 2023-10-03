@@ -69,6 +69,7 @@ spec:
             - --dsnexec-sidecar-config-path=config/dsnexec/dsnexecsidecar.json
             - --db-identifier-prefix={{ tpl .Values.db.identifier.prefix . }}
             - --class={{ .Values.dbController.class }}
+            - --verbosity={{ .Values.zapLogger.verbosity }}
             {{ if .Values.zapLogger.develMode }}
             - --zap-devel
             {{ end }}
