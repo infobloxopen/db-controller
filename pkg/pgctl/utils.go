@@ -124,3 +124,18 @@ func closeDB(log logr.Logger, db *sql.DB) error {
 	}
 	return nil
 }
+
+/*
+extract the parent role from db user name by removing the last two characters.
+The last two characters are expected to be _a or _b
+if rolename name is sample_user_a, the role inherited is sample_user
+remove "_a" to get role name.
+*/
+func getParentRole(dbUser string) string {
+	if len(dbUser) > 2 {
+		if string(dbUser[len(dbUser)-2]) == "_" {
+			return dbUser[:len(dbUser)-2]
+		}
+	}
+	return dbUser
+}

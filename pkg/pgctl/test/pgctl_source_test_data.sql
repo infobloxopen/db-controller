@@ -43,7 +43,8 @@ set     rds.logical_replication static parameter to 1
 -- DROP DATABASE IF EXISTS pub;
 -- CREATE DATABASE pub;
 -- \c pub
-CREATE ROLE rds_superuser WITH SUPERUSER;
+-- simulate AWS rds_superuser role
+CREATE ROLE rds_superuser WITH INHERIT LOGIN;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -72,7 +73,21 @@ BEGIN
             pg_user
         WHERE
             usename = 'appuser_a') THEN
-    CREATE USER appuser_a PASSWORD 'secret';
+    CREATE USER appuser_a PASSWORD 'secret' IN ROLE appuser;
+END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS(
+        SELECT
+            *
+        FROM
+            pg_user
+        WHERE
+            usename = 'noadminaccess') THEN
+    CREATE USER noadminaccess PASSWORD 'secret';
 END IF;
 END
 $$;
