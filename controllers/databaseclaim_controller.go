@@ -426,8 +426,9 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
-		dbClaim.Status.ActiveDB.DbState = persistancev1.UsingExistingDB
-		dbClaim.Status.ActiveDB.SourceDataFrom = dbClaim.Spec.SourceDataFrom.DeepCopy()
+		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+		dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+
 		logr.Info("existing db reconcile complete")
 		return r.manageSuccess(ctx, dbClaim)
 	}
@@ -501,6 +502,15 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	if err != nil {
 		return err
 	}
+	if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingExistingDB {
+		if dbClaim.Status.ActiveDB.ConnectionInfo.Host == existingDBConnInfo.Host {
+			logr.Info("requested existing db host is same as active db host. reusing existing db host")
+			dbClaim.Status.NewDB = *dbClaim.Status.ActiveDB.DeepCopy()
+		}
+	}
+	dbClaim.Status.NewDB.DbState = persistancev1.UsingExistingDB
+	dbClaim.Status.NewDB.SourceDataFrom = dbClaim.Spec.SourceDataFrom.DeepCopy()
+
 	logr.Info("creating database client")
 	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
 	if err != nil {
@@ -512,9 +522,9 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	logr.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	dbName := existingDBConnInfo.DatabaseName
-	updateDBStatus(&dbClaim.Status.ActiveDB, dbName)
+	updateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUser(dbClient, &dbClaim.Status.ActiveDB, dbName, dbClaim.Spec.Username)
+	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
 	if err != nil {
 		return err
 	}
@@ -523,10 +533,10 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	}
 	if r.Input.TempSecret != "" {
 		logr.Info("password reset. updating secret")
-		activeDBConnInfo := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
-		activeDBConnInfo.Password = r.Input.TempSecret
+		newDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
+		newDBConnInfo.Password = r.Input.TempSecret
 
-		if err := r.createOrUpdateSecret(ctx, dbClaim, activeDBConnInfo); err != nil {
+		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
 			return err
 		}
 	}
@@ -813,7 +823,7 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, lo
 	if connInfo.Password == "" {
 		return nil, fmt.Errorf("invalid credentials (password)")
 	}
-	updateHostPortStatus(&dbClaim.Status.ActiveDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
+	updateHostPortStatus(&dbClaim.Status.NewDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
 	return dbclient.New(dbclient.Config{Log: r.Log, DBType: "postgres", DSN: connInfo.Uri()})
 }
