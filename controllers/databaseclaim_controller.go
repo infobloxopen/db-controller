@@ -80,6 +80,9 @@ const (
 	// DebugLevel is used to set V level to 1 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	DebugLevel = 1
+
+	operationalStatusTagKey        string = "OPERATIONAL_STATUS"
+	operationalStatusInactiveValue string = "INACTIVE"
 )
 
 type ModeEnum int
@@ -108,6 +111,7 @@ const (
 	M_UseNewDB
 	M_InitiateDBUpgrade
 	M_UpgradeDBInProgress
+	M_PostMigrationInProgress
 )
 
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
@@ -145,6 +149,13 @@ func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
 func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) ModeEnum {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getMode")
 	//default mode is M_UseNewDB. any non supported combination needs to be identfied and set to M_NotSupported
+
+	if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
+		if dbClaim.Status.OldDB.ConnectionInfo == nil || dbClaim.Status.ActiveDB.DbState != persistancev1.Ready || *dbClaim.Status.NewDB.ConnectionInfo != (persistancev1.DatabaseClaimConnectionInfo{}) ||
+			r.Input.SharedDBHost || *dbClaim.Spec.UseExistingSource || dbClaim.Spec.SourceDataFrom != nil {
+			return M_NotSupported
+		}
+	}
 
 	if r.Input.SharedDBHost {
 		if dbClaim.Status.ActiveDB.DbState == persistancev1.UsingSharedHost {
@@ -220,6 +231,8 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 				return M_UpgradeDBInProgress
 
 			}
+		} else if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
+			return M_PostMigrationInProgress
 		}
 	}
 
@@ -420,6 +433,64 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 	}
 
 	r.Mode = r.getMode(dbClaim)
+	if r.Mode == M_PostMigrationInProgress {
+		logr.Info("post migration is in progress")
+
+		if canTag, err := r.canTagResources(ctx, dbClaim); err != nil {
+			logr.Error(err, "error in checking  criteria post migration ")
+			return r.manageError(ctx, dbClaim, err)
+		} else if !canTag {
+			logr.Info("Skipping post migration actions due to DB being used by other entities")
+			dbClaim.Status.OldDB = persistancev1.Status{}
+			return r.manageSuccess(ctx, dbClaim)
+		}
+
+		// get name of DBInstance from connectionInfo
+		dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
+
+		var dbParamGroupName string
+		// get name of DBParamGroup from connectionInfo
+		if dbClaim.Status.OldDB.Type == defaultAuroraPostgresStr {
+			dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+		} else {
+			dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+		}
+
+		TagsVerified, err := r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName)
+
+		// Even though we get error in updating tags, we log the error
+		// and go ahead with deleting resources
+		if err != nil || TagsVerified {
+
+			if err != nil {
+				logr.Error(err, "Failed updating or verifying operational tags")
+			}
+
+			if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
+				logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
+			}
+			if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
+				logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
+			}
+
+			dbClaim.Status.OldDB = persistancev1.Status{}
+		} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 5 {
+			// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
+			logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
+
+			if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
+				logr.Error(err, "Could not delete crossplane  DBInstance/DBCLluster")
+			}
+			if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
+				logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
+			}
+
+			dbClaim.Status.OldDB = persistancev1.Status{}
+		}
+
+		return r.manageSuccess(ctx, dbClaim)
+
+	}
 	if r.Mode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
 		err := r.reconcileUseExistingDB(ctx, dbClaim)
@@ -770,6 +841,12 @@ loop:
 	}
 	dbClaim.Status.MigrationState = pgctl.S_Completed.String()
 
+	timenow := metav1.Now()
+
+	dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
+	dbClaim.Status.OldDB.DbState = persistancev1.PostMigrationInProgress
+	dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow
+
 	//done with migration- switch active server to newDB
 	dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
 	dbClaim.Status.ActiveDB.DbState = persistancev1.Ready
@@ -779,6 +856,7 @@ loop:
 		logr.Error(err, "could not update db claim")
 		return r.manageError(ctx, dbClaim, err)
 	}
+
 	err = r.deleteTempSecret(ctx, dbClaim)
 	if err != nil {
 		logr.Error(err, "ignoring delete temp secret error")
@@ -787,6 +865,218 @@ loop:
 	logr.Info("migration complete")
 
 	return r.manageSuccess(ctx, dbClaim)
+}
+
+func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) {
+	dbParameterGroup := &crossplanerds.DBParameterGroup{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbParamGroupName,
+	}, dbParameterGroup)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return // nothing to delete
+		}
+		logr.Error(err, "Error getting crossplane db param group for old DB ")
+	} else {
+		operationalTagForProviderPresent := false
+		for _, tag := range dbParameterGroup.Spec.ForProvider.Tags {
+			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+				operationalTagForProviderPresent = true
+			}
+		}
+		if !operationalTagForProviderPresent {
+			patchDBParameterGroup := client.MergeFrom(dbParameterGroup.DeepCopy())
+
+			operationalTagKey := operationalStatusTagKey
+			operationalValue := operationalStatusInactiveValue
+
+			dbParameterGroup.Spec.ForProvider.Tags = append(dbParameterGroup.Spec.ForProvider.Tags, &crossplanerds.Tag{
+				Key:   &operationalTagKey,
+				Value: &operationalValue,
+			})
+
+			err := r.Client.Patch(ctx, dbParameterGroup, patchDBParameterGroup)
+			if err != nil {
+				logr.Error(err, "Error updating operational tags for  crossplane db param group ")
+			}
+		}
+	}
+}
+
+func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) {
+	dbClusterParamGroup := &crossplanerds.DBClusterParameterGroup{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbParamGroupName,
+	}, dbClusterParamGroup)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return // nothing to delete
+		}
+		logr.Error(err, "Error getting crossplane db cluster param group for old DB ")
+	} else {
+		operationalTagForProviderPresent := false
+		for _, tag := range dbClusterParamGroup.Spec.ForProvider.Tags {
+			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+				operationalTagForProviderPresent = true
+			}
+		}
+		if !operationalTagForProviderPresent {
+			patchDBClusterParameterGroup := client.MergeFrom(dbClusterParamGroup.DeepCopy())
+
+			operationalTagKey := operationalStatusTagKey
+			operationalValue := operationalStatusInactiveValue
+
+			dbClusterParamGroup.Spec.ForProvider.Tags = append(dbClusterParamGroup.Spec.ForProvider.Tags, &crossplanerds.Tag{
+				Key:   &operationalTagKey,
+				Value: &operationalValue,
+			})
+
+			err := r.Client.Patch(ctx, dbClusterParamGroup, patchDBClusterParameterGroup)
+			if err != nil {
+				logr.Error(err, "Error updating operational tags for  crossplane db cluster param group ")
+			}
+		}
+	}
+
+}
+
+func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Context, logr logr.Logger, dbHostName string) {
+	dbCluster := &crossplanerds.DBCluster{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbCluster)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return // nothing to delete
+		}
+		logr.Error(err, "Error getting crossplane DBCluster for old DB")
+	} else {
+		operationalTagForProviderPresent := false
+		for _, tag := range dbCluster.Spec.ForProvider.Tags {
+			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+				operationalTagForProviderPresent = true
+			}
+		}
+		if !operationalTagForProviderPresent {
+			patchDBClusterParameterGroup := client.MergeFrom(dbCluster.DeepCopy())
+
+			operationalTagKey := operationalStatusTagKey
+			operationalValue := operationalStatusInactiveValue
+
+			dbCluster.Spec.ForProvider.Tags = append(dbCluster.Spec.ForProvider.Tags, &crossplanerds.Tag{
+				Key:   &operationalTagKey,
+				Value: &operationalValue,
+			})
+
+			err := r.Client.Patch(ctx, dbCluster, patchDBClusterParameterGroup)
+			if err != nil {
+				logr.Error(err, "Error updating operational tags for  crossplane db cluster   ")
+			}
+		}
+	}
+
+}
+
+func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Context, logr logr.Logger, dbHostName string) (bool, error) {
+
+	dbInstance := &crossplanerds.DBInstance{}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbInstance)
+
+	if err != nil {
+		logr.Error(err, "Error getting crossplane dbInstance for old DB")
+		return false, err
+	} else {
+		operationalTagForProviderPresent := false
+		operationalTagAtProviderPresent := false
+		// Checking whether tags are already requested
+		for _, tag := range dbInstance.Spec.ForProvider.Tags {
+			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+				operationalTagForProviderPresent = true
+			}
+		}
+		// checking whether tags have got updated on AWS (This will be done by chekcing tags at AtProvider)
+		for _, tag := range dbInstance.Status.AtProvider.TagList {
+			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+				operationalTagAtProviderPresent = true
+			}
+		}
+
+		if !operationalTagForProviderPresent {
+			patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
+
+			operationalTagKey := operationalStatusTagKey
+			operationalValue := operationalStatusInactiveValue
+
+			dbInstance.Spec.ForProvider.Tags = append(dbInstance.Spec.ForProvider.Tags, &crossplanerds.Tag{
+				Key:   &operationalTagKey,
+				Value: &operationalValue,
+			})
+
+			err := r.Client.Patch(ctx, dbInstance, patchDBInstance)
+			if err != nil {
+				logr.Error(err, "Error patching  crossplane dbInstance for old DB to add operational tags")
+				return false, err
+			}
+		} else if operationalTagForProviderPresent && !operationalTagAtProviderPresent {
+			logr.Info("could not find operational tags of DBInstance on AWS. These are already requested. Needs to requeue")
+			return false, nil
+		} else {
+			logr.Info("operational tags of DBInstance on AWS found")
+			return true, nil
+		}
+
+	}
+	return false, nil
+}
+
+// manageOperationalTagging: Will update operational tags on old DBInstance, DBCluster, DBClusterParamGroup and DBParamGroup.
+// It does not return error for DBCluster, DBClusterParamGroup and DBParamGroup if they fail to update tags. Such error is only logged, but not returned.
+// In case of successful updation, It  does not to verify whether those tags got updated.
+//
+// Unlike other resources,
+// It returns error just for  DBinstance failling to update tags.
+// It also verifies whether DBinstance got updated with the tag, and return the signal as boolean.
+//
+//	true: operational tag is updated and verfied.
+//	false: operational tag is updated but could not be verified yet.
+func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, logr logr.Logger, dbInstanceName, dbParamGroupName string) (bool, error) {
+
+	r.operationalTaggingForDbClusterParamGroup(ctx, logr, dbParamGroupName)
+	r.operationalTaggingForDbParamGroup(ctx, logr, dbParamGroupName)
+	r.operationalTaggingForDbCluster(ctx, logr, dbInstanceName)
+
+	// unlike other resources above, verifying tags updation and handling errors if any just for "DBInstance" resource
+	isVerfied, err := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName)
+
+	if r.getMultiAZEnabled() {
+		isVerfiedforMultiAZ, errMultiAZ := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName+"-2")
+		if err != nil {
+			return false, err
+		} else if errMultiAZ != nil {
+			return false, errMultiAZ
+		} else if !isVerfied || !isVerfiedforMultiAZ {
+			return false, nil
+		} else {
+			return true, nil
+		}
+
+	} else {
+		if err != nil {
+			return false, err
+		} else {
+			return isVerfied, nil
+		}
+	}
+
 }
 
 func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
@@ -881,6 +1171,22 @@ func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
 		// Assume reclaimPolicy == "delete"
 		return "delete"
 	}
+}
+
+func (r *DatabaseClaimReconciler) canTagResources(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
+
+	if dbClaim.Spec.InstanceLabel == "" {
+		return true, nil
+	}
+	var dbClaimList persistancev1.DatabaseClaimList
+	if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+		return false, err
+	}
+
+	if len(dbClaimList.Items) == 1 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) error {
@@ -2309,6 +2615,8 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *pe
 	//if object is getting deleted then call requeue immediately
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		return ctrl.Result{Requeue: true}, nil
+	} else if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	} else {
 		return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 	}

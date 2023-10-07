@@ -236,6 +236,39 @@ spec:
           status:
             description: DatabaseClaimStatus defines the observed state of DatabaseClaim
             properties:
+              oldDB:
+                description: track the status of the old db which is migrated and non operational
+                properties:
+                  DbState:
+                    description: DbState of the DB. inprogress, "", ready
+                    type: string
+                  connectionInfo:
+                    properties:
+                      databaseName:
+                        type: string
+                      hostName:
+                        type: string
+                      password:
+                        type: string
+                      port:
+                        type: string
+                      sslMode:
+                        type: string
+                      userName:
+                        type: string
+                    type: object
+                  type:
+                    description: Specifies the type of database to provision. Only
+                      postgres is supported.
+                    type: string
+                  postMigrationActionStartedAt:
+                    description: Time the  process of post migration actions have started
+                    format: date-time
+                    type: string
+                  dbversion:
+                    description: Version of the provisioned Database
+                    type: string
+                type: object
               activeDB:
                 description: track the status of the active db being used by the application
                 properties:
