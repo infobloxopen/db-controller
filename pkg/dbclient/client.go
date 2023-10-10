@@ -163,6 +163,44 @@ func (pc *client) CreateDefaultExtentions(dbName string) error {
 	return err
 }
 
+func (pc *client) ManageSystemFunctions(dbName string, functions map[string]string) error {
+	db, err := pc.getDB(dbName)
+	if err != nil {
+		pc.log.Error(err, "could not connect to db", "database", dbName)
+		return err
+	}
+	pc.log.Info("ManageSystemFunctions - connected to " + dbName)
+	defer db.Close()
+	var currVal string
+	var create bool
+	for f, v := range functions {
+		create = false
+		err := db.QueryRow(fmt.Sprintf("SELECT %s()", f)).Scan(&currVal)
+		//check if error contains "does not exist"
+		if err != nil {
+			if strings.Contains(err.Error(), "does not exist") {
+				pc.log.Info("function does not exist - create it", "function", f)
+				create = true
+			} else {
+				return err
+			}
+		} else {
+			if currVal != v {
+				pc.log.Info("function value is not correct - update it", "function", f)
+				create = true
+			}
+		}
+		if create {
+			_, err = db.Exec(fmt.Sprintf("CREATE OR REPLACE FUNCTION %s() RETURNS text AS $$SELECT text '%s'$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;", f, v))
+			if err != nil {
+				pc.log.Error(err, "could not create function", "database_name", dbName, "function", f, "value", v)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 	start := time.Now()
 	var exists bool

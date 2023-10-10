@@ -514,6 +514,38 @@ func TestPostgresClientOperations(t *testing.T) {
 			if _, err := db.Exec("CREATE EXTENSION IF NOT EXISTS citext"); err != nil {
 				t.Errorf("citext is not created: %s", err)
 			}
+			t.Logf("create system functions")
+			functions := map[string]string{
+				"ib_realm":     "eu",
+				"ib_env":       "box-3",
+				"ib_lifecycle": "dev",
+			}
+			err = pc.ManageSystemFunctions(tt.args.dbName, functions)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s ManageSystemFunctions() error = %v, wantErr %v", failed, err, tt.wantErr)
+			} else {
+				t.Logf("\t%s create system functions passed", succeed)
+			}
+			t.Logf("re-create same system functions")
+			err = pc.ManageSystemFunctions(tt.args.dbName, functions)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s re-create ManageSystemFunctions() error = %v, wantErr %v", failed, err, tt.wantErr)
+			} else {
+				t.Logf("\t%s create same system functions passed", succeed)
+			}
+			t.Logf("re-create different system functions")
+			functions = map[string]string{
+				"ib_realm":     "us",
+				"ib_env":       "box-4",
+				"ib_lifecycle": "stage",
+			}
+			err = pc.ManageSystemFunctions(tt.args.dbName, functions)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("\t%s re-create ManageSystemFunctions() error = %v, wantErr %v", failed, err, tt.wantErr)
+			} else {
+				t.Logf("\t%s create different system functions passed", succeed)
+			}
+
 		})
 	}
 }

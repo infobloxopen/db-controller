@@ -354,8 +354,7 @@ deploy: .id docker-push build-chart
 		--create-namespace \
 		-f helm/db-controller/minikube.yaml \
 		--set dbController.class=`cat .id` \
-		--set image.tag="${TAG}" \
-		--set db.identifier.prefix=`cat .id` ${HELM_SETFLAGS}
+		--set image.tag="${TAG}"  ${HELM_SETFLAGS}
 
 undeploy: .id
 	helm delete --namespace `cat .id` `cat .id`-db-ctrl

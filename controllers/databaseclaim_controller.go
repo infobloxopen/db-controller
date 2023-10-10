@@ -448,6 +448,8 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			if err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
+			dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
+			dbClaim.Status.NewDB = persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
 		}
 
 		return r.reconcileMigrateToNewDB(ctx, dbClaim)
@@ -539,6 +541,10 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
 			return err
 		}
+	}
+	err = dbClient.ManageSystemFunctions(dbName, r.getSystemFunctions())
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -1070,6 +1076,10 @@ func (r *DatabaseClaimReconciler) getProviderConfig() string {
 
 func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
 	return r.Config.GetString("dbSubnetGroupNameRef")
+}
+
+func (r *DatabaseClaimReconciler) getSystemFunctions() map[string]string {
+	return r.Config.GetStringMapString("system-functions")
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
