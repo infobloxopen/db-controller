@@ -81,8 +81,8 @@ const (
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	DebugLevel = 1
 
-	operationalStatusTagKey        string = "OPERATIONAL_STATUS"
-	operationalStatusInactiveValue string = "INACTIVE"
+	operationalStatusTagKey        string = "operational-status"
+	operationalStatusInactiveValue string = "inactive"
 )
 
 type ModeEnum int
@@ -155,6 +155,10 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 			r.Input.SharedDBHost || *dbClaim.Spec.UseExistingSource || dbClaim.Spec.SourceDataFrom != nil {
 			return M_NotSupported
 		}
+	}
+
+	if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress && dbClaim.Status.ActiveDB.DbState == persistancev1.Ready {
+		return M_PostMigrationInProgress
 	}
 
 	if r.Input.SharedDBHost {
@@ -231,8 +235,6 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 				return M_UpgradeDBInProgress
 
 			}
-		} else if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
-			return M_PostMigrationInProgress
 		}
 	}
 
