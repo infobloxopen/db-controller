@@ -8,7 +8,8 @@ secrets:
   enabled: false
 
 env: local
-realm: "us"
+ib:
+  realm: "us"
 lifecycle: "dev"
 db:
   identifier:
@@ -160,8 +161,10 @@ controllerConfig:
   enablePerfInsight: true
   # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
   enableCloudwatchLogsExport: "none"
-  system-functions:
-    ib_realm: "{{ tpl .Values.realm . }}"
+  # system funtions are created as functions in the database. The prefix is used as the schema name.
+  # only "ib_" prefixed functions are supported at this time.
+  systemFunctions:
+    ib_realm: "{{ .Values.ib.realm }}"
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
 

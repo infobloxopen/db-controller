@@ -609,6 +609,10 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	err = dbClient.ManageSystemFunctions(GetDBName(dbClaim), r.getSystemFunctions())
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -1079,7 +1083,7 @@ func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
 }
 
 func (r *DatabaseClaimReconciler) getSystemFunctions() map[string]string {
-	return r.Config.GetStringMapString("system-functions")
+	return r.Config.GetStringMapString("systemFunctions")
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {

@@ -343,7 +343,7 @@ push-chart-crd:
 clean:
 	rm -f *build.properties || true
 	rm -f *.tgz || true
-	rm .push* .image*
+	rm .push* .image* || true
 
 deploy-crds: .id build-chart-crd
 	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
