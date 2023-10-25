@@ -13,6 +13,7 @@ type Client interface {
 	ManageReplicationRole(username string, enableReplicationRole bool) error
 	ManageSuperUserRole(username string, enableSuperUser bool) error
 	ManageCreateRole(username string, enableCreateRole bool) error
+	ManageSystemFunctions(dbName string, functions map[string]string) error
 
 	DBCloser
 }

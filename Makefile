@@ -343,7 +343,7 @@ push-chart-crd:
 clean:
 	rm -f *build.properties || true
 	rm -f *.tgz || true
-	rm .push* .image*
+	rm .push* .image* || true
 
 deploy-crds: .id build-chart-crd
 	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
@@ -354,8 +354,7 @@ deploy: .id docker-push build-chart
 		--create-namespace \
 		-f helm/db-controller/minikube.yaml \
 		--set dbController.class=`cat .id` \
-		--set image.tag="${TAG}" \
-		--set db.identifier.prefix=`cat .id` ${HELM_SETFLAGS}
+		--set image.tag="${TAG}"  ${HELM_SETFLAGS}
 
 undeploy: .id
 	helm delete --namespace `cat .id` `cat .id`-db-ctrl
