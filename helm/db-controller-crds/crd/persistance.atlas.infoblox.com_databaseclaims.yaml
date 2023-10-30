@@ -236,39 +236,6 @@ spec:
           status:
             description: DatabaseClaimStatus defines the observed state of DatabaseClaim
             properties:
-              oldDB:
-                description: track the status of the old db which is migrated and non operational
-                properties:
-                  DbState:
-                    description: DbState of the DB. inprogress, "", ready
-                    type: string
-                  connectionInfo:
-                    properties:
-                      databaseName:
-                        type: string
-                      hostName:
-                        type: string
-                      password:
-                        type: string
-                      port:
-                        type: string
-                      sslMode:
-                        type: string
-                      userName:
-                        type: string
-                    type: object
-                  type:
-                    description: Specifies the type of database to provision. Only
-                      postgres is supported.
-                    type: string
-                  postMigrationActionStartedAt:
-                    description: Time the  process of post migration actions have started
-                    format: date-time
-                    type: string
-                  dbversion:
-                    description: Version of the provisioned Database
-                    type: string
-                type: object
               activeDB:
                 description: track the status of the active db being used by the application
                 properties:
@@ -309,6 +276,10 @@ spec:
                     description: The optional MinStorageGB value requests the minimum
                       database host storage capacity in GBytes
                     type: integer
+                  postMigrationActionStartedAt:
+                    description: Time at the process of post migration actions initiated
+                    format: date-time
+                    type: string
                   shape:
                     description: The optional Shape values are arbitrary and help
                       drive instance selection
@@ -446,6 +417,144 @@ spec:
                     description: The optional MinStorageGB value requests the minimum
                       database host storage capacity in GBytes
                     type: integer
+                  postMigrationActionStartedAt:
+                    description: Time at the process of post migration actions initiated
+                    format: date-time
+                    type: string
+                  shape:
+                    description: The optional Shape values are arbitrary and help
+                      drive instance selection
+                    type: string
+                  sourceDataFrom:
+                    description: SourceDataFrom specifies an existing database or
+                      backup to use when initially provisioning the database. if the
+                      dbclaim has already provisioned a database, this field is ignored
+                      This field used when claim is use-existing-db and attempting
+                      to migrate to newdb
+                    properties:
+                      database:
+                        description: Database defines the connection information to
+                          an existing db
+                        properties:
+                          dsn:
+                            description: 'DSN is the connection string used to reach
+                              the postgres database must have protocol specifier at
+                              beginning (example: mysql://  postgres:// )'
+                            type: string
+                          secretRef:
+                            description: 'SecretRef specifies a secret to use for
+                              connecting to the postgresdb (should be master/root)
+                              TODO: document/validate the secret format required'
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - dsn
+                        type: object
+                      s3:
+                        description: S3 defines the location of a DB backup in an
+                          S3 bucket
+                        properties:
+                          bucket:
+                            type: string
+                          prefix:
+                            description: Prefix is the path prefix of the S3 bucket
+                              within which the backup to restore is located.
+                            type: string
+                          region:
+                            type: string
+                          secretRef:
+                            description: 'SecretRef specifies a secret to use for
+                              connecting to the s3 bucket via AWS client TODO: document/validate
+                              the secret format required'
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          sourceEngine:
+                            description: SourceEngine is the engine used to create
+                              the backup.
+                            type: string
+                          sourceEngineVersion:
+                            description: 'SourceEngineVersion is the version of the
+                              engine used to create the backup. Example: "5.7.30"'
+                            type: string
+                        required:
+                        - bucket
+                        - region
+                        - sourceEngine
+                        - sourceEngineVersion
+                        type: object
+                      type:
+                        description: Type specifies the type of source
+                        type: string
+                    required:
+                    - type
+                    type: object
+                  type:
+                    description: Specifies the type of database to provision. Only
+                      postgres is supported.
+                    type: string
+                  userUpdatedAt:
+                    description: Time the user/password was updated/created
+                    format: date-time
+                    type: string
+                required:
+                - connectionInfo
+                type: object
+              oldDB:
+                description: tracks the DB which is migrated and not more operational
+                properties:
+                  DbState:
+                    description: DbState of the DB. inprogress, "", ready
+                    type: string
+                  connectionInfo:
+                    properties:
+                      databaseName:
+                        type: string
+                      hostName:
+                        type: string
+                      password:
+                        type: string
+                      port:
+                        type: string
+                      sslMode:
+                        type: string
+                      userName:
+                        type: string
+                    type: object
+                  connectionUpdatedAt:
+                    description: Time the connection info was updated/created.
+                    format: date-time
+                    type: string
+                  dbCreateAt:
+                    description: Time the database was created
+                    format: date-time
+                    type: string
+                  dbversion:
+                    description: Version of the provisioned Database
+                    type: string
+                  matchLabel:
+                    description: The name of the label that was successfully matched
+                      against the fragment key names in the db-controller configMap
+                    type: string
+                  minStorageGB:
+                    description: The optional MinStorageGB value requests the minimum
+                      database host storage capacity in GBytes
+                    type: integer
+                  postMigrationActionStartedAt:
+                    description: Time at the process of post migration actions initiated
+                    format: date-time
+                    type: string
                   shape:
                     description: The optional Shape values are arbitrary and help
                       drive instance selection
