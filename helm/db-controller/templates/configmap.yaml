@@ -10,5 +10,5 @@ metadata:
 data:
   {{- with .Values.controllerConfig }}
   "config.yaml": |-
-  {{- toYaml . | trim | nindent 4 }}
+  {{- tpl (toYaml .) $ | trim | nindent 4 }}
   {{ end }}

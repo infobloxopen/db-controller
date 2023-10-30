@@ -163,6 +163,83 @@ func (pc *client) CreateDefaultExtentions(dbName string) error {
 	return err
 }
 
+func (pc *client) ManageSystemFunctions(dbName string, functions map[string]string) error {
+	db, err := pc.getDB(dbName)
+	if err != nil {
+		pc.log.Error(err, "could not connect to db", "database", dbName)
+		return err
+	}
+	pc.log.Info("ManageSystemFunctions - connected to " + dbName)
+	defer db.Close()
+	//check if schema ib exists
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'ib')").Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for schema ib")
+		return err
+	}
+	if !exists {
+		createSchema := `
+			CREATE SCHEMA IF NOT EXISTS ib;
+			REVOKE ALL ON SCHEMA ib FROM PUBLIC;
+			GRANT USAGE ON SCHEMA ib TO PUBLIC;			
+			REVOKE ALL ON ALL TABLES IN SCHEMA ib FROM PUBLIC ;
+			GRANT SELECT ON ALL TABLES IN SCHEMA ib TO PUBLIC;
+		`
+		//create schema ib
+		_, err = db.Exec(createSchema)
+		if err != nil {
+			pc.log.Error(err, "could not create schema ib")
+			return err
+		}
+	}
+	var currVal string
+	var create bool
+	var schema string
+	sep := "_" // separator between schema and function name
+	for f, v := range functions {
+		create = false
+		// split ib_lifecycle into schema and function name. eg. ib_life_cycle -> ib.life_cycle
+		f_parts := strings.Split(f, sep)
+		if len(f_parts) == 1 {
+			schema = "public"
+		} else {
+			schema = f_parts[0]
+			f = pq.QuoteIdentifier(strings.Join(f_parts[1:], sep))
+		}
+
+		err := db.QueryRow(fmt.Sprintf("SELECT %s.%s()", schema, f)).Scan(&currVal)
+		//check if error contains "does not exist"
+		if err != nil {
+			if strings.Contains(err.Error(), "does not exist") {
+				pc.log.Info("function does not exist - create it", "function", f)
+				create = true
+			} else {
+				return err
+			}
+		} else {
+			if currVal != v {
+				pc.log.Info("function value is not correct - update it", "function", f)
+				create = true
+			}
+		}
+		if create {
+			createFunction := `
+				CREATE OR REPLACE FUNCTION %s.%s() 
+				RETURNS text AS $$SELECT text '%s'$$ 
+				LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+			`
+			_, err = db.Exec(fmt.Sprintf(createFunction, schema, f, v))
+			if err != nil {
+				pc.log.Error(err, "could not create function", "database_name",
+					dbName, "function", f, "value", v)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 	start := time.Now()
 	var exists bool
