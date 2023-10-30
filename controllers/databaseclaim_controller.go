@@ -151,7 +151,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	//default mode is M_UseNewDB. any non supported combination needs to be identfied and set to M_NotSupported
 
 	if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
-		if dbClaim.Status.OldDB.ConnectionInfo == nil || dbClaim.Status.ActiveDB.DbState != persistancev1.Ready || *dbClaim.Status.NewDB.ConnectionInfo != (persistancev1.DatabaseClaimConnectionInfo{}) ||
+		if dbClaim.Status.OldDB.ConnectionInfo == nil || dbClaim.Status.ActiveDB.DbState != persistancev1.Ready ||
 			r.Input.SharedDBHost || *dbClaim.Spec.UseExistingSource || dbClaim.Spec.SourceDataFrom != nil {
 			return M_NotSupported
 		}
