@@ -34,7 +34,10 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-require github.com/pmezard/go-difflib v1.0.0 // indirect
+require (
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
+)
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
