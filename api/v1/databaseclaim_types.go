@@ -221,8 +221,6 @@ type DatabaseClaimStatus struct {
 	//tracks status of DB migration. if empty, not started.
 	//non empty denotes migration in progress, unless it is S_Completed
 	MigrationState string `json:"migrationState,omitempty"`
-	// tracks the DB which is migrated and not more operational
-	OldDB Status `json:"oldDB,omitempty"`
 }
 
 type Status struct {
@@ -260,20 +258,16 @@ type Status struct {
 	// This field used when claim is use-existing-db and attempting to migrate to newdb
 	// +optional
 	SourceDataFrom *SourceDataFrom `json:"sourceDataFrom,omitempty"`
-
-	// Time at the process of post migration actions initiated
-	PostMigrationActionStartedAt *metav1.Time `json:"postMigrationActionStartedAt,omitempty"`
 }
 
 // DbState keeps track of state of the DB.
 type DbState string
 
 const (
-	Ready                   DbState = "ready"
-	InProgress              DbState = "in-progress"
-	UsingExistingDB         DbState = "using-existing-db"
-	UsingSharedHost         DbState = "using-shared-host"
-	PostMigrationInProgress DbState = "post-migration-in-progress"
+	Ready           DbState = "ready"
+	InProgress      DbState = "in-progress"
+	UsingExistingDB DbState = "using-existing-db"
+	UsingSharedHost DbState = "using-shared-host"
 )
 
 type DatabaseClaimConnectionInfo struct {
