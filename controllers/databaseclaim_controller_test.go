@@ -1726,7 +1726,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						ActiveDB: persistancev1.Status{
 							DbState: persistancev1.Ready,
 						},
-						OldDB: persistancev1.Status{
+						OldDB: persistancev1.StatusForOldDB{
 							DbState:        persistancev1.PostMigrationInProgress,
 							Type:           "aurora-postgres",
 							DBVersion:      "13.11",
@@ -1766,7 +1766,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						ActiveDB: persistancev1.Status{
 							DbState: persistancev1.Ready,
 						},
-						OldDB: persistancev1.Status{
+						OldDB: persistancev1.StatusForOldDB{
 							DbState:      persistancev1.PostMigrationInProgress,
 							Type:         "aurora-postgres",
 							DBVersion:    "13.11",
@@ -1805,7 +1805,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						ActiveDB: persistancev1.Status{
 							DbState: persistancev1.Ready,
 						},
-						OldDB: persistancev1.Status{
+						OldDB: persistancev1.StatusForOldDB{
 							DbState:      persistancev1.PostMigrationInProgress,
 							Type:         "aurora-postgres",
 							DBVersion:    "13.11",
@@ -1845,7 +1845,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						ActiveDB: persistancev1.Status{
 							DbState: persistancev1.Ready,
 						},
-						OldDB: persistancev1.Status{
+						OldDB: persistancev1.StatusForOldDB{
 							DbState:      persistancev1.PostMigrationInProgress,
 							Type:         "aurora-postgres",
 							DBVersion:    "13.11",
@@ -1884,7 +1884,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 						ActiveDB: persistancev1.Status{
 							DbState: persistancev1.Ready,
 						},
-						OldDB: persistancev1.Status{
+						OldDB: persistancev1.StatusForOldDB{
 							DbState:      persistancev1.PostMigrationInProgress,
 							Type:         "aurora-postgres",
 							DBVersion:    "13.11",
@@ -1976,6 +1976,83 @@ func TestDatabaseClaimReconciler_BackupPolicy(t *testing.T) {
 				t.Errorf("configureBackupPolicy() got = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMakeDeepCopyToOldDB(t *testing.T) {
+	testSuite := []struct {
+		inputStatus         *persistancev1.Status
+		expectedOldDbStatus *persistancev1.StatusForOldDB
+	}{
+		{
+			inputStatus: &persistancev1.Status{
+				ConnectionInfo: nil,
+				DBVersion:      "v1",
+				Shape:          "t2",
+				DbState:        "ready",
+				Type:           "11",
+				MinStorageGB:   0,
+			},
+			expectedOldDbStatus: &persistancev1.StatusForOldDB{
+				ConnectionInfo: nil,
+				DBVersion:      "v1",
+				Shape:          "t2",
+				Type:           "11",
+				DbState:        "ready",
+				MinStorageGB:   0,
+			},
+		},
+		{
+			inputStatus: &persistancev1.Status{
+				ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
+				DBVersion:      "v1",
+				Shape:          "t2",
+				DbState:        "ready",
+				Type:           "11",
+				MinStorageGB:   0,
+			},
+			expectedOldDbStatus: &persistancev1.StatusForOldDB{
+				ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{},
+				DBVersion:      "v1",
+				Shape:          "t2",
+				Type:           "11",
+				DbState:        "ready",
+				MinStorageGB:   0,
+			},
+		},
+		{
+			inputStatus: &persistancev1.Status{
+				ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+					Host: "host1",
+				},
+				DBVersion:    "v1",
+				Shape:        "t2",
+				DbState:      "ready",
+				Type:         "11",
+				MinStorageGB: 0,
+			},
+			expectedOldDbStatus: &persistancev1.StatusForOldDB{
+				ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+					Host: "host1",
+				},
+				DBVersion:    "v1",
+				Shape:        "t2",
+				Type:         "11",
+				DbState:      "ready",
+				MinStorageGB: 0,
+			},
+		},
+	}
+
+	for _, test := range testSuite {
+		out := &persistancev1.StatusForOldDB{}
+		MakeDeepCopyToOldDB(out, test.inputStatus)
+
+		assert.Equal(t, test.expectedOldDbStatus.DBVersion, out.DBVersion)
+		assert.Equal(t, test.expectedOldDbStatus.Shape, out.Shape)
+		assert.Equal(t, test.expectedOldDbStatus.Type, out.Type)
+		assert.Equal(t, test.expectedOldDbStatus.MinStorageGB, out.MinStorageGB)
+		assert.Equal(t, test.expectedOldDbStatus.ConnectionInfo, out.ConnectionInfo)
 	}
 }
 
