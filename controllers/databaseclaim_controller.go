@@ -443,7 +443,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			return r.manageError(ctx, dbClaim, err)
 		} else if !canTag {
 			logr.Info("Skipping post migration actions due to DB being used by other entities")
-			dbClaim.Status.OldDB = persistancev1.Status{}
+			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
 			return r.manageSuccess(ctx, dbClaim)
 		}
 
@@ -475,7 +475,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 				logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
 			}
 
-			dbClaim.Status.OldDB = persistancev1.Status{}
+			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
 		} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 5 {
 			// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
 			logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
@@ -487,7 +487,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 				logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
 			}
 
-			dbClaim.Status.OldDB = persistancev1.Status{}
+			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
 		}
 
 		return r.manageSuccess(ctx, dbClaim)
@@ -845,7 +845,9 @@ loop:
 
 	timenow := metav1.Now()
 
-	dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
+	dbClaim.Status.OldDB = persistancev1.StatusForOldDB{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+	//dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
+	MakeDeepCopyToOldDB(&dbClaim.Status.OldDB, &dbClaim.Status.ActiveDB)
 	dbClaim.Status.OldDB.DbState = persistancev1.PostMigrationInProgress
 	dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow
 
@@ -867,6 +869,13 @@ loop:
 	logr.Info("migration complete")
 
 	return r.manageSuccess(ctx, dbClaim)
+}
+
+func MakeDeepCopyToOldDB(to *persistancev1.StatusForOldDB, from *persistancev1.Status) {
+	to.ConnectionInfo = from.ConnectionInfo.DeepCopy()
+	to.DBVersion = from.DBVersion
+	to.Shape = from.Shape
+	to.Type = from.Type
 }
 
 func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) {

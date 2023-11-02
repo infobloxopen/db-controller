@@ -222,7 +222,30 @@ type DatabaseClaimStatus struct {
 	//non empty denotes migration in progress, unless it is S_Completed
 	MigrationState string `json:"migrationState,omitempty"`
 	// tracks the DB which is migrated and not more operational
-	OldDB Status `json:"oldDB,omitempty"`
+	OldDB StatusForOldDB `json:"oldDB,omitempty"`
+}
+
+type StatusForOldDB struct {
+	// Time the connection info was updated/created.
+	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo,omitempty"`
+
+	// Version of the provisioned Database
+	DBVersion string `json:"dbversion,omitempty"`
+
+	// The optional Shape values are arbitrary and help drive instance selection
+	Shape string `json:"shape,omitempty"`
+
+	// Specifies the type of database to provision. Only postgres is supported.
+	Type DatabaseType `json:"type,omitempty"`
+
+	// Time at the process of post migration actions initiated
+	PostMigrationActionStartedAt *metav1.Time `json:"postMigrationActionStartedAt,omitempty"`
+
+	// DbState of the DB. inprogress, "", ready
+	DbState DbState `json:"DbState,omitempty"`
+
+	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
+	MinStorageGB int `json:"minStorageGB,omitempty"`
 }
 
 type Status struct {
@@ -260,9 +283,6 @@ type Status struct {
 	// This field used when claim is use-existing-db and attempting to migrate to newdb
 	// +optional
 	SourceDataFrom *SourceDataFrom `json:"sourceDataFrom,omitempty"`
-
-	// Time at the process of post migration actions initiated
-	PostMigrationActionStartedAt *metav1.Time `json:"postMigrationActionStartedAt,omitempty"`
 }
 
 // DbState keeps track of state of the DB.
