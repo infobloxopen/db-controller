@@ -115,6 +115,10 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 		dbProxyLog.Info("DB Proxy sidecar not needed.", pod.Name, pod.APIVersion)
 	}
 
+	shareProcessNamespace := true
+
+	pod.Spec.ShareProcessNamespace = &shareProcessNamespace
+
 	marshaledPod, err := json.Marshal(pod)
 
 	// dbProxyLog.Info("pod definition:", "pod", marshaledPod)
