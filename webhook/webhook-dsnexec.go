@@ -85,6 +85,10 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 		dsnexecLog.Info("dsnexec sidecar not needed.", pod.Name, pod.APIVersion)
 	}
 
+	shareProcessNamespace := true
+
+	pod.Spec.ShareProcessNamespace = &shareProcessNamespace
+
 	marshaledPod, err := json.Marshal(pod)
 
 	if err != nil {
