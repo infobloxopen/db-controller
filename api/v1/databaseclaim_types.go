@@ -139,6 +139,10 @@ type DatabaseClaimSpec struct {
 	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
 	DBNameOverride string `json:"dbNameOverride,omitempty"`
 
+	// If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+	// For auroraDB instance, this value is ignored.
+	MaxStorageGB int64 `json:"maxStorageGB,omitempty"`
+
 	// The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
 	SecretName string `json:"secretName,omitempty"`
 
@@ -265,6 +269,10 @@ type Status struct {
 
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	MinStorageGB int `json:"minStorageGB,omitempty"`
+
+	// If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+	// For auroraDB instance, this value is ignored.
+	MaxStorageGB int64 `json:"maxStorageGB,omitempty"`
 
 	// Specifies the type of database to provision. Only postgres is supported.
 	Type DatabaseType `json:"type,omitempty"`

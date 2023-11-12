@@ -101,6 +101,12 @@ spec:
                 description: The matching fragment key name of the database instance
                   that will host the database.
                 type: string
+              maxStorageGB:
+                description: If provided, marks auto storage scalling to true for
+                  postgres DBinstance. The value represents the maximum allowed storage
+                  to scale upto. For auroraDB instance, this value is ignored.
+                format: int64
+                type: integer
               minStorageGB:
                 description: The optional MinStorageGB value requests the minimum
                   database host storage capacity in GBytes
@@ -272,6 +278,13 @@ spec:
                     description: The name of the label that was successfully matched
                       against the fragment key names in the db-controller configMap
                     type: string
+                  maxStorageGB:
+                    description: If provided, marks auto storage scalling to true
+                      for postgres DBinstance. The value represents the maximum allowed
+                      storage to scale upto. For auroraDB instance, this value is
+                      ignored.
+                    format: int64
+                    type: integer
                   minStorageGB:
                     description: The optional MinStorageGB value requests the minimum
                       database host storage capacity in GBytes
@@ -409,6 +422,13 @@ spec:
                     description: The name of the label that was successfully matched
                       against the fragment key names in the db-controller configMap
                     type: string
+                  maxStorageGB:
+                    description: If provided, marks auto storage scalling to true
+                      for postgres DBinstance. The value represents the maximum allowed
+                      storage to scale upto. For auroraDB instance, this value is
+                      ignored.
+                    format: int64
+                    type: integer
                   minStorageGB:
                     description: The optional MinStorageGB value requests the minimum
                       database host storage capacity in GBytes
