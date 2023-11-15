@@ -843,13 +843,14 @@ loop:
 	}
 	dbClaim.Status.MigrationState = pgctl.S_Completed.String()
 
-	timenow := metav1.Now()
-
-	dbClaim.Status.OldDB = persistancev1.StatusForOldDB{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-	//dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
-	MakeDeepCopyToOldDB(&dbClaim.Status.OldDB, &dbClaim.Status.ActiveDB)
-	dbClaim.Status.OldDB.DbState = persistancev1.PostMigrationInProgress
-	dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow
+	if dbClaim.Status.ActiveDB.DbState != persistancev1.UsingExistingDB {
+		timenow := metav1.Now()
+		dbClaim.Status.OldDB = persistancev1.StatusForOldDB{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
+		//dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
+		MakeDeepCopyToOldDB(&dbClaim.Status.OldDB, &dbClaim.Status.ActiveDB)
+		dbClaim.Status.OldDB.DbState = persistancev1.PostMigrationInProgress
+		dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow
+	}
 
 	//done with migration- switch active server to newDB
 	dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
