@@ -83,6 +83,7 @@ const (
 
 	operationalStatusTagKey        string = "operational-status"
 	operationalStatusInactiveValue string = "inactive"
+	operationalStatusActiveValue   string = "active"
 )
 
 type ModeEnum int
@@ -2387,6 +2388,12 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+	operationalTagKey := operationalStatusTagKey
+	operationalValue := operationalStatusActiveValue
+	dbInstance.Spec.ForProvider.Tags = append(dbInstance.Spec.ForProvider.Tags, &crossplanerds.Tag{
+		Key:   &operationalTagKey,
+		Value: &operationalValue,
+	})
 	if dbClaim.Spec.Type == defaultPostgresStr {
 		multiAZ := r.getMultiAZEnabled()
 		params := &r.Input.HostParams
