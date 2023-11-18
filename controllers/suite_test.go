@@ -48,6 +48,11 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 
+var e2e_cfg *rest.Config
+var e2e_k8sClient client.Client
+var e2e_testEnv *envtest.Environment
+var trueVal = true
+
 var controllerConfig = []byte(`
     authSource: "secret"
     passwordConfig:

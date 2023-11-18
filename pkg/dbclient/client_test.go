@@ -2,6 +2,7 @@ package dbclient
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -17,6 +18,19 @@ const succeed = "\u2713"
 const failed = "\u2717"
 
 var sqlDB *sql.DB
+
+// The following gingo struct and associted init() is required to run go test with ginkgo related flags
+// Since this test is not using ginkgo, this is a hack to get around the issue of go test complaining about
+// unknown flags.
+var ginkgo struct {
+	dry_run      string
+	label_filter string
+}
+
+func init() {
+	flag.StringVar(&ginkgo.dry_run, "ginkgo.dry-run", "", "Ignore this flag")
+	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
+}
 
 type testDB struct {
 	t        *testing.T
