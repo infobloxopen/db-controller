@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,9 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
 const (
@@ -139,14 +137,14 @@ func (r *DbRoleClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DbRoleClaim{}).
 		Watches(
-			&source.Kind{Type: &persistancev1.DatabaseClaim{}},
+			client.Object(&persistancev1.DatabaseClaim{}),
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForDatabaseClaim),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Complete(r)
 }
 
-func (r *DbRoleClaimReconciler) findObjectsForDatabaseClaim(databaseClaim client.Object) []reconcile.Request {
+func (r *DbRoleClaimReconciler) findObjectsForDatabaseClaim(ctx context.Context, databaseClaim client.Object) []reconcile.Request {
 	associatedDbRoleClaims := &persistancev1.DbRoleClaimList{}
 	listOps := &client.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector(dbClaimField, databaseClaim.GetName()),
