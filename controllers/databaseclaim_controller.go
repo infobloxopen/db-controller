@@ -74,8 +74,6 @@ const (
 	masterSecretSuffix       = "-master"
 	masterPasswordKey        = "password"
 	ErrMaxNameLen            = Error("dbclaim name is too long. max length is 44 characters")
-	ErrMaxStorageReduced     = Error("reducing .spec.MaxStorageGB value is not allowed")
-	ErrMaxStorageLesser      = Error(".spec.MaxStorageGB should always be greater or equel to spec.minStorageGB")
 	// InfoLevel is used to set V level to 0 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	InfoLevel = 0
@@ -245,12 +243,6 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	return M_UseNewDB
 }
 
-// checkIfMaxStorageReduced checks if the MaxStorageGB has been reduced or disabled compared to earlier state.
-// This can be done by comparing it with MaxStorageGB in the status.
-func (r *DatabaseClaimReconciler) checkIfMaxStorageReduced(dbClaim *persistancev1.DatabaseClaim) bool {
-	return r.Input.HostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB || r.Input.HostParams.MaxStorageGB < dbClaim.Status.NewDB.MaxStorageGB
-}
-
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
@@ -336,22 +328,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
 	}
 
-	if hostParams.Engine == defaultPostgresStr {
-		if r.checkIfMaxStorageReduced(dbClaim) {
-			// if MaxStorageGB was present in earlier state, and now is being reduced or removed. This Should throw an error
-			return ErrMaxStorageReduced
-		} else if r.Input.HostParams.MaxStorageGB == 0 {
-			// If MaxStorageGB is currently not present or zero, and  it was not present earlier as well, then we assign MinStorageGB value to it
-			// marking autoStorageScalling as disabled
-			r.Input.HostParams.MaxStorageGB = int64(r.Input.HostParams.MinStorageGB)
-		} else if r.Input.HostParams.MaxStorageGB != 0 {
-			if r.Input.HostParams.MaxStorageGB < int64(r.Input.HostParams.MinStorageGB) {
-				// If MaxStorageGB is being provided, but it is lasser than minStorage, This should not be allowed.
-				return ErrMaxStorageLesser
-			}
-		}
-	}
-
 	logr.V(DebugLevel).Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
 }
@@ -387,7 +363,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.setReqInfo(&dbClaim); err != nil {
 		return r.manageError(ctx, &dbClaim, err)
 	}
-
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
@@ -693,9 +668,6 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		dbClaim.Status.NewDB = *dbClaim.Status.ActiveDB.DeepCopy()
 		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
-			if r.Input.HostParams.Engine == defaultPostgresStr {
-				dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
-			}
 		}
 	} else {
 		updateClusterStatus(&dbClaim.Status.NewDB, &r.Input.HostParams)
@@ -1905,12 +1877,11 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							EngineVersion:               &params.EngineVersion,
 						},
 						// Items from Claim and fragmentKey
-						Engine:              &params.Engine,
-						MultiAZ:             &multiAZ,
-						DBInstanceClass:     &params.Shape,
-						AllocatedStorage:    &ms64,
-						MaxAllocatedStorage: &params.MaxStorageGB,
-						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Engine:           &params.Engine,
+						MultiAZ:          &multiAZ,
+						DBInstanceClass:  &params.Shape,
+						AllocatedStorage: &ms64,
+						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
@@ -2421,7 +2392,6 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		params := &r.Input.HostParams
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
-		dbInstance.Spec.ForProvider.MaxAllocatedStorage = &params.MaxStorageGB
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
@@ -2713,9 +2683,6 @@ func updateClusterStatus(status *persistancev1.Status, hostParams *hostparams.Ho
 	status.Type = persistancev1.DatabaseType(hostParams.Engine)
 	status.Shape = hostParams.Shape
 	status.MinStorageGB = hostParams.MinStorageGB
-	if hostParams.Engine == defaultPostgresStr {
-		status.MaxStorageGB = hostParams.MaxStorageGB
-	}
 }
 
 func getServiceNamespace() (string, error) {
