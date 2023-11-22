@@ -28,7 +28,6 @@ func TestHostParams_Hash(t *testing.T) {
 	type fields struct {
 		Engine                          string
 		Shape                           string
-		InstanceClass                   string
 		MinStorageGB                    int
 		EngineVersion                   string
 		MasterUsername                  string
@@ -50,7 +49,6 @@ func TestHostParams_Hash(t *testing.T) {
 		{name: "test_Execute_ok", want: "d391a72a",
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
@@ -58,7 +56,6 @@ func TestHostParams_Hash(t *testing.T) {
 		{name: "test_Execute_engine_change", want: "0cd64830",
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "13.11",
 			},
@@ -66,7 +63,6 @@ func TestHostParams_Hash(t *testing.T) {
 		{name: "test_Execute_shape_change", want: "ef75846d",
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t2.medium",
-				InstanceClass: "db.t2.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
@@ -74,15 +70,13 @@ func TestHostParams_Hash(t *testing.T) {
 		{name: "test_Execute_storage_change", want: "d391a72a",
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  21,
 				EngineVersion: "12.11",
 			},
 		},
 		{name: "test_Execute_aurora", want: "362c4cd6",
 			fields: fields{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium!io1",
-				InstanceClass: "db.t4g.medium",
+				Shape:         "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
@@ -91,7 +85,6 @@ func TestHostParams_Hash(t *testing.T) {
 		{name: "test_Execute_storage_change_aurora", want: "362c4cd6",
 			fields: fields{Engine: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20000,
 				EngineVersion: "12.11",
 			},
@@ -102,7 +95,6 @@ func TestHostParams_Hash(t *testing.T) {
 			p := &HostParams{
 				Engine:                          tt.fields.Engine,
 				Shape:                           tt.fields.Shape,
-				InstanceClass:                   tt.fields.InstanceClass,
 				MinStorageGB:                    tt.fields.MinStorageGB,
 				EngineVersion:                   tt.fields.EngineVersion,
 				MasterUsername:                  tt.fields.MasterUsername,
@@ -127,8 +119,6 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 	type fields struct {
 		Engine                          string
 		Shape                           string
-		InstanceClass                   string
-		StorageType                     string
 		MinStorageGB                    int
 		EngineVersion                   string
 		MasterUsername                  string
@@ -141,7 +131,6 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		isDefaultShape                  bool
 		isDefaultStorage                bool
 		isDefaultVersion                bool
-		isDefaultInstanceClass          bool
 	}
 	type args struct {
 		np *HostParams
@@ -155,13 +144,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{name: "shape-different", want: true,
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
 			args: args{np: &HostParams{Engine: "postgres",
 				Shape:         "db.t2.small",
-				InstanceClass: "db.t2.small",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
@@ -169,19 +156,15 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		},
 		{name: "shape-different-default-shape", want: false,
 			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-
-				MinStorageGB:           20,
-				EngineVersion:          "12.11",
-				isDefaultShape:         true,
-				isDefaultInstanceClass: true,
-				isDefaultStorage:       false,
-				isDefaultVersion:       false,
+				Shape:            "db.t4g.medium",
+				MinStorageGB:     20,
+				EngineVersion:    "12.11",
+				isDefaultShape:   true,
+				isDefaultStorage: false,
+				isDefaultVersion: false,
 			},
 			args: args{np: &HostParams{Engine: "postgres",
 				Shape:         "db.t2.small",
-				InstanceClass: "db.t2.small",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
@@ -189,20 +172,15 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		},
 		{name: "version-different", want: true,
 			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-
-				MinStorageGB:           20,
-				EngineVersion:          "12.11",
-				isDefaultShape:         false,
-				isDefaultInstanceClass: false,
-				isDefaultStorage:       false,
-				isDefaultVersion:       false,
+				Shape:            "db.t4g.medium",
+				MinStorageGB:     20,
+				EngineVersion:    "12.11",
+				isDefaultShape:   false,
+				isDefaultStorage: false,
+				isDefaultVersion: false,
 			},
 			args: args{np: &HostParams{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-
 				MinStorageGB:  20,
 				EngineVersion: "13.11",
 			},
@@ -210,18 +188,15 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		},
 		{name: "version-different-default-version", want: false,
 			fields: fields{Engine: "postgres",
-				Shape:                  "db.t4g.medium",
-				InstanceClass:          "db.t4g.medium",
-				MinStorageGB:           20,
-				EngineVersion:          "12.11",
-				isDefaultShape:         true,
-				isDefaultInstanceClass: true,
-				isDefaultStorage:       false,
-				isDefaultVersion:       true,
+				Shape:            "db.t4g.medium",
+				MinStorageGB:     20,
+				EngineVersion:    "12.11",
+				isDefaultShape:   true,
+				isDefaultStorage: false,
+				isDefaultVersion: true,
 			},
 			args: args{np: &HostParams{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "13.11",
 			},
@@ -230,13 +205,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{name: "engine-different", want: true,
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
 			args: args{np: &HostParams{Engine: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
@@ -245,14 +218,12 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{name: "storage-different-postgres", want: false,
 			fields: fields{Engine: "postgres",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
 			args: args{np: &HostParams{Engine: "postgres",
 				Shape:         "db.t4g.medium",
 				MinStorageGB:  200,
-				InstanceClass: "db.t4g.medium",
 				EngineVersion: "12.11",
 			},
 			},
@@ -260,32 +231,13 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{name: "storage-different-aurora", want: false,
 			fields: fields{Engine: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
 			},
 			args: args{np: &HostParams{Engine: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  200,
-				EngineVersion: "12.11",
-			},
-			},
-		},
-		{name: "storage-different-aurora-with-io-shape", want: false,
-			fields: fields{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium!io1",
-				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
-				StorageType:   "aurora-iopt1",
-			},
-			args: args{np: &HostParams{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  200,
-				EngineVersion: "12.11",
-				StorageType:   "aurora",
 			},
 			},
 		},
@@ -295,7 +247,6 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 			p := &HostParams{
 				Engine:                          tt.fields.Engine,
 				Shape:                           tt.fields.Shape,
-				InstanceClass:                   tt.fields.InstanceClass,
 				MinStorageGB:                    tt.fields.MinStorageGB,
 				EngineVersion:                   tt.fields.EngineVersion,
 				MasterUsername:                  tt.fields.MasterUsername,
@@ -308,7 +259,6 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 				isDefaultShape:                  tt.fields.isDefaultShape,
 				isDefaultStorage:                tt.fields.isDefaultStorage,
 				isDefaultVersion:                tt.fields.isDefaultVersion,
-				isDefaultInstanceClass:          tt.fields.isDefaultInstanceClass,
 			}
 			if got := p.IsUpgradeRequested(tt.args.np); got != tt.want {
 				t.Errorf("HostParams.IsUpgradeRequested() = %v, want %v", got, tt.want)
@@ -367,7 +317,6 @@ defaultShape: xyz
 defaultEngine: whocares
 defaultMinStorageGB: 42
 sample-connection:
-storageType: gp3
 `)
 
 func TestNew(t *testing.T) {
@@ -399,72 +348,9 @@ func TestNew(t *testing.T) {
 				Shape:         "db.t4g.medium",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
-				InstanceClass: "db.t4g.medium",
-				StorageType:   "aurora",
 			},
 			wantErr: false,
 		},
-		{
-			name: "fragmentKey_nil_aurora_with_io_ok",
-			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
-					Type:         "aurora-postgresql",
-					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium!io1",
-					MinStorageGB: 20,
-				}},
-			},
-			want: &HostParams{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium!io1",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-				InstanceClass: "db.t4g.medium",
-				StorageType:   "aurora-iopt1",
-			},
-			wantErr: false,
-		},
-		{
-			name: "fragmentKey_nil_postgres_ok",
-			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
-					Type:         "postgres",
-					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium",
-					MinStorageGB: 20,
-				}},
-			},
-			want: &HostParams{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-				InstanceClass: "db.t4g.medium",
-				StorageType:   "gp3",
-			},
-			wantErr: false,
-		},
-		{
-			name: "fragmentKey_nil_aurora_with_io_not_ok",
-			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
-					Type:         "aurora-postgresql",
-					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium!xxx",
-					MinStorageGB: 20,
-				}},
-			},
-			want:    &HostParams{},
-			wantErr: true,
-		},
-
 		{
 			name: "fragmentKey_set_use_default_ok",
 			args: args{
