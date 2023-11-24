@@ -95,8 +95,8 @@ var DefaultConfig = Config{
 			"memory": "128Mi",
 		},
 		"limits": {
-			"cpu":    "100m",
-			"memory": "128Mi",
+			"cpu":    "500m",
+			"memory": "512Mi",
 		},
 	},
 	Values: MustReadValues([]byte(`annotations:
