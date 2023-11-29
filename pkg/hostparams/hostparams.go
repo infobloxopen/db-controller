@@ -19,6 +19,7 @@ type HostParams struct {
 	Engine                          string
 	Shape                           string
 	MinStorageGB                    int
+	MaxStorageGB                    int64
 	EngineVersion                   string
 	MasterUsername                  string
 	SkipFinalSnapshotBeforeDeletion bool
@@ -96,6 +97,7 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 		hostParams.Shape = dbClaim.Spec.Shape
 		hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
 		port = dbClaim.Spec.Port
+		hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
 	} else {
 		hostParams.MasterUsername = config.GetString(fmt.Sprintf("%s::masterUsername", fragmentKey))
 		hostParams.Engine = config.GetString(fmt.Sprintf("%s::Engine", fragmentKey))
