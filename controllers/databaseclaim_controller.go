@@ -2429,6 +2429,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	if r.Input.BackupRetentionDays != 0 {
 		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &r.Input.BackupRetentionDays
 	}
+	dbCluster.Spec.ForProvider.StorageType = &r.Input.HostParams.StorageType
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)

@@ -166,32 +166,10 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 	// TODO - Enable IAM auth based on authSource config
 	hostParams.EnableIAMDatabaseAuthentication = false
 
-	if hostParams.Engine == defaultAuroraPostgresStr {
-		shapeParts := strings.Split(hostParams.Shape, shapeDelimiter)
-		hostParams.InstanceClass = shapeParts[INSTANCE_CLASS_INDEX]
-		if len(shapeParts) > STORAGE_TYPE_INDEX {
-			switch strings.ToLower(shapeParts[STORAGE_TYPE_INDEX]) {
-			case "io1":
-				hostParams.StorageType = "aurora-iopt1"
-			case "io-optimized":
-				hostParams.StorageType = "aurora-iopt1"
-			case "standard":
-				hostParams.StorageType = "aurora"
-			case "aurora":
-				hostParams.StorageType = "aurora"
-			default:
-				return &HostParams{}, fmt.Errorf("invalid shape")
-			}
-		} else {
-			hostParams.StorageType = "aurora"
-		}
-	}
-
-	if hostParams.Engine == defaultPostgresStr {
-		shapeParts := strings.Split(hostParams.Shape, shapeDelimiter)
-		hostParams.InstanceClass = shapeParts[INSTANCE_CLASS_INDEX]
-		// TODO - add support for custom storage type for postgres
-		hostParams.StorageType = config.GetString("storageType")
+	hostParams.InstanceClass = getInstanceClass(hostParams.Shape)
+	hostParams.StorageType, err = getStorageType(config, hostParams.Engine, hostParams.Shape)
+	if err != nil {
+		return &HostParams{}, err
 	}
 
 	return &hostParams, nil
@@ -204,7 +182,43 @@ func GetActiveHostParams(dbClaim *persistancev1.DatabaseClaim) *HostParams {
 	hostParams.Engine = string(dbClaim.Status.ActiveDB.Type)
 	hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
 	hostParams.Shape = dbClaim.Status.ActiveDB.Shape
+	hostParams.InstanceClass = getInstanceClass(hostParams.Shape)
 	hostParams.MinStorageGB = dbClaim.Status.ActiveDB.MinStorageGB
 
 	return &hostParams
+}
+
+func getInstanceClass(shape string) string {
+	shapeParts := strings.Split(shape, shapeDelimiter)
+	return shapeParts[INSTANCE_CLASS_INDEX]
+}
+
+func getStorageType(config *viper.Viper, engine string, shape string) (string, error) {
+	storageType := ""
+	if engine == defaultAuroraPostgresStr {
+		shapeParts := strings.Split(shape, shapeDelimiter)
+		if len(shapeParts) > STORAGE_TYPE_INDEX {
+			switch strings.ToLower(shapeParts[STORAGE_TYPE_INDEX]) {
+			case "io1":
+				storageType = "aurora-iopt1"
+			case "io-optimized":
+				storageType = "aurora-iopt1"
+			case "standard":
+				storageType = "aurora"
+			case "aurora":
+				storageType = "aurora"
+			case "":
+				storageType = "aurora"
+			default:
+				return "", fmt.Errorf("invalid shape")
+			}
+		} else {
+			storageType = "aurora"
+		}
+	} else {
+		// TODO - add support for custom storage type for postgres
+		storageType = config.GetString("storageType")
+	}
+
+	return storageType, nil
 }
