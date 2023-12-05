@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"strconv"
+	"strings"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -13,6 +14,10 @@ import (
 
 const (
 	defaultAuroraPostgresStr = "aurora-postgresql"
+	defaultPostgresStr       = "postgres"
+	shapeDelimiter           = "!"
+	INSTANCE_CLASS_INDEX     = 0
+	STORAGE_TYPE_INDEX       = 1
 )
 
 type HostParams struct {
@@ -21,6 +26,8 @@ type HostParams struct {
 	MinStorageGB                    int
 	EngineVersion                   string
 	MasterUsername                  string
+	InstanceClass                   string
+	StorageType                     string
 	SkipFinalSnapshotBeforeDeletion bool
 	PubliclyAccessible              bool
 	EnableIAMDatabaseAuthentication bool
@@ -28,12 +35,13 @@ type HostParams struct {
 	Port                            int64
 	isDefaultEngine                 bool
 	isDefaultShape                  bool
+	isDefaultInstanceClass          bool
 	isDefaultStorage                bool
 	isDefaultVersion                bool
 }
 
 func (p *HostParams) String() string {
-	return fmt.Sprintf("%s-%s-%s", p.Engine, p.Shape, p.EngineVersion)
+	return fmt.Sprintf("%s-%s-%s", p.Engine, p.InstanceClass, p.EngineVersion)
 }
 
 func (p *HostParams) Hash() string {
@@ -48,6 +56,15 @@ func (p *HostParams) HasShapeChanged(activeShape string) bool {
 		return false
 	}
 	return activeShape != p.Shape
+}
+
+func (p *HostParams) HasInstanceClassChanged(activeInstanceClass string) bool {
+	if p.isDefaultInstanceClass {
+		// request is for a "" shape
+		// default request should not trigger an upgrade
+		return false
+	}
+	return activeInstanceClass != p.InstanceClass
 }
 
 func (p *HostParams) HasStorageChanged(activeStorage int) bool {
@@ -77,9 +94,8 @@ func (p *HostParams) HasVersionChanged(activeVersion string) bool {
 
 func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 	return p.HasEngineChanged(np.Engine) ||
-		p.HasShapeChanged(np.Shape) ||
+		p.HasInstanceClassChanged(np.InstanceClass) ||
 		p.HasVersionChanged(np.EngineVersion)
-
 }
 
 func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (*HostParams, error) {
@@ -125,6 +141,7 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 
 	if hostParams.Shape == "" {
 		hostParams.isDefaultShape = true
+		hostParams.isDefaultInstanceClass = true
 		hostParams.Shape = config.GetString("defaultShape")
 	}
 
@@ -149,6 +166,12 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 	// TODO - Enable IAM auth based on authSource config
 	hostParams.EnableIAMDatabaseAuthentication = false
 
+	hostParams.InstanceClass = getInstanceClass(hostParams.Shape)
+	hostParams.StorageType, err = getStorageType(config, hostParams.Engine, hostParams.Shape)
+	if err != nil {
+		return &HostParams{}, err
+	}
+
 	return &hostParams, nil
 }
 
@@ -159,7 +182,43 @@ func GetActiveHostParams(dbClaim *persistancev1.DatabaseClaim) *HostParams {
 	hostParams.Engine = string(dbClaim.Status.ActiveDB.Type)
 	hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
 	hostParams.Shape = dbClaim.Status.ActiveDB.Shape
+	hostParams.InstanceClass = getInstanceClass(hostParams.Shape)
 	hostParams.MinStorageGB = dbClaim.Status.ActiveDB.MinStorageGB
 
 	return &hostParams
+}
+
+func getInstanceClass(shape string) string {
+	shapeParts := strings.Split(shape, shapeDelimiter)
+	return shapeParts[INSTANCE_CLASS_INDEX]
+}
+
+func getStorageType(config *viper.Viper, engine string, shape string) (string, error) {
+	storageType := ""
+	if engine == defaultAuroraPostgresStr {
+		shapeParts := strings.Split(shape, shapeDelimiter)
+		if len(shapeParts) > STORAGE_TYPE_INDEX {
+			switch strings.ToLower(shapeParts[STORAGE_TYPE_INDEX]) {
+			case "io1":
+				storageType = "aurora-iopt1"
+			case "io-optimized":
+				storageType = "aurora-iopt1"
+			case "standard":
+				storageType = "aurora"
+			case "aurora":
+				storageType = "aurora"
+			case "":
+				storageType = "aurora"
+			default:
+				return "", fmt.Errorf("invalid shape")
+			}
+		} else {
+			storageType = "aurora"
+		}
+	} else {
+		// TODO - add support for custom storage type for postgres
+		storageType = config.GetString("storageType")
+	}
+
+	return storageType, nil
 }

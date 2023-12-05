@@ -44,7 +44,7 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 			Skip(fmt.Sprintf("This test can only run in %s. Current context is %s", "box-3", "unable to read kubeconfig"))
 		}
 
-		if !strings.Contains(rawConfig.CurrentContext, "box-4") {
+		if !strings.Contains(rawConfig.CurrentContext, "box-3") {
 			Skip(fmt.Sprintf("This test can only run in %s. Current context is %s", "box-3", rawConfig.CurrentContext))
 		}
 		//	integration tests

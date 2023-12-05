@@ -1137,6 +1137,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					HostParams: hostparams.HostParams{Engine: "postgres",
 						EngineVersion: "12.11",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20}},
 			},
 			args{
@@ -1151,14 +1152,15 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 			"boxing-x-identity-dbclaim-name-d391a72a",
 		},
 		{
-			"OK",
+			"OK-aurora",
 			fields{
 				Config:             NewConfig(multiConfig),
 				DbIdentifierPrefix: "boxing-x",
 				Input: &input{FragmentKey: "athena",
 					HostParams: hostparams.HostParams{Engine: "aurora-postgresql",
 						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
+						Shape:         "db.t4g.medium!io1",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20}},
 			},
 			args{
@@ -1445,6 +1447,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1484,6 +1487,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1522,6 +1526,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 				Input: &input{HostParams: hostparams.HostParams{
 					Engine:        "postgres",
 					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  20,
 					EngineVersion: "12.11"},
 					SharedDBHost: false},
@@ -1561,6 +1566,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1602,6 +1608,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1645,6 +1652,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 				Input: &input{HostParams: hostparams.HostParams{
 					Engine:        "aurora-postgres",
 					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  20,
 					EngineVersion: "12.11",
 				},
@@ -1671,6 +1679,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1707,6 +1716,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1747,6 +1757,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1786,6 +1797,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1825,6 +1837,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1865,6 +1878,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
