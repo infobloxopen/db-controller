@@ -131,16 +131,11 @@ func main() {
 	ctlConfig := config.NewConfig(logger, configFile)
 	ctrl.SetLogger(logger)
 
-	webhookOptions := webhook.Options{
-		Port:    7443,
-		CertDir: "./certs",
-	}
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     fmt.Sprintf("%s:%d", metricsAddr, metricsPort),
 		HealthProbeBindAddress: fmt.Sprintf("%s:%d", probeAddr, probePort),
-		WebhookServer:          webhook.NewServer(webhookOptions),
+		Port:                   9443,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "32151587.atlas.infoblox.com",
 	})
@@ -185,6 +180,8 @@ func main() {
 
 	if enableDBProxyWebhook || enableDsnExecWebhook {
 		webHookServer := mgr.GetWebhookServer()
+		webHookServer.Port = 7443
+		webHookServer.CertDir = "./certs/"
 		if enableDBProxyWebhook {
 
 			cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)

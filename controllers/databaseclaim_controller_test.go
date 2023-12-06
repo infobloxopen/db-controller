@@ -1137,6 +1137,7 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 					HostParams: hostparams.HostParams{Engine: "postgres",
 						EngineVersion: "12.11",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20}},
 			},
 			args{
@@ -1151,14 +1152,15 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 			"boxing-x-identity-dbclaim-name-d391a72a",
 		},
 		{
-			"OK",
+			"OK-aurora",
 			fields{
 				Config:             NewConfig(multiConfig),
 				DbIdentifierPrefix: "boxing-x",
 				Input: &input{FragmentKey: "athena",
 					HostParams: hostparams.HostParams{Engine: "aurora-postgresql",
 						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
+						Shape:         "db.t4g.medium!io1",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20}},
 			},
 			args{
@@ -1191,97 +1193,6 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 		})
 	}
 }
-
-func TestCheckIfMaxStorageReduced(t *testing.T) {
-	testSuite := []struct {
-		testName string
-		r        *DatabaseClaimReconciler
-		dbc      *persistancev1.DatabaseClaim
-		expected bool
-	}{
-		{
-			testName: "OK",
-			r: &DatabaseClaimReconciler{
-				Input: &input{
-					HostParams: hostparams.HostParams{
-						MaxStorageGB: 100,
-					},
-				},
-			},
-			dbc: &persistancev1.DatabaseClaim{
-				Status: persistancev1.DatabaseClaimStatus{
-					ActiveDB: persistancev1.Status{
-						MaxStorageGB: 100,
-					},
-					NewDB: persistancev1.Status{
-						MaxStorageGB: 100,
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			testName: "OK",
-			r: &DatabaseClaimReconciler{
-				Input: &input{
-					HostParams: hostparams.HostParams{
-						MaxStorageGB: 200,
-					},
-				},
-			},
-			dbc: &persistancev1.DatabaseClaim{
-				Status: persistancev1.DatabaseClaimStatus{
-					ActiveDB: persistancev1.Status{
-						MaxStorageGB: 100,
-					},
-					NewDB: persistancev1.Status{
-						MaxStorageGB: 100,
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			testName: "MaxStorageGB reduced",
-			r: &DatabaseClaimReconciler{
-				Input: &input{
-					HostParams: hostparams.HostParams{
-						MaxStorageGB: 200,
-					},
-				},
-			},
-			dbc: &persistancev1.DatabaseClaim{
-				Status: persistancev1.DatabaseClaimStatus{
-					ActiveDB: persistancev1.Status{
-						MaxStorageGB: 300,
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			testName: "fresh dbc, no values provided",
-			r: &DatabaseClaimReconciler{
-				Input: &input{
-					HostParams: hostparams.HostParams{},
-				},
-			},
-			dbc: &persistancev1.DatabaseClaim{
-				Status: persistancev1.DatabaseClaimStatus{
-					ActiveDB: persistancev1.Status{},
-				},
-			},
-			expected: false,
-		},
-	}
-
-	for _, test := range testSuite {
-		if got := test.r.checkIfMaxStorageReduced(test.dbc); got != test.expected {
-			t.Errorf("checkIfMaxStorageReduced failed. test name = %v, expected = %v , got = %v ", test.testName, test.expected, got)
-		}
-	}
-}
-
 func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 	opts := zap.Options{
 		Development: true,
@@ -1301,11 +1212,10 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 		dbClaim *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
-		name             string
-		fields           fields
-		args             args
-		want             error
-		wantMaxStorageGB int
+		name   string
+		fields fields
+		args   args
+		want   error
 	}{
 		{
 			"OK",
@@ -1329,7 +1239,6 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 				},
 			},
 			nil,
-			20,
 		},
 		{
 			"Dbname too long",
@@ -1353,183 +1262,6 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 				},
 			},
 			ErrMaxNameLen,
-			20,
-		},
-		{
-			"MaxStorageGB reduced",
-			fields{
-				Config:             NewConfig(multiConfig),
-				Log:                zap.New(zap.UseFlagOptions(&opts)),
-				DbIdentifierPrefix: "boxing-x",
-				Input: &input{FragmentKey: "",
-					HostParams: hostparams.HostParams{Engine: "postgres",
-						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
-						MinStorageGB:  20}},
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
-					Spec: persistancev1.DatabaseClaimSpec{
-						AppID:                 "identity",
-						DatabaseName:          "identity",
-						EnableReplicationRole: &flse,
-						MaxStorageGB:          60},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{
-							MaxStorageGB: 100,
-						},
-					},
-				},
-			},
-			ErrMaxStorageReduced,
-			20,
-		},
-		{
-			"MaxStorageGB removed",
-			fields{
-				Config:             NewConfig(multiConfig),
-				Log:                zap.New(zap.UseFlagOptions(&opts)),
-				DbIdentifierPrefix: "boxing-x",
-				Input: &input{FragmentKey: "",
-					HostParams: hostparams.HostParams{Engine: "postgres",
-						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
-						MinStorageGB:  20}},
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
-					Spec: persistancev1.DatabaseClaimSpec{
-						AppID:                 "identity",
-						DatabaseName:          "identity",
-						EnableReplicationRole: &flse,
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{
-							MaxStorageGB: 100,
-						},
-					},
-				},
-			},
-			ErrMaxStorageReduced,
-			100,
-		},
-		{
-			"ok, MaxStorageGB stays same",
-			fields{
-				Config:             NewConfig(multiConfig),
-				Log:                zap.New(zap.UseFlagOptions(&opts)),
-				DbIdentifierPrefix: "boxing-x",
-				Input: &input{FragmentKey: "",
-					HostParams: hostparams.HostParams{Engine: "postgres",
-						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
-						MinStorageGB:  20}},
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
-					Spec: persistancev1.DatabaseClaimSpec{
-						AppID:                 "identity",
-						DatabaseName:          "identity",
-						EnableReplicationRole: &flse,
-						MaxStorageGB:          60},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{
-							MaxStorageGB: 60,
-						},
-					},
-				},
-			},
-			nil,
-			60,
-		},
-		{
-			"ok, MaxStorageGB increased ",
-			fields{
-				Config:             NewConfig(multiConfig),
-				Log:                zap.New(zap.UseFlagOptions(&opts)),
-				DbIdentifierPrefix: "boxing-x",
-				Input: &input{FragmentKey: "",
-					HostParams: hostparams.HostParams{Engine: "postgres",
-						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
-						MinStorageGB:  20}},
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
-					Spec: persistancev1.DatabaseClaimSpec{
-						AppID:                 "identity",
-						DatabaseName:          "identity",
-						EnableReplicationRole: &flse,
-						MaxStorageGB:          100},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{
-							MaxStorageGB: 60,
-						},
-					},
-				},
-			},
-			nil,
-			100,
-		},
-		{
-			"MaxStorageGB lesser",
-			fields{
-				Config:             NewConfig(multiConfig),
-				Log:                zap.New(zap.UseFlagOptions(&opts)),
-				DbIdentifierPrefix: "boxing-x",
-				Input: &input{FragmentKey: "",
-					HostParams: hostparams.HostParams{Engine: "postgres",
-						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
-					}},
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
-					Spec: persistancev1.DatabaseClaimSpec{
-						AppID:                 "identity",
-						DatabaseName:          "identity",
-						EnableReplicationRole: &flse,
-						MaxStorageGB:          10},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{},
-					},
-				},
-			},
-			ErrMaxStorageLesser,
-			10,
-		},
-		{
-			"ok",
-			fields{
-				Config:             NewConfig(multiConfig),
-				Log:                zap.New(zap.UseFlagOptions(&opts)),
-				DbIdentifierPrefix: "boxing-x",
-				Input: &input{FragmentKey: "",
-					HostParams: hostparams.HostParams{Engine: "postgres",
-						EngineVersion: "12.11",
-						Shape:         "db.t4g.medium",
-					}},
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					ObjectMeta: v1.ObjectMeta{Name: "44characterlengthname23456789012345678901234"},
-					Spec: persistancev1.DatabaseClaimSpec{
-						AppID:                 "identity",
-						DatabaseName:          "identity",
-						EnableReplicationRole: &flse,
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{},
-					},
-				},
-			},
-			nil,
-			20,
 		},
 	}
 	for _, tt := range tests {
@@ -1544,12 +1276,8 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 				Mode:               tt.fields.Mode,
 				Input:              tt.fields.Input,
 			}
-			got := r.setReqInfo(tt.args.dbClaim)
-			if got != tt.want {
+			if got := r.setReqInfo(tt.args.dbClaim); got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.setReqInfo() = %v, want %v", got, tt.want)
-			}
-			if got == nil && tt.wantMaxStorageGB != int(r.Input.HostParams.MaxStorageGB) {
-				t.Errorf("hostParams.MaxStorageGB = %v, want %v ", r.Input.HostParams.MaxStorageGB, tt.wantMaxStorageGB)
 			}
 		})
 	}
@@ -1719,6 +1447,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1758,6 +1487,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1796,6 +1526,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 				Input: &input{HostParams: hostparams.HostParams{
 					Engine:        "postgres",
 					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  20,
 					EngineVersion: "12.11"},
 					SharedDBHost: false},
@@ -1835,6 +1566,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1876,6 +1608,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1919,6 +1652,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 				Input: &input{HostParams: hostparams.HostParams{
 					Engine:        "aurora-postgres",
 					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  20,
 					EngineVersion: "12.11",
 				},
@@ -1945,6 +1679,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -1981,6 +1716,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -2021,6 +1757,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -2060,6 +1797,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -2099,6 +1837,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
@@ -2139,6 +1878,7 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 					HostParams: hostparams.HostParams{
 						Engine:        "aurora-postgres",
 						Shape:         "db.t4g.medium",
+						InstanceClass: "db.t4g.medium",
 						MinStorageGB:  20,
 						EngineVersion: "12.11",
 					},
