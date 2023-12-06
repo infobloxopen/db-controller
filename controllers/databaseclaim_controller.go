@@ -1900,7 +1900,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						// Items from Claim and fragmentKey
 						Engine:              &params.Engine,
 						MultiAZ:             &multiAZ,
-						DBInstanceClass:     &params.Shape,
+						DBInstanceClass:     &params.InstanceClass,
 						AllocatedStorage:    &ms64,
 						MaxAllocatedStorage: &params.MaxStorageGB,
 						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
