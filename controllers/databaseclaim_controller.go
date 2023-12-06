@@ -1782,6 +1782,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						MasterUsername:                  &params.MasterUsername,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 						StorageEncrypted:                &encryptStrg,
+						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
@@ -1863,7 +1864,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	ms64 := int64(params.MinStorageGB)
 	multiAZ := r.getMultiAZEnabled()
 	trueVal := true
-	storageType := r.Config.GetString("storageType")
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -1898,12 +1898,12 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							EngineVersion:               &params.EngineVersion,
 						},
 						// Items from Claim and fragmentKey
-						Engine:              &params.Engine,
-						MultiAZ:             &multiAZ,
-						DBInstanceClass:     &params.InstanceClass,
-						AllocatedStorage:    &ms64,
-						MaxAllocatedStorage: &params.MaxStorageGB,
-						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Engine:           &params.Engine,
+						MultiAZ:          &multiAZ,
+						DBInstanceClass:  &params.InstanceClass,
+						AllocatedStorage: &ms64,
+            MaxAllocatedStorage: &params.MaxStorageGB,
+						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
@@ -1912,7 +1912,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
 						BackupRetentionPeriod:           &r.Input.BackupRetentionDays,
 						StorageEncrypted:                &trueVal,
-						StorageType:                     &storageType,
+						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
@@ -2006,7 +2006,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBParameterGroupName: &pgName,
 						// Items from Claim and fragmentKey
 						Engine:          &params.Engine,
-						DBInstanceClass: &params.Shape,
+						DBInstanceClass: &params.InstanceClass,
 						Tags:            DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						PubliclyAccessible:          &params.PubliclyAccessible,
@@ -2452,6 +2452,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 	if r.Input.BackupRetentionDays != 0 {
 		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &r.Input.BackupRetentionDays
 	}
+	dbCluster.Spec.ForProvider.StorageType = &r.Input.HostParams.StorageType
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
