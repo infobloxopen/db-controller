@@ -245,12 +245,6 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	return M_UseNewDB
 }
 
-// checkIfMaxStorageReduced checks if the MaxStorageGB has been reduced or disabled compared to earlier state.
-// This can be done by comparing it with MaxStorageGB in the status.
-func (r *DatabaseClaimReconciler) checkIfMaxStorageReduced(dbClaim *persistancev1.DatabaseClaim) bool {
-	return r.Input.HostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB || r.Input.HostParams.MaxStorageGB < dbClaim.Status.NewDB.MaxStorageGB
-}
-
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
@@ -337,18 +331,17 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	}
 
 	if hostParams.Engine == defaultPostgresStr {
-		if r.checkIfMaxStorageReduced(dbClaim) {
-			// if MaxStorageGB was present in earlier state, and now is being reduced or removed. This Should throw an error
-			return ErrMaxStorageReduced
-		} else if r.Input.HostParams.MaxStorageGB == 0 {
-			// If MaxStorageGB is currently not present or zero, and  it was not present earlier as well, then we assign MinStorageGB value to it
-			// marking autoStorageScalling as disabled
+
+		if r.Input.HostParams.MaxStorageGB == 0 {
 			r.Input.HostParams.MaxStorageGB = int64(r.Input.HostParams.MinStorageGB)
-		} else if r.Input.HostParams.MaxStorageGB != 0 {
-			if r.Input.HostParams.MaxStorageGB < int64(r.Input.HostParams.MinStorageGB) {
-				// If MaxStorageGB is being provided, but it is lasser than minStorage, This should not be allowed.
-				return ErrMaxStorageLesser
-			}
+		}
+
+		if r.Input.HostParams.MaxStorageGB < int64(r.Input.HostParams.MinStorageGB) {
+			return ErrMaxStorageLesser
+		}
+
+		if r.Input.HostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB && dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
+			return ErrMaxStorageReduced
 		}
 	}
 
@@ -693,9 +686,9 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		dbClaim.Status.NewDB = *dbClaim.Status.ActiveDB.DeepCopy()
 		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
-			if r.Input.HostParams.Engine == defaultPostgresStr {
-				dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
-			}
+		}
+		if r.Input.HostParams.Engine == defaultPostgresStr && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
+			dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
 		}
 	} else {
 		updateClusterStatus(&dbClaim.Status.NewDB, &r.Input.HostParams)
