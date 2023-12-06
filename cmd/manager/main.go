@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
@@ -200,6 +201,7 @@ func main() {
 					Name:                 "DB Proxy",
 					Client:               mgr.GetClient(),
 					DBProxySidecarConfig: cfg,
+					Decoder:              admission.NewDecoder(mgr.GetScheme()),
 				},
 			})
 		}
@@ -219,6 +221,7 @@ func main() {
 					Name:                 "Dsnexec",
 					Client:               mgr.GetClient(),
 					DsnExecSidecarConfig: cfg,
+					Decoder:              admission.NewDecoder(mgr.GetScheme()),
 				},
 			})
 		}
