@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/controllers"
@@ -130,11 +131,16 @@ func main() {
 	ctlConfig := config.NewConfig(logger, configFile)
 	ctrl.SetLogger(logger)
 
+	webhookOptions := webhook.Options{
+		Port:    7443,
+		CertDir: "./certs",
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     fmt.Sprintf("%s:%d", metricsAddr, metricsPort),
 		HealthProbeBindAddress: fmt.Sprintf("%s:%d", probeAddr, probePort),
-		Port:                   9443,
+		WebhookServer:          webhook.NewServer(webhookOptions),
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "32151587.atlas.infoblox.com",
 	})
@@ -179,8 +185,6 @@ func main() {
 
 	if enableDBProxyWebhook || enableDsnExecWebhook {
 		webHookServer := mgr.GetWebhookServer()
-		webHookServer.Port = 7443
-		webHookServer.CertDir = "./certs/"
 		if enableDBProxyWebhook {
 
 			cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)
@@ -197,6 +201,7 @@ func main() {
 					Name:                 "DB Proxy",
 					Client:               mgr.GetClient(),
 					DBProxySidecarConfig: cfg,
+					Decoder:              admission.NewDecoder(mgr.GetScheme()),
 				},
 			})
 		}
@@ -216,6 +221,7 @@ func main() {
 					Name:                 "Dsnexec",
 					Client:               mgr.GetClient(),
 					DsnExecSidecarConfig: cfg,
+					Decoder:              admission.NewDecoder(mgr.GetScheme()),
 				},
 			})
 		}

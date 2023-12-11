@@ -17,7 +17,7 @@ import (
 type DsnExecInjector struct {
 	Name                 string
 	Client               client.Client
-	decoder              *admission.Decoder
+	Decoder              *admission.Decoder
 	DsnExecSidecarConfig *Config
 }
 
@@ -55,7 +55,7 @@ func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) admission.Response {
 	pod := &corev1.Pod{}
 
-	err := dbpi.decoder.Decode(req, pod)
+	err := dbpi.Decoder.Decode(req, pod)
 	if err != nil {
 		dsnexecLog.Info("Sdecar-Injector: cannot decode")
 		return admission.Errored(http.StatusBadRequest, err)
@@ -97,11 +97,4 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 	}
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
-}
-
-// DsnExecInjector implements admission.DecoderInjector.
-// InjectDecoder injects the decoder.
-func (dbpi *DsnExecInjector) InjectDecoder(d *admission.Decoder) error {
-	dbpi.decoder = d
-	return nil
 }
