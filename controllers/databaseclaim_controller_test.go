@@ -1294,7 +1294,7 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 					},
 				},
 			},
-			ErrMaxStorageReduced,
+			hostparams.ErrMaxStorageReduced,
 			20,
 		},
 		{
@@ -1324,7 +1324,7 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 					},
 				},
 			},
-			ErrMaxStorageReduced,
+			hostparams.ErrMaxStorageReduced,
 			100,
 		},
 		{
@@ -1412,7 +1412,7 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 					},
 				},
 			},
-			ErrMaxStorageLesser,
+			hostparams.ErrMaxStorageLesser,
 			10,
 		},
 		{
