@@ -74,8 +74,6 @@ const (
 	masterSecretSuffix       = "-master"
 	masterPasswordKey        = "password"
 	ErrMaxNameLen            = Error("dbclaim name is too long. max length is 44 characters")
-	ErrMaxStorageReduced     = Error("reducing .spec.MaxStorageGB value is not allowed")
-	ErrMaxStorageLesser      = Error(".spec.MaxStorageGB should always be greater or equel to spec.minStorageGB")
 	// InfoLevel is used to set V level to 0 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	InfoLevel = 0
@@ -328,21 +326,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		r.Input.EnableReplicationRole = false
 	} else {
 		r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
-	}
-
-	if hostParams.Engine == defaultPostgresStr {
-
-		if r.Input.HostParams.MaxStorageGB == 0 {
-			r.Input.HostParams.MaxStorageGB = int64(r.Input.HostParams.MinStorageGB)
-		}
-
-		if r.Input.HostParams.MaxStorageGB < int64(r.Input.HostParams.MinStorageGB) {
-			return ErrMaxStorageLesser
-		}
-
-		if r.Input.HostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB && dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
-			return ErrMaxStorageReduced
-		}
 	}
 
 	logr.V(DebugLevel).Info("setup values of ", "DatabaseClaimReconciler", r)

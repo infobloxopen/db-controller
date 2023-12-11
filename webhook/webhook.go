@@ -15,6 +15,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
+const (
+	// DebugLevel is used to set V level to 1 as suggested by official docs
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+	DebugLevel = 1
+)
+
 // DBProxyInjector annotates Pods
 type DBProxyInjector struct {
 	Name                 string
@@ -58,11 +64,11 @@ func dbProxySideCardInjectionRequired(pod *corev1.Pod) (bool, string) {
 	alreadyInjected, err := strconv.ParseBool(pod.Annotations["infoblox.com/dbproxy-injected"])
 
 	if err == nil && alreadyInjected {
-		dbProxyLog.Info("DB Proxy sidecar already injected: ", pod.Name, dbSecretPath)
+		dbProxyLog.V(DebugLevel).Info("DB Proxy sidecar already injected: ", pod.Name, dbSecretPath)
 		return false, dbSecretPath
 	}
 
-	dbProxyLog.Info("DB Proxy sidecar Injection required: ", pod.Name, dbSecretPath)
+	dbProxyLog.V(DebugLevel).Info("DB Proxy sidecar Injection required: ", pod.Name, dbSecretPath)
 
 	return true, dbSecretPath
 }
@@ -74,7 +80,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 
 	err := dbpi.Decoder.Decode(req, pod)
 	if err != nil {
-		dbProxyLog.Info("Sdecar-Injector: cannot decode")
+		dbProxyLog.Error(err, "Sdecar-Injector: cannot decode")
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
@@ -85,7 +91,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 	shoudInjectDBProxy, dbSecretPath := dbProxySideCardInjectionRequired(pod)
 
 	if shoudInjectDBProxy {
-		dbProxyLog.Info("Injecting sidecar...")
+		dbProxyLog.V(DebugLevel).Info("Injecting sidecar...")
 
 		f := func(c rune) bool {
 			return c == '/'
@@ -107,12 +113,12 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 
 			pod.Annotations["infoblox.com/dbproxy-injected"] = "true"
 
-			dbProxyLog.Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
+			dbProxyLog.V(DebugLevel).Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
 		} else {
 			dbProxyLog.Error(nil, "could not parse db secret path", "infoblox.com/db-secret-path", dbSecretPath)
 		}
 	} else {
-		dbProxyLog.Info("DB Proxy sidecar not needed.", pod.Name, pod.APIVersion)
+		dbProxyLog.V(DebugLevel).Info("DB Proxy sidecar not needed.", pod.Name, pod.APIVersion)
 	}
 
 	shareProcessNamespace := true
@@ -124,7 +130,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 	// dbProxyLog.Info("pod definition:", "pod", marshaledPod)
 
 	if err != nil {
-		dbProxyLog.Info("DB Proxy sidecar injection: cannot marshal")
+		dbProxyLog.Error(err, "DB Proxy sidecar injection: cannot marshal")
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
