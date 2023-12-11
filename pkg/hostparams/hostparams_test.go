@@ -545,6 +545,73 @@ func TestNew(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "maxStorage-less",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "postgres",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium!xxx",
+					MinStorageGB: 20,
+					MaxStorageGB: 10,
+				}},
+			},
+			want:    &HostParams{},
+			wantErr: true,
+		}, {
+			name: "maxStorage-reduced",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "postgres",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium!xxx",
+					MinStorageGB: 20,
+					MaxStorageGB: 30,
+				},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							MaxStorageGB: 40,
+						},
+					},
+				},
+			},
+			want:    &HostParams{},
+			wantErr: true,
+		}, {
+			name: "maxStorage_increased",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "postgres",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+					MaxStorageGB: 40,
+				}, Status: persistancev1.DatabaseClaimStatus{
+					ActiveDB: persistancev1.Status{
+						MaxStorageGB: 30,
+					},
+				}},
+			},
+			want: &HostParams{Engine: "postgres",
+				Shape:         "db.t4g.medium",
+				MinStorageGB:  20,
+				MaxStorageGB:  40,
+				EngineVersion: "12.11",
+				InstanceClass: "db.t4g.medium",
+				StorageType:   "gp3",
+				Port:          5432,
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

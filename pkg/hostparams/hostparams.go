@@ -12,18 +12,23 @@ import (
 	"github.com/spf13/viper"
 )
 
+type Error string
+
 const (
 	defaultAuroraPostgresStr = "aurora-postgresql"
 	defaultPostgresStr       = "postgres"
 	shapeDelimiter           = "!"
 	INSTANCE_CLASS_INDEX     = 0
 	STORAGE_TYPE_INDEX       = 1
+	ErrMaxStorageReduced     = Error("reducing .spec.MaxStorageGB value is not allowed")
+	ErrMaxStorageLesser      = Error(".spec.MaxStorageGB should always be greater or equel to spec.minStorageGB")
 )
 
 type HostParams struct {
 	Engine                          string
 	Shape                           string
 	MinStorageGB                    int
+	MaxStorageGB                    int64
 	EngineVersion                   string
 	MasterUsername                  string
 	InstanceClass                   string
@@ -39,6 +44,8 @@ type HostParams struct {
 	isDefaultStorage                bool
 	isDefaultVersion                bool
 }
+
+func (e Error) Error() string { return string(e) }
 
 func (p *HostParams) String() string {
 	return fmt.Sprintf("%s-%s-%s", p.Engine, p.InstanceClass, p.EngineVersion)
@@ -112,6 +119,7 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 		hostParams.Shape = dbClaim.Spec.Shape
 		hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
 		port = dbClaim.Spec.Port
+		hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
 	} else {
 		hostParams.MasterUsername = config.GetString(fmt.Sprintf("%s::masterUsername", fragmentKey))
 		hostParams.Engine = config.GetString(fmt.Sprintf("%s::Engine", fragmentKey))
@@ -170,6 +178,21 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 	hostParams.StorageType, err = getStorageType(config, hostParams.Engine, hostParams.Shape)
 	if err != nil {
 		return &HostParams{}, err
+	}
+
+	if hostParams.Engine == defaultPostgresStr {
+
+		if hostParams.MaxStorageGB == 0 {
+			hostParams.MaxStorageGB = int64(hostParams.MinStorageGB)
+		}
+
+		if hostParams.MaxStorageGB < int64(hostParams.MinStorageGB) {
+			return &HostParams{}, ErrMaxStorageLesser
+		}
+
+		if hostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB && dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
+			return &HostParams{}, ErrMaxStorageReduced
+		}
 	}
 
 	return &hostParams, nil
