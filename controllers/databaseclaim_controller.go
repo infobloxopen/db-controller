@@ -154,7 +154,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 
 	if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
 		if dbClaim.Status.OldDB.ConnectionInfo == nil || dbClaim.Status.ActiveDB.DbState != persistancev1.Ready ||
-			r.Input.SharedDBHost || *dbClaim.Spec.UseExistingSource || dbClaim.Spec.SourceDataFrom != nil {
+			r.Input.SharedDBHost {
 			return M_NotSupported
 		}
 	}
@@ -462,7 +462,15 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		} else if !canTag {
 			logr.Info("Skipping post migration actions due to DB being used by other entities")
 			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
-			return r.manageSuccess(ctx, dbClaim)
+			dbClaim.Status.Error = ""
+			if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
+			if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+				return ctrl.Result{Requeue: true}, nil
+			} else {
+				return ctrl.Result{RequeueAfter: time.Minute}, nil
+			}
 		}
 
 		// get name of DBInstance from connectionInfo
@@ -508,7 +516,15 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
 		}
 
-		return r.manageSuccess(ctx, dbClaim)
+		dbClaim.Status.Error = ""
+		if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{Requeue: true}, nil
+		} else {
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
 
 	}
 	if r.Mode == M_UseExistingDB {
@@ -1898,12 +1914,12 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							EngineVersion:               &params.EngineVersion,
 						},
 						// Items from Claim and fragmentKey
-						Engine:           &params.Engine,
-						MultiAZ:          &multiAZ,
-						DBInstanceClass:  &params.InstanceClass,
-						AllocatedStorage: &ms64,
-            MaxAllocatedStorage: &params.MaxStorageGB,
-						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Engine:              &params.Engine,
+						MultiAZ:             &multiAZ,
+						DBInstanceClass:     &params.InstanceClass,
+						AllocatedStorage:    &ms64,
+						MaxAllocatedStorage: &params.MaxStorageGB,
+						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
