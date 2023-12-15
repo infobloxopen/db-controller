@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -21,15 +22,17 @@ import (
 )
 
 const (
-	timeout  = time.Minute * 3
-	interval = time.Minute * 1
+	timeout  = time.Minute * 10
+	interval = time.Second * 30
 )
 
 var (
 	falseVal               = false
-	namespace              = "bjeevan"
-	newdbcName             = "new-db-test-dbclaim"
-	newdbcMasterSecretName = "box-3-new-db-test-dbclaim-1ec9b27c-master"
+	namespace              string
+	newdbcName             string
+	newdbcMasterSecretName string
+	db1                    string
+	db2                    string
 	ctx                    = context.Background()
 	// dBHostname             string
 )
@@ -41,6 +44,7 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 
 		rawConfig, err := kubeConfig.RawConfig()
 		if err != nil {
+			// if we can't read the kubeconfig, we can't run the test
 			Skip(fmt.Sprintf("This test can only run in %s. Current context is %s", "box-3", "unable to read kubeconfig"))
 		}
 
@@ -66,6 +70,15 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		e2e_k8sClient, err = client.New(e2e_cfg, client.Options{Scheme: scheme.Scheme})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(e2e_k8sClient).ToNot(BeNil())
+
+		data, err := os.ReadFile("../.id")
+		Expect(err).ToNot(HaveOccurred())
+		namespace = strings.TrimSpace(string(data)) + "-e2e"
+		newdbcName = namespace + "-db-1"
+		db1 = "box-3-" + newdbcName + "-1ec9b27c"
+		newdbcMasterSecretName = db1 + "-master"
+		db2 = namespace + "-db-2"
+		createNamespace()
 	})
 
 	logf.Log.Info("Starting test", "timeout", timeout, "interval", interval)
@@ -103,6 +116,23 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 	})
 
 	var _ = AfterAll(func() {
+		//delete master secret if it exists
+		By("deleting the master secret")
+		e2e_k8sClient.Delete(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      newdbcMasterSecretName,
+				Namespace: "db-controller",
+			},
+		})
+
+		//delete the namespace
+		By("deleting the namespace")
+		e2e_k8sClient.Delete(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		})
+
 		By("tearing down the test environment")
 		if e2e_testEnv != nil {
 			err := e2e_testEnv.Stop()
@@ -163,7 +193,7 @@ func MigratePostgresToAuroraRDS() {
 
 func MigrateUseExistingToNewRDS() {
 	key := types.NamespacedName{
-		Name:      "end2end-test-2-dbclaim",
+		Name:      db2,
 		Namespace: namespace,
 	}
 	existingDbClaim := &persistancev1.DatabaseClaim{}
@@ -194,7 +224,7 @@ func MigrateUseExistingToNewRDS() {
 
 func UseExistingPostgresRDSTest() {
 	key := types.NamespacedName{
-		Name:      "end2end-test-2-dbclaim",
+		Name:      db2,
 		Namespace: namespace,
 	}
 	dbClaim := &persistancev1.DatabaseClaim{
@@ -219,7 +249,7 @@ func UseExistingPostgresRDSTest() {
 			SourceDataFrom: &persistancev1.SourceDataFrom{
 				Type: persistancev1.SourceDataType("database"),
 				Database: &persistancev1.Database{
-					DSN: "postgres://root@box-3-new-db-test-dbclaim-1ec9b27c.cpwy0kesdxhx.us-east-1.rds.amazonaws.com:5432/sample_db?sslmode=require",
+					DSN: "postgres://root@" + db1 + ".cpwy0kesdxhx.us-east-1.rds.amazonaws.com:5432/sample_db?sslmode=require",
 					SecretRef: &persistancev1.SecretRef{
 						Name:      "existing-db-master-secret",
 						Namespace: namespace,
@@ -336,4 +366,13 @@ func createPostgresRDSTest() {
 	Eventually(func() error {
 		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
 	}, timeout, interval).Should(BeNil())
+}
+
+func createNamespace() {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+	e2e_k8sClient.Create(ctx, ns)
 }
