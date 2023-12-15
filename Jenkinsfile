@@ -26,17 +26,17 @@ pipeline {
     }
     stage("Run tests") {
       steps {
-      withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GitHub_PAT')]) {
-          sh "echo machine github.com login $GitHub_PAT > ~/.netrc"
-          sh "echo machine api.github.com login $GitHub_PAT >> ~/.netrc"
+        withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'GitHub_PAT')]) {
+            sh "echo machine github.com login $GitHub_PAT > ~/.netrc"
+            sh "echo machine api.github.com login $GitHub_PAT >> ~/.netrc"
         }
-		dir("$DIRECTORY") {
-		  sh "sudo apt-get update"
-		  sh "sudo apt-get -y install postgresql-client"
-		  sh "echo 'db-controller-name' > .id"
-		  sh "make test"
-		  sh "sudo apt-get -y remove postgresql-client"
-		}
+        dir("$DIRECTORY") {
+          sh "sudo apt-get update"
+          sh "sudo apt-get -y install postgresql-client"
+          sh "echo 'db-controller-name' > .id"
+          sh "make test"
+          sh "sudo apt-get -y remove postgresql-client"
+        }
       }
     }
     stage("Build db-controller image") {

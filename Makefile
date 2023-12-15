@@ -139,6 +139,9 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... --ginkgo.label-filter=!integration -coverprofile cover.out
 
+.PHONY: integration-test
+integration-test: manifests generate fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./controllers --ginkgo.label-filter=integration -coverprofile cover.out
 ##@ Build
 
 .PHONY: build
