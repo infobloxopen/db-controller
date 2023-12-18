@@ -5,7 +5,7 @@ IMAGE_NAME ?= db-controller
 DBPROXY_IMAGE_NAME ?= dbproxy
 DSNEXEC_IMAGE_NAME ?= dsnexec
 # commit tag info from git repo
-GIT_COMMIT	   := $(shell git describe --always || echo pre-commit)
+GIT_COMMIT	   := $(shell git describe --always --long --tags || echo pre-commit)
 # image tag
 TAG ?= ${GIT_COMMIT}
 # Image Path to use all building/pushing image targets
