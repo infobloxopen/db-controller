@@ -45,19 +45,23 @@ pipeline {
           sh """
             echo cicd > .id
             REGISTRY=infoblox make docker-build
+            REGISTRY=infoblox make docker-build-dbproxy
+            REGISTRY=infoblox make docker-build-dsnexec
           """
         }
       }
     }
-    stage("Push db-controller image") {
-      steps {
-        withDockerRegistry([credentialsId: "${env.JENKINS_DOCKER_CRED_ID}", url: ""]) {
-          dir("$DIRECTORY") {
-            sh "REGISTRY=infoblox make docker-push"
-          }
-        }
-      }
-    }
+    // stage("Push db-controller image") {
+    //   steps {
+    //     withDockerRegistry([credentialsId: "${env.JENKINS_DOCKER_CRED_ID}", url: ""]) {
+    //       dir("$DIRECTORY") {
+    //         sh "REGISTRY=infoblox make docker-push"
+    //         sh "REGISTRY=infoblox make docker-push-dbproxy"
+    //         sh "REGISTRY=infoblox make docker-push-dsnexec"
+    //       }
+    //     }
+    //   }
+    // }
     stage('Push charts') {
       steps {
         dir ("${WORKSPACE}/${DIRECTORY}") {
@@ -82,7 +86,12 @@ pipeline {
     success {
       dir("${WORKSPACE}/${DIRECTORY}") {
         // finalizeBuild is one of the Secure CICD helper methods
-        finalizeBuild('', getFileList("*.properties"))
+        finalizeBuild(
+          sh(
+              script: 'REGISTRY=infoblox make list-of-images',
+              returnStdout: true
+          ), getFileList("*.properties")
+        )
       }
     }
     cleanup {
