@@ -5,7 +5,7 @@ IMAGE_NAME ?= db-controller
 DBPROXY_IMAGE_NAME ?= dbproxy
 DSNEXEC_IMAGE_NAME ?= dsnexec
 # commit tag info from git repo
-GIT_COMMIT	   := $(shell git describe --always || echo pre-commit)
+GIT_COMMIT	   := $(shell git describe --always --long --tags || echo pre-commit)
 # image tag
 TAG ?= ${GIT_COMMIT}
 # Image Path to use all building/pushing image targets
@@ -361,3 +361,8 @@ deploy: .id docker-push build-chart
 
 undeploy: .id
 	helm delete --namespace `cat .id` `cat .id`-db-ctrl
+
+.PHONY: list-of-images
+list-of-images:
+    # @echo -n ${REGISTRY}/${DBPROXY_IMG_PATH}:${TAG} ${REGISTRY}/${DSNEXEC_IMG_PATH}:${TAG} ${REGISTRY}/${IMAGE_NAME}:${TAG}
+	@echo -n ${DBPROXY_IMG_PATH}:${TAG} ${DSNEXEC_IMG_PATH}:${TAG} ${IMG_PATH}:${TAG}
