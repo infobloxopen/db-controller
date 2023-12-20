@@ -78,17 +78,14 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 		pod.Spec.Containers = append(pod.Spec.Containers, dbpi.DsnExecSidecarConfig.Containers...)
 
 		pod.Annotations["infoblox.com/dsnexec-injected"] = "true"
+		shareProcessNamespace := true
+		pod.Spec.ShareProcessNamespace = &shareProcessNamespace
 
 		dsnexecLog.Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
 
 	} else {
 		dsnexecLog.Info("dsnexec sidecar not needed.", pod.Name, pod.APIVersion)
 	}
-
-	shareProcessNamespace := true
-
-	pod.Spec.ShareProcessNamespace = &shareProcessNamespace
-
 	marshaledPod, err := json.Marshal(pod)
 
 	if err != nil {
