@@ -313,6 +313,15 @@ CREATE OPERATOR CLASS soa_serial_number_ops DEFAULT FOR TYPE soa_serial_number
     FUNCTION 1 soa_serial_number_cmp( soa_serial_number, soa_serial_number
 );
 
+--UNLOGGED table
+CREATE UNLOGGED TABLE tab_11(
+    id int PRIMARY KEY,
+    name varchar
+);
+
+INSERT INTO tab_11
+    VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
+
 --CREATE publication mypub FOR ALL tables;
 /*create subscription mysub connection 'dbname=pub host=localhost user=bjeevan port=5433' publication mypub;
 
