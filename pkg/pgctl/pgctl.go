@@ -710,13 +710,15 @@ func (s *validate_migration_status_state) Execute() (State, error) {
 
 	allTableCountQ := `
 			WITH tbl AS (
-				SELECT table_schema, table_name 
-				FROM information_schema.tables t, pg_catalog.pg_tables pt
-				WHERE t.TABLE_NAME not like 'pg_%' 
+				SELECT table_schema, table_name
+				FROM information_schema.tables t, pg_catalog.pg_tables pt, pg_class cl
+				WHERE t.TABLE_NAME not like 'pg_%'
 					AND t.table_type = 'BASE TABLE'
 					AND t.table_schema = 'public'
 					AND t.table_name = pt.tablename
+					AND t.table_name = cl.relname
 					AND pt.tableowner != 'rdsadmin'
+					AND relpersistence != 'u'
 			) 
 			SELECT 	table_name, 
 					(xpath('/row/c/text()', 
@@ -742,7 +744,6 @@ func (s *validate_migration_status_state) Execute() (State, error) {
 			log.Error(err, "failed to query target table count - "+sourceTableName)
 			return nil, err
 		}
-
 		if targetTableCount < sourceTableCount {
 			deuce = false
 			log.Error(fmt.Errorf("warning: table count not matching"),
@@ -758,6 +759,10 @@ func (s *validate_migration_status_state) Execute() (State, error) {
 				"targetTableCount", targetTableCount,
 			)
 		}
+	}
+	if err = rows.Err(); err != nil {
+		log.Error(err, "failed to iterate over source table rows")
+		return nil, err
 	}
 	if deuce {
 		log.Info("completed")
