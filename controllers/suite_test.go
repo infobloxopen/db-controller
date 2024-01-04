@@ -73,7 +73,7 @@ var controllerConfig = []byte(`
       passwordSecretRef: another-connection-secret
 `)
 
-func TestAPIs(t *testing.T) {
+func TestIntegrations(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Controller Suite")
 }
