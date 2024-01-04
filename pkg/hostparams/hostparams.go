@@ -20,8 +20,8 @@ const (
 	shapeDelimiter           = "!"
 	INSTANCE_CLASS_INDEX     = 0
 	STORAGE_TYPE_INDEX       = 1
-	ErrMaxStorageReduced     = Error("reducing .spec.MaxStorageGB value is not allowed")
-	ErrMaxStorageLesser      = Error(".spec.MaxStorageGB should always be greater or equel to spec.minStorageGB")
+	ErrMaxStorageReduced     = Error("reducing .spec.MaxStorageGB value is not allowed (Also not spacifying maxStorageGB if specified earlier is not allowed.)")
+	ErrMaxStorageLesser      = Error(".spec.MaxStorageGB should always be greater than spec.minStorageGB")
 )
 
 type HostParams struct {
@@ -181,17 +181,14 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 	}
 
 	if hostParams.Engine == defaultPostgresStr {
-
 		if hostParams.MaxStorageGB == 0 {
-			hostParams.MaxStorageGB = int64(hostParams.MinStorageGB)
-		}
-
-		if hostParams.MaxStorageGB < int64(hostParams.MinStorageGB) {
-			return &HostParams{}, ErrMaxStorageLesser
-		}
-
-		if hostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB && dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
+			if dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
+				return &HostParams{}, ErrMaxStorageReduced
+			}
+		} else if hostParams.MaxStorageGB < dbClaim.Status.ActiveDB.MaxStorageGB {
 			return &HostParams{}, ErrMaxStorageReduced
+		} else if hostParams.MaxStorageGB <= int64(hostParams.MinStorageGB) {
+			return &HostParams{}, ErrMaxStorageLesser
 		}
 	}
 

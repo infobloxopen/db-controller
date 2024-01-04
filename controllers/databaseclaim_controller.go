@@ -1866,6 +1866,14 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
+	var maxStorageVal *int64
+
+	if params.MaxStorageGB == 0 {
+		maxStorageVal = nil
+	} else {
+		maxStorageVal = &params.MaxStorageGB
+	}
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
@@ -1901,7 +1909,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						MultiAZ:             &multiAZ,
 						DBInstanceClass:     &params.InstanceClass,
 						AllocatedStorage:    &ms64,
-						MaxAllocatedStorage: &params.MaxStorageGB,
+						MaxAllocatedStorage: maxStorageVal,
 						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
@@ -2408,12 +2416,21 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+
 	if dbClaim.Spec.Type == defaultPostgresStr {
 		multiAZ := r.getMultiAZEnabled()
 		params := &r.Input.HostParams
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
-		dbInstance.Spec.ForProvider.MaxAllocatedStorage = &params.MaxStorageGB
+
+		var maxStorageVal *int64
+		if params.MaxStorageGB == 0 {
+			maxStorageVal = nil
+		} else {
+			maxStorageVal = &params.MaxStorageGB
+		}
+
+		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
