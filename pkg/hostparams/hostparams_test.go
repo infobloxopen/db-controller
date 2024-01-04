@@ -611,6 +611,80 @@ func TestNew(t *testing.T) {
 				Port:          5432,
 			},
 			wantErr: false,
+		}, {
+			name: "maxStorage-equel-minStorage",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "postgres",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium!xxx",
+					MinStorageGB: 20,
+					MaxStorageGB: 20,
+				},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							MaxStorageGB: 0,
+						},
+					},
+				},
+			},
+			want:    &HostParams{},
+			wantErr: true,
+		},
+		{
+			name: "maxStorage-not-specified-freash-dbc",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "postgres",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							MaxStorageGB: 0,
+						},
+					},
+				},
+			},
+			want: &HostParams{Engine: "postgres",
+				Shape:         "db.t4g.medium",
+				MinStorageGB:  20,
+				MaxStorageGB:  0,
+				EngineVersion: "12.11",
+				InstanceClass: "db.t4g.medium",
+				StorageType:   "gp3",
+				Port:          5432,
+			},
+			wantErr: false,
+		},
+		{
+			name: "maxStorage-not-specified-after-enabled",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "postgres",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium!xxx",
+					MinStorageGB: 20,
+				},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							MaxStorageGB: 100,
+						},
+					},
+				},
+			},
+			want:    &HostParams{},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {

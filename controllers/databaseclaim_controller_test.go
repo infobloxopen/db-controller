@@ -1241,7 +1241,7 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 				},
 			},
 			nil,
-			20,
+			0,
 		},
 		{
 			"Dbname too long",
@@ -1265,7 +1265,7 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 				},
 			},
 			ErrMaxNameLen,
-			20,
+			0,
 		},
 		{
 			"MaxStorageGB reduced",
@@ -1441,7 +1441,7 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 				},
 			},
 			nil,
-			20,
+			0,
 		},
 	}
 	for _, tt := range tests {
