@@ -80,7 +80,7 @@ func (dbpi *DBProxyInjector) Handle(ctx context.Context, req admission.Request) 
 
 	err := dbpi.Decoder.Decode(req, pod)
 	if err != nil {
-		dbProxyLog.Error(err, "Sdecar-Injector: cannot decode")
+		dbProxyLog.Error(err, "Sidecar-Injector: cannot decode")
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
