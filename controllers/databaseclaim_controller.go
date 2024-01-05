@@ -152,7 +152,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 
 	if dbClaim.Status.OldDB.DbState == persistancev1.PostMigrationInProgress {
 		if dbClaim.Status.OldDB.ConnectionInfo == nil || dbClaim.Status.ActiveDB.DbState != persistancev1.Ready ||
-			r.Input.SharedDBHost || *dbClaim.Spec.UseExistingSource || dbClaim.Spec.SourceDataFrom != nil {
+			r.Input.SharedDBHost {
 			return M_NotSupported
 		}
 	}
@@ -363,6 +363,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.setReqInfo(&dbClaim); err != nil {
 		return r.manageError(ctx, &dbClaim, err)
 	}
+
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
@@ -444,7 +445,15 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		} else if !canTag {
 			logr.Info("Skipping post migration actions due to DB being used by other entities")
 			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
-			return r.manageSuccess(ctx, dbClaim)
+			dbClaim.Status.Error = ""
+			if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
+			if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+				return ctrl.Result{Requeue: true}, nil
+			} else {
+				return ctrl.Result{RequeueAfter: time.Minute}, nil
+			}
 		}
 
 		// get name of DBInstance from connectionInfo
@@ -490,7 +499,15 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
 		}
 
-		return r.manageSuccess(ctx, dbClaim)
+		dbClaim.Status.Error = ""
+		if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{Requeue: true}, nil
+		} else {
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
 
 	}
 	if r.Mode == M_UseExistingDB {
@@ -668,6 +685,9 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		dbClaim.Status.NewDB = *dbClaim.Status.ActiveDB.DeepCopy()
 		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
+		}
+		if r.Input.HostParams.Engine == defaultPostgresStr && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
+			dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
 		}
 	} else {
 		updateClusterStatus(&dbClaim.Status.NewDB, &r.Input.HostParams)
@@ -1846,6 +1866,14 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
+	var maxStorageVal *int64
+
+	if params.MaxStorageGB == 0 {
+		maxStorageVal = nil
+	} else {
+		maxStorageVal = &params.MaxStorageGB
+	}
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
@@ -1877,11 +1905,12 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							EngineVersion:               &params.EngineVersion,
 						},
 						// Items from Claim and fragmentKey
-						Engine:           &params.Engine,
-						MultiAZ:          &multiAZ,
-						DBInstanceClass:  &params.InstanceClass,
-						AllocatedStorage: &ms64,
-						Tags:             DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Engine:              &params.Engine,
+						MultiAZ:             &multiAZ,
+						DBInstanceClass:     &params.InstanceClass,
+						AllocatedStorage:    &ms64,
+						MaxAllocatedStorage: maxStorageVal,
+						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
@@ -2387,11 +2416,21 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+
 	if dbClaim.Spec.Type == defaultPostgresStr {
 		multiAZ := r.getMultiAZEnabled()
 		params := &r.Input.HostParams
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
+
+		var maxStorageVal *int64
+		if params.MaxStorageGB == 0 {
+			maxStorageVal = nil
+		} else {
+			maxStorageVal = &params.MaxStorageGB
+		}
+
+		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
@@ -2684,6 +2723,9 @@ func updateClusterStatus(status *persistancev1.Status, hostParams *hostparams.Ho
 	status.Type = persistancev1.DatabaseType(hostParams.Engine)
 	status.Shape = hostParams.Shape
 	status.MinStorageGB = hostParams.MinStorageGB
+	if hostParams.Engine == defaultPostgresStr {
+		status.MaxStorageGB = hostParams.MaxStorageGB
+	}
 }
 
 func getServiceNamespace() (string, error) {
