@@ -50,6 +50,15 @@ const (
 	S3Source       SourceDataType = "s3"
 )
 
+type DeletionPolicy string
+
+const (
+	// Delete the database instance when the resource is deleted.
+	Delete DeletionPolicy = "Delete"
+	// Retain the database instance when the resource is deleted.
+	Orphan DeletionPolicy = "Orphan"
+)
+
 // SourceDataFrom is a union object for specifying the initial state of a DB that should be used when provisioning a DatabaseClaim
 type SourceDataFrom struct {
 	// Type specifies the type of source
@@ -138,6 +147,12 @@ type DatabaseClaimSpec struct {
 
 	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
 	DBNameOverride string `json:"dbNameOverride,omitempty"`
+
+	// Specifies the type of deletion policy to use when the resource is deleted.
+	// It makes a lot of sense to not set it for most cases - this will default it to Orphan based on defaultDeletionPolicy in controllerConfig
+	// If you are setting it to Delete, you should be aware that the database will be deleted when the resource is deleted. Hope you know what you are doing.
+	// +optional
+	DeletionPolicy DeletionPolicy `json:"deletionPolicy,omitempty"`
 
 	// If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
 	// For auroraDB instance, this value is ignored.

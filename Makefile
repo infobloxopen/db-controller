@@ -141,7 +141,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 .PHONY: integration-test
 integration-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./controllers --ginkgo.label-filter=integration -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./controllers --ginkgo.label-filter=integration -timeout 0 -run ^TestIntegrations$  -coverprofile cover.out
 ##@ Build
 
 .PHONY: build

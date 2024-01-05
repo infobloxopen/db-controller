@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	timeout  = time.Minute * 10
-	interval = time.Second * 30
+	timeout_e2e  = time.Minute * 20
+	interval_e2e = time.Second * 30
 )
 
 var (
@@ -33,6 +33,7 @@ var (
 	newdbcMasterSecretName string
 	db1                    string
 	db2                    string
+	db3                    string
 	ctx                    = context.Background()
 	// dBHostname             string
 )
@@ -78,10 +79,11 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		db1 = "box-3-" + newdbcName + "-1ec9b27c"
 		newdbcMasterSecretName = db1 + "-master"
 		db2 = namespace + "-db-2"
+		db3 = namespace + "-db-3"
 		createNamespace()
 	})
 
-	logf.Log.Info("Starting test", "timeout", timeout, "interval", interval)
+	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
 	Context("Creating a Postgres RDS using a dbclaim ", func() {
 		It("should create a RDS in AWS", func() {
@@ -126,12 +128,12 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		})
 
 		//delete the namespace
-		By("deleting the namespace")
-		e2e_k8sClient.Delete(ctx, &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: namespace,
-			},
-		})
+		// By("deleting the namespace")
+		// e2e_k8sClient.Delete(ctx, &corev1.Namespace{
+		// 	ObjectMeta: metav1.ObjectMeta{
+		// 		Name: namespace,
+		// 	},
+		// })
 
 		By("tearing down the test environment")
 		if e2e_testEnv != nil {
@@ -143,7 +145,7 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 
 func MigratePostgresToAuroraRDS() {
 	key := types.NamespacedName{
-		Name:      "end2end-test-2-dbclaim",
+		Name:      db2,
 		Namespace: namespace,
 	}
 	type testState struct {
@@ -156,13 +158,13 @@ func MigratePostgresToAuroraRDS() {
 		MigrationState: "completed",
 		Type:           "aurora-postgresql",
 	}
-	existingDbClaim := &persistancev1.DatabaseClaim{}
+	db2Claim := &persistancev1.DatabaseClaim{}
 	By("Getting the existing dbclaim")
-	Expect(e2e_k8sClient.Get(ctx, key, existingDbClaim)).Should(Succeed())
+	Expect(e2e_k8sClient.Get(ctx, key, db2Claim)).Should(Succeed())
 	By("Updating type from postgres to aurora-postgresql in the claim")
-	existingDbClaim.Spec.Type = "aurora-postgresql"
-	Expect(e2e_k8sClient.Update(ctx, existingDbClaim)).Should(Succeed())
-	time.Sleep(time.Minute * 5)
+	db2Claim.Spec.Type = "aurora-postgresql"
+	Expect(e2e_k8sClient.Update(ctx, db2Claim)).Should(Succeed())
+	// time.Sleep(time.Minute * 5)
 	createdDbClaim := &persistancev1.DatabaseClaim{}
 	By("checking dbclaim status is ready")
 	By("checking dbclaim status type is aurora-postgresql")
@@ -177,10 +179,10 @@ func MigratePostgresToAuroraRDS() {
 			Type:           createdDbClaim.Status.ActiveDB.Type,
 		}
 		return currentState, nil
-	}, time.Minute*15, interval).Should(Equal(expectedState))
+	}, time.Minute*20, interval_e2e).Should(Equal(expectedState))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created")
-	//box-3-end2end-test-2-dbclaim-bb1e7196
+	//box-3-bjeevan-e2e-db-2-bb1e7196
 	Eventually(func() (string, error) {
 		secret := &corev1.Secret{}
 		err := e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, secret)
@@ -188,7 +190,7 @@ func MigratePostgresToAuroraRDS() {
 			return "", err
 		}
 		return string(secret.Data["hostname"]), nil
-	}, time.Minute*15, interval).Should(ContainSubstring("box-3-end2end-test-2-dbclaim-bb1e7196"))
+	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-bb1e7196"))
 }
 
 func MigrateUseExistingToNewRDS() {
@@ -212,13 +214,13 @@ func MigrateUseExistingToNewRDS() {
 			return "", err
 		}
 		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, time.Minute*15, interval).Should(Equal(persistancev1.Ready))
+	}, time.Minute*15, interval_e2e).Should(Equal(persistancev1.Ready))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created and host name contains 1ec9b27c")
 	//box-3-end2end-test-2-dbclaim-1ec9b27c
 	Eventually(func() error {
 		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, &corev1.Secret{})
-	}, time.Minute*15, interval).Should(BeNil())
+	}, time.Minute*15, interval_e2e).Should(BeNil())
 
 }
 
@@ -322,7 +324,7 @@ func deletePostgresRDSTest() {
 		} else {
 			return fmt.Errorf("dbclaim still exists")
 		}
-	}, timeout, time.Second*5).Should(Succeed())
+	}, timeout_e2e, time.Second*5).Should(Succeed())
 }
 
 func createPostgresRDSTest() {
@@ -361,11 +363,11 @@ func createPostgresRDSTest() {
 			return "", err
 		}
 		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, timeout, interval).Should(Equal(persistancev1.Ready))
+	}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
 	By("checking if the secret is created")
 	Eventually(func() error {
 		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
-	}, timeout, interval).Should(BeNil())
+	}, timeout_e2e, interval_e2e).Should(BeNil())
 }
 
 func createNamespace() {
