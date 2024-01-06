@@ -128,12 +128,12 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		})
 
 		//delete the namespace
-		// By("deleting the namespace")
-		// e2e_k8sClient.Delete(ctx, &corev1.Namespace{
-		// 	ObjectMeta: metav1.ObjectMeta{
-		// 		Name: namespace,
-		// 	},
-		// })
+		By("deleting the namespace")
+		e2e_k8sClient.Delete(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		})
 
 		By("tearing down the test environment")
 		if e2e_testEnv != nil {
