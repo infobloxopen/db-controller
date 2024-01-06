@@ -83,6 +83,7 @@ const (
 
 	operationalStatusTagKey        string = "operational-status"
 	operationalStatusInactiveValue string = "inactive"
+	operationalStatusActiveValue   string = "active"
 )
 
 type ModeEnum int
@@ -899,6 +900,21 @@ func MakeDeepCopyToOldDB(to *persistancev1.StatusForOldDB, from *persistancev1.S
 	to.Type = from.Type
 }
 
+func ReplaceOrAddTag(tags []*crossplanerds.Tag, key string, value string) []*crossplanerds.Tag {
+	for _, tag := range tags {
+		if *tag.Key == key {
+			if *tag.Value != value {
+				tag.Value = &value
+				return tags
+			} else {
+				return tags
+			}
+		}
+	}
+	tags = append(tags, &crossplanerds.Tag{Key: &key, Value: &value})
+	return tags
+}
+
 func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) {
 	dbParameterGroup := &crossplanerds.DBParameterGroup{}
 
@@ -921,13 +937,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.
 		if !operationalTagForProviderPresent {
 			patchDBParameterGroup := client.MergeFrom(dbParameterGroup.DeepCopy())
 
-			operationalTagKey := operationalStatusTagKey
-			operationalValue := operationalStatusInactiveValue
-
-			dbParameterGroup.Spec.ForProvider.Tags = append(dbParameterGroup.Spec.ForProvider.Tags, &crossplanerds.Tag{
-				Key:   &operationalTagKey,
-				Value: &operationalValue,
-			})
+			dbParameterGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbParameterGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
 
 			err := r.Client.Patch(ctx, dbParameterGroup, patchDBParameterGroup)
 			if err != nil {
@@ -959,13 +969,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx c
 		if !operationalTagForProviderPresent {
 			patchDBClusterParameterGroup := client.MergeFrom(dbClusterParamGroup.DeepCopy())
 
-			operationalTagKey := operationalStatusTagKey
-			operationalValue := operationalStatusInactiveValue
-
-			dbClusterParamGroup.Spec.ForProvider.Tags = append(dbClusterParamGroup.Spec.ForProvider.Tags, &crossplanerds.Tag{
-				Key:   &operationalTagKey,
-				Value: &operationalValue,
-			})
+			dbClusterParamGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbClusterParamGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
 
 			err := r.Client.Patch(ctx, dbClusterParamGroup, patchDBClusterParameterGroup)
 			if err != nil {
@@ -998,13 +1002,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Con
 		if !operationalTagForProviderPresent {
 			patchDBClusterParameterGroup := client.MergeFrom(dbCluster.DeepCopy())
 
-			operationalTagKey := operationalStatusTagKey
-			operationalValue := operationalStatusInactiveValue
-
-			dbCluster.Spec.ForProvider.Tags = append(dbCluster.Spec.ForProvider.Tags, &crossplanerds.Tag{
-				Key:   &operationalTagKey,
-				Value: &operationalValue,
-			})
+			dbCluster.Spec.ForProvider.Tags = ReplaceOrAddTag(dbCluster.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
 
 			err := r.Client.Patch(ctx, dbCluster, patchDBClusterParameterGroup)
 			if err != nil {
@@ -1045,13 +1043,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Co
 		if !operationalTagForProviderPresent {
 			patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 
-			operationalTagKey := operationalStatusTagKey
-			operationalValue := operationalStatusInactiveValue
-
-			dbInstance.Spec.ForProvider.Tags = append(dbInstance.Spec.ForProvider.Tags, &crossplanerds.Tag{
-				Key:   &operationalTagKey,
-				Value: &operationalValue,
-			})
+			dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(dbInstance.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
 
 			err := r.Client.Patch(ctx, dbInstance, patchDBInstance)
 			if err != nil {
@@ -1910,7 +1902,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 						DBInstanceClass:     &params.InstanceClass,
 						AllocatedStorage:    &ms64,
 						MaxAllocatedStorage: maxStorageVal,
-						Tags:                DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Tags:                ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
@@ -2014,7 +2006,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						// Items from Claim and fragmentKey
 						Engine:          &params.Engine,
 						DBInstanceClass: &params.InstanceClass,
-						Tags:            DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+						Tags:            ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
 						// Items from Config
 						PubliclyAccessible:          &params.PubliclyAccessible,
 						DBClusterIdentifier:         &dbClusterIdentifier,
@@ -2415,7 +2407,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
-	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
+	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
 
 	if dbClaim.Spec.Type == defaultPostgresStr {
 		multiAZ := r.getMultiAZEnabled()

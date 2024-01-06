@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -951,6 +952,136 @@ func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 				t.Errorf("getPasswordRotationTime() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func GetStringPointer(s string) *string {
+	return &s
+}
+
+func TestReplaceOrAddTag(t *testing.T) {
+
+	tests := []struct {
+		tags     []*crossplanerds.Tag
+		expected []*crossplanerds.Tag
+		key      string
+		value    string
+		name     string
+	}{
+		{
+			name: "key value not present",
+			tags: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("one"),
+					Value: GetStringPointer("oneVal"),
+				},
+				{
+					Key:   GetStringPointer("two"),
+					Value: GetStringPointer("twoVal"),
+				},
+			},
+			key:   "test",
+			value: "testVal",
+			expected: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("one"),
+					Value: GetStringPointer("oneVal"),
+				},
+				{
+					Key:   GetStringPointer("two"),
+					Value: GetStringPointer("twoVal"),
+				},
+				{
+					Key:   GetStringPointer("test"),
+					Value: GetStringPointer("testVal"),
+				},
+			},
+		},
+		{
+			name:  "key value not present when the array is empty",
+			tags:  []*crossplanerds.Tag{},
+			key:   "test",
+			value: "testVal",
+			expected: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("test"),
+					Value: GetStringPointer("testVal"),
+				},
+			},
+		},
+		{
+			name: "key present but  value is different",
+			tags: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("one"),
+					Value: GetStringPointer("oneVal"),
+				},
+				{
+					Key:   GetStringPointer("two"),
+					Value: GetStringPointer("twoVal"),
+				},
+				{
+					Key:   GetStringPointer("test"),
+					Value: GetStringPointer("testValWrong"),
+				},
+			},
+			key:   "test",
+			value: "testVal",
+			expected: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("one"),
+					Value: GetStringPointer("oneVal"),
+				},
+				{
+					Key:   GetStringPointer("two"),
+					Value: GetStringPointer("twoVal"),
+				},
+				{
+					Key:   GetStringPointer("test"),
+					Value: GetStringPointer("testVal"),
+				},
+			},
+		},
+		{
+			name: "key value present",
+			tags: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("one"),
+					Value: GetStringPointer("oneVal"),
+				},
+				{
+					Key:   GetStringPointer("two"),
+					Value: GetStringPointer("twoVal"),
+				},
+				{
+					Key:   GetStringPointer("test"),
+					Value: GetStringPointer("testVal"),
+				},
+			},
+			key:   "test",
+			value: "testVal",
+			expected: []*crossplanerds.Tag{
+				{
+					Key:   GetStringPointer("one"),
+					Value: GetStringPointer("oneVal"),
+				},
+				{
+					Key:   GetStringPointer("two"),
+					Value: GetStringPointer("twoVal"),
+				},
+				{
+					Key:   GetStringPointer("test"),
+					Value: GetStringPointer("testVal"),
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		updatedTags := ReplaceOrAddTag(test.tags, test.key, test.value)
+
+		assert.ElementsMatch(t, updatedTags, test.expected, "Tags should match")
+
 	}
 }
 
