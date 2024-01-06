@@ -486,7 +486,7 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 			}
 
 			dbClaim.Status.OldDB = persistancev1.StatusForOldDB{}
-		} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 5 {
+		} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
 			// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
 			logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
 
