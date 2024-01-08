@@ -8,6 +8,8 @@ import (
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/spf13/viper"
 )
@@ -114,6 +116,8 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 	hostParams := HostParams{}
 
 	if fragmentKey == "" {
+		hostParams.DeletionPolicy = xpv1.DeletionPolicy(
+			cases.Title(language.English, cases.Compact).String(string(dbClaim.Spec.DeletionPolicy)))
 		hostParams.Engine = string(dbClaim.Spec.Type)
 		hostParams.EngineVersion = dbClaim.Spec.DBVersion
 		hostParams.Shape = dbClaim.Spec.Shape
@@ -165,10 +169,12 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 
 	hostParams.SkipFinalSnapshotBeforeDeletion = config.GetBool("defaultSkipFinalSnapshotBeforeDeletion")
 	hostParams.PubliclyAccessible = config.GetBool("defaultPubliclyAccessible")
-	if config.GetString("defaultDeletionPolicy") == "delete" {
-		hostParams.DeletionPolicy = xpv1.DeletionDelete
-	} else {
-		hostParams.DeletionPolicy = xpv1.DeletionOrphan
+	if hostParams.DeletionPolicy == "" {
+		if config.GetString("defaultDeletionPolicy") == "delete" {
+			hostParams.DeletionPolicy = xpv1.DeletionDelete
+		} else {
+			hostParams.DeletionPolicy = xpv1.DeletionOrphan
+		}
 	}
 
 	// TODO - Enable IAM auth based on authSource config

@@ -2416,10 +2416,9 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
-
+	params := &r.Input.HostParams
 	if dbClaim.Spec.Type == defaultPostgresStr {
 		multiAZ := r.getMultiAZEnabled()
-		params := &r.Input.HostParams
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
 
@@ -2436,6 +2435,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	}
 	enablePerfInsight := r.Input.EnablePerfInsight
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
+	dbInstance.Spec.DeletionPolicy = params.DeletionPolicy
 
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
@@ -2469,6 +2469,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &r.Input.BackupRetentionDays
 	}
 	dbCluster.Spec.ForProvider.StorageType = &r.Input.HostParams.StorageType
+	dbCluster.Spec.DeletionPolicy = r.Input.HostParams.DeletionPolicy
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)

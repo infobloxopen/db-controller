@@ -433,6 +433,7 @@ defaultEngine: whocares
 defaultMinStorageGB: 42
 sample-connection:
 storageType: gp3
+defaultDeletionPolicy: orphan
 `)
 
 func TestNew(t *testing.T) {
@@ -696,6 +697,105 @@ func TestNew(t *testing.T) {
 			}
 			if got.String() != tt.want.String() {
 				t.Errorf("New() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func TestDeletionPolicy(t *testing.T) {
+	type args struct {
+		config      *viper.Viper
+		fragmentKey string
+		dbClaim     *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "test_default_deletion_policy",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "aurora-postgresql",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+			},
+			want: "Orphan",
+		},
+		{
+			name: "test_delete_deletion_policy",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:           "5432",
+					Type:           "aurora-postgresql",
+					DBVersion:      "12.11",
+					Shape:          "db.t4g.medium",
+					MinStorageGB:   20,
+					DeletionPolicy: "Delete",
+				}},
+			},
+			want: "Delete",
+		},
+		{
+			name: "test_orphan_deletion_policy",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:           "5432",
+					Type:           "postgres",
+					DBVersion:      "12.11",
+					Shape:          "db.t4g.medium",
+					MinStorageGB:   20,
+					DeletionPolicy: "Orphan",
+				}},
+			},
+			want: "Orphan",
+		},
+		{
+			name: "test_default_deletion_policy_with_fragment_key",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "sample-connection",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "aurora-postgresql",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+			},
+			want: "Orphan",
+		},
+		{
+			name: "test_delete_deletion_policy_with_fragment_key",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "sample-connection",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:           "5432",
+					Type:           "aurora-postgresql",
+					DBVersion:      "12.11",
+					Shape:          "db.t4g.medium",
+					MinStorageGB:   20,
+					DeletionPolicy: "Delete",
+				}},
+			},
+			want: "Orphan",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			if string(got.DeletionPolicy) != tt.want {
+				t.Errorf("DeletionPolicy = %v, want %v", got.DeletionPolicy, tt.want)
 			}
 		})
 	}
