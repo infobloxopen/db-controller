@@ -330,7 +330,7 @@ ${DB_CONTROLLER_CHART}-${CHART_VERSION}.tgz:
 
 build-chart: ${DB_CONTROLLER_CHART}-${CHART_VERSION}.tgz
 
-build-chart-crd: update_crds
+build-chart-crd: manifests
 	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
 
 

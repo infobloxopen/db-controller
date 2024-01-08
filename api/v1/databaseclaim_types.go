@@ -54,9 +54,9 @@ type DeletionPolicy string
 
 const (
 	// Delete the database instance when the resource is deleted.
-	Delete DeletionPolicy = "Delete"
+	DeleteDeletionPolicy DeletionPolicy = "Delete"
 	// Retain the database instance when the resource is deleted.
-	Orphan DeletionPolicy = "Orphan"
+	OrphanDeletionPolicy DeletionPolicy = "Orphan"
 )
 
 // SourceDataFrom is a union object for specifying the initial state of a DB that should be used when provisioning a DatabaseClaim
@@ -152,6 +152,7 @@ type DatabaseClaimSpec struct {
 	// It makes a lot of sense to not set it for most cases - this will default it to Orphan based on defaultDeletionPolicy in controllerConfig
 	// If you are setting it to Delete, you should be aware that the database will be deleted when the resource is deleted. Hope you know what you are doing.
 	// +optional
+	// +kubebuilder:validation:Enum=Delete;delete;Orphan;orphan
 	DeletionPolicy DeletionPolicy `json:"deletionPolicy,omitempty"`
 
 	// If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.

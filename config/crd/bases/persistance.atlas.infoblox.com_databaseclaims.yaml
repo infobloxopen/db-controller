@@ -85,6 +85,11 @@ spec:
                   in controllerConfig If you are setting it to Delete, you should
                   be aware that the database will be deleted when the resource is
                   deleted. Hope you know what you are doing.
+                enum:
+                - Delete
+                - delete
+                - Orphan
+                - orphan
                 type: string
               dsnName:
                 description: DSN key name.
