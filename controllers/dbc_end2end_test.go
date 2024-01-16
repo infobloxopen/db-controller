@@ -1,3 +1,17 @@
+/* This file contains end to end tests for db-controller. It tests the following scenarios
+* 1. Create a postgres RDS using a dbclaim
+* 2. Delete the dbclaim and associated dbinstances.crd
+* 3. Use existing RDS
+* 4. Migrate Use Existing RDS to a local RDS
+* 5. Migrate postgres RDS to Aurora RDS
+* The tests are run in box-3 cluster. The tests are skipped if the cluster is not box-3
+* It runs in the namespace specified in .id + e2e file in the root directory (eg: bjeevan-e2e)
+* The tests create RDS resources in AWS. The resources are cleaned up after the tests are complete.
+* At this time these tests can be run manually only using:
+* make integration-test
+*
+ */
+
 package controllers
 
 import (
@@ -29,9 +43,9 @@ const (
 var (
 	falseVal               = false
 	namespace              string
-	newdbcName             string
-	newdbcMasterSecretName string
 	db1                    string
+	newdbcMasterSecretName string
+	rds1                   string
 	db2                    string
 	db3                    string
 	ctx                    = context.Background()
@@ -75,11 +89,11 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		data, err := os.ReadFile("../.id")
 		Expect(err).ToNot(HaveOccurred())
 		namespace = strings.TrimSpace(string(data)) + "-e2e"
-		newdbcName = namespace + "-db-1"
-		db1 = "box-3-" + newdbcName + "-1ec9b27c"
-		newdbcMasterSecretName = db1 + "-master"
+		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
+		rds1 = "box-3-" + db1 + "-1ec9b27c"
+		newdbcMasterSecretName = rds1 + "-master"
 		createNamespace()
 	})
 
@@ -118,6 +132,18 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 	})
 
 	var _ = AfterAll(func() {
+		//delete
+		key := types.NamespacedName{
+			Name:      db2,
+			Namespace: namespace,
+		}
+		db2Claim := &persistancev1.DatabaseClaim{}
+		By("Getting the existing dbclaim")
+		e2e_k8sClient.Get(ctx, key, db2Claim)
+		e2e_k8sClient.Delete(ctx, db2Claim)
+
+		cleanupdb(db1)
+		cleanupdb(db2)
 		//delete master secret if it exists
 		By("deleting the master secret")
 		e2e_k8sClient.Delete(ctx, &corev1.Secret{
@@ -163,6 +189,7 @@ func MigratePostgresToAuroraRDS() {
 	Expect(e2e_k8sClient.Get(ctx, key, db2Claim)).Should(Succeed())
 	By("Updating type from postgres to aurora-postgresql in the claim")
 	db2Claim.Spec.Type = "aurora-postgresql"
+	// db2Claim.Spec.DeletionPolicy = "delete"
 	Expect(e2e_k8sClient.Update(ctx, db2Claim)).Should(Succeed())
 	// time.Sleep(time.Minute * 5)
 	createdDbClaim := &persistancev1.DatabaseClaim{}
@@ -205,7 +232,6 @@ func MigrateUseExistingToNewRDS() {
 	existingDbClaim.Spec.UseExistingSource = &falseVal
 	existingDbClaim.Spec.SourceDataFrom = nil
 	Expect(e2e_k8sClient.Update(ctx, existingDbClaim)).Should(Succeed())
-	time.Sleep(time.Minute * 5)
 	createdDbClaim := &persistancev1.DatabaseClaim{}
 	By("checking dbclaim status is ready")
 	Eventually(func() (persistancev1.DbState, error) {
@@ -214,13 +240,13 @@ func MigrateUseExistingToNewRDS() {
 			return "", err
 		}
 		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, time.Minute*15, interval_e2e).Should(Equal(persistancev1.Ready))
+	}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created and host name contains 1ec9b27c")
 	//box-3-end2end-test-2-dbclaim-1ec9b27c
 	Eventually(func() error {
 		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, &corev1.Secret{})
-	}, time.Minute*15, interval_e2e).Should(BeNil())
+	}, timeout_e2e, interval_e2e).Should(BeNil())
 
 }
 
@@ -248,10 +274,11 @@ func UseExistingPostgresRDSTest() {
 			EnableReplicationRole: &falseVal,
 			UseExistingSource:     &trueVal,
 			DBVersion:             "15.3",
+			DeletionPolicy:        "delete",
 			SourceDataFrom: &persistancev1.SourceDataFrom{
 				Type: persistancev1.SourceDataType("database"),
 				Database: &persistancev1.Database{
-					DSN: "postgres://root@" + db1 + ".cpwy0kesdxhx.us-east-1.rds.amazonaws.com:5432/sample_db?sslmode=require",
+					DSN: "postgres://root@" + rds1 + ".cpwy0kesdxhx.us-east-1.rds.amazonaws.com:5432/sample_db?sslmode=require",
 					SecretRef: &persistancev1.SecretRef{
 						Name:      "existing-db-master-secret",
 						Namespace: namespace,
@@ -304,7 +331,7 @@ func setupMasterSecretForExistingRDS() {
 
 func deletePostgresRDSTest() {
 	key := types.NamespacedName{
-		Name:      newdbcName,
+		Name:      db1,
 		Namespace: namespace,
 	}
 	prevDbClaim := &persistancev1.DatabaseClaim{}
@@ -329,7 +356,7 @@ func deletePostgresRDSTest() {
 
 func createPostgresRDSTest() {
 	key := types.NamespacedName{
-		Name:      newdbcName,
+		Name:      db1,
 		Namespace: namespace,
 	}
 	dbClaim := &persistancev1.DatabaseClaim{
@@ -368,6 +395,38 @@ func createPostgresRDSTest() {
 	Eventually(func() error {
 		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
 	}, timeout_e2e, interval_e2e).Should(BeNil())
+}
+
+func cleanupdb(db string) {
+	key := types.NamespacedName{
+		Name:      db,
+		Namespace: namespace,
+	}
+	dbClaim := &persistancev1.DatabaseClaim{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "persistance.atlas.infoblox.com/v1",
+			Kind:       "DatabaseClaim",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      key.Name,
+			Namespace: key.Namespace,
+		},
+		Spec: persistancev1.DatabaseClaimSpec{
+			AppID:                 "sample-app",
+			DatabaseName:          "sample_db",
+			SecretName:            "newdb-secret",
+			Username:              "sample_user",
+			Type:                  "postgres",
+			DSNName:               "dsn",
+			EnableReplicationRole: &falseVal,
+			UseExistingSource:     &falseVal,
+			DBVersion:             "15.3",
+			DeletionPolicy:        "delete",
+		},
+	}
+	e2e_k8sClient.Create(ctx, dbClaim)
+	time.Sleep(time.Minute * 1)
+	e2e_k8sClient.Delete(ctx, dbClaim)
 }
 
 func createNamespace() {
