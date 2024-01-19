@@ -48,8 +48,12 @@ var (
 	rds1                   string
 	db2                    string
 	db3                    string
+	dbcNamespace           string
 	ctx                    = context.Background()
-	// dBHostname             string
+	//set this class to default if you want to use the controller running db-controller namespace
+	//set it to you .id if you want to use the controller running in your namespace
+	class = "bjeevan"
+	// class = "default"
 )
 
 var _ = Describe("db-controller end to end testing", Label("integration"), Ordered, func() {
@@ -79,6 +83,12 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 
 		err = persistancev1.AddToScheme(scheme.Scheme)
 		Expect(err).NotTo(HaveOccurred())
+
+		if class == "default" {
+			dbcNamespace = "db-controller"
+		} else {
+			dbcNamespace = class
+		}
 
 		// +kubebuilder:scaffold:scheme
 
@@ -149,7 +159,7 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		e2e_k8sClient.Delete(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      newdbcMasterSecretName,
-				Namespace: "db-controller",
+				Namespace: dbcNamespace,
 			},
 		})
 
@@ -265,6 +275,7 @@ func UseExistingPostgresRDSTest() {
 			Namespace: key.Namespace,
 		},
 		Spec: persistancev1.DatabaseClaimSpec{
+			Class:                 &class,
 			AppID:                 "sample-app",
 			DatabaseName:          "sample_db",
 			SecretName:            "sample-secret",
@@ -309,7 +320,7 @@ func setupMasterSecretForExistingRDS() {
 	//copy secret from prev dbclaim and use it as master secret for existing rds usecase
 	key := types.NamespacedName{
 		Name:      newdbcMasterSecretName,
-		Namespace: "db-controller",
+		Namespace: dbcNamespace,
 	}
 	newDBMasterSecret := &corev1.Secret{}
 	By("Reading the prev secret")
@@ -369,6 +380,7 @@ func createPostgresRDSTest() {
 			Namespace: key.Namespace,
 		},
 		Spec: persistancev1.DatabaseClaimSpec{
+			Class:                 &class,
 			AppID:                 "sample-app",
 			DatabaseName:          "sample_db",
 			SecretName:            "newdb-secret",
@@ -412,6 +424,7 @@ func cleanupdb(db string) {
 			Namespace: key.Namespace,
 		},
 		Spec: persistancev1.DatabaseClaimSpec{
+			Class:                 &class,
 			AppID:                 "sample-app",
 			DatabaseName:          "sample_db",
 			SecretName:            "newdb-secret",

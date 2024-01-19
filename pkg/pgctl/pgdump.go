@@ -2,6 +2,7 @@ package pgctl
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -118,4 +119,28 @@ func (x *Dump) SetOptions(o []string) {
 }
 func (x *Dump) GetOptions() []string {
 	return x.Options
+}
+func (x *Dump) modifyPgDumpInfo() error {
+	// Build the full file path
+	filePath := x.Path + x.fileName
+
+	// Comment out the create policy statements
+	commentCmd := exec.Command("sed", "-i", "/^CREATE POLICY cron_job_/s/^/-- commented by dbc to avoid duplicate conflict during restore \\n--/", filePath)
+	commentCmd.Stderr = os.Stderr
+	commentCmd.Stdout = os.Stdout
+
+	if err := commentCmd.Run(); err != nil {
+		return fmt.Errorf("error running sed command to comment create policy: %w", err)
+	}
+
+	// If pg_cron is installed, grant usage on schema cron to public
+	grantCmd := exec.Command("sed", "-i", "/^CREATE EXTENSION IF NOT EXISTS pg_cron/a GRANT USAGE ON SCHEMA cron TO public;", filePath)
+	grantCmd.Stderr = os.Stderr
+	grantCmd.Stdout = os.Stdout
+
+	if err := grantCmd.Run(); err != nil {
+		return fmt.Errorf("error running sed command to grant usage on schema cron: %w", err)
+	}
+
+	return nil
 }
