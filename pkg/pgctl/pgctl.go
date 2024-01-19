@@ -324,6 +324,10 @@ func (s *copy_schema_state) Execute() (State, error) {
 	if dumpExec.Error != nil {
 		return nil, dumpExec.Error.Err
 	}
+	if err = dump.modifyPgDumpInfo(); err != nil {
+		log.Error(err, "failed to comment create policy")
+		return nil, err
+	}
 
 	restore := NewRestore(s.config.TargetDBUserDsn)
 	restore.EnableVerbose()
@@ -573,7 +577,7 @@ func (s *reset_target_sequence_state) Execute() (State, error) {
 	}
 	defer closeDB(log, sourceDBUser)
 
-	seqsQ := "SELECT sequence_name FROM information_schema.sequences"
+	seqsQ := "SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'"
 	seqCountQ := "SELECT ROUND(last_value + 10000, -4)  FROM %s"
 
 	rows, err := sourceDBUser.Query(seqsQ)

@@ -23,7 +23,7 @@ const (
 
 var extensions = []string{"citext", "uuid-ossp",
 	"pgcrypto", "hstore", "pg_stat_statements",
-	"plpgsql", "pg_partman", "hll"}
+	"plpgsql", "pg_partman", "hll", "pg_cron"}
 
 // TBD
 //#pg_cron
@@ -160,7 +160,20 @@ func (pc *client) CreateDefaultExtentions(dbName string) error {
 		}
 		pc.log.Info("created extension " + s)
 	}
-	return err
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = $1)", "pg_cron").Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		// pg_cron extension is enabled - grant permission
+		_, err = db.Exec("GRANT USAGE ON SCHEMA cron TO public")
+		if err != nil {
+			pc.log.Error(err, "could not GRANT USAGE ON SCHEMA cron TO public")
+			return err
+		}
+	}
+	return nil
 }
 
 func (pc *client) ManageSystemFunctions(dbName string, functions map[string]string) error {
