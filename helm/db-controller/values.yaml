@@ -128,7 +128,7 @@ controllerConfig:
   authSource: secret
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
-  caCertificateIdentifier: ""
+  caCertificateIdentifier: "rds-ca-2019"
   dbMultiAZEnabled: false
   dbSubnetGroupNameRef:
   defaultBackupPolicyValue: Bronze
