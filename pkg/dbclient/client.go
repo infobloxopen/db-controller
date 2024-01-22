@@ -25,9 +25,6 @@ var extensions = []string{"citext", "uuid-ossp",
 	"pgcrypto", "hstore", "pg_stat_statements",
 	"plpgsql", "pg_partman", "hll", "pg_cron"}
 
-// TBD
-//#pg_cron
-
 type client struct {
 	dbType string
 	dbURL  string

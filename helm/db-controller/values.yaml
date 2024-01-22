@@ -123,15 +123,15 @@ zapLogger:
   verbosity: 0
 
 controllerConfig:
+  athena-shared:
+    masterUsername: root
   authSource: secret
   # if aws authorization is used iam role must be provided
   #iamRole: rds-role
+  caCertificateIdentifier: ""
   dbMultiAZEnabled: false
-  region: us-east-1
-  pgTemp: "/pg-temp/"
-  vpcSecurityGroupIDRefs:
   dbSubnetGroupNameRef:
-  dynamicHostWaitTimeMin: 1
+  defaultBackupPolicyValue: Bronze
   defaultShape: db.t4g.medium
   defaultMinStorageGB: 50
   defaultEngine: postgres
@@ -144,8 +144,11 @@ controllerConfig:
   defaultSkipFinalSnapshotBeforeDeletion: true
   defaultPubliclyAccessible: false
   defaultDeletionPolicy: orphan
+  dynamicHostWaitTimeMin: 1
+  enablePerfInsight: true
+  # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
+  enableCloudwatchLogsExport: "none"
   providerConfig: default
-  defaultBackupPolicyValue: Bronze
   # The number of days for which automated backups are retained. Setting this parameter to a positive number enables backups.
   # Setting this parameter to 0 disables automated backups (in case of Aurora, 0 is N/A and will be set to 1 by default).
   # Possible values (0-35)
@@ -154,17 +157,14 @@ controllerConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
     passwordRotationPeriod: 60
-  athena-shared:
-    masterUsername: root
+  pgTemp: "/pg-temp/"
+  region: us-east-1
   storageType: gp3
   supportSuperUserElevation: true
-  enablePerfInsight: true
-  # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
-  enableCloudwatchLogsExport: "none"
   # system funtions are created as functions in the database. The prefix is used as the schema name.
   # only "ib_" prefixed functions are supported at this time.
   systemFunctions:
     ib_realm: "{{ .Values.ib.realm }}"
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
-
+  vpcSecurityGroupIDRefs:
