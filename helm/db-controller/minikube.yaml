@@ -3,6 +3,7 @@ controllerConfig:
   vpcSecurityGroupIDRefs: box-3
   dbSubnetGroupNameRef: box-3
   providerConfig: box-3
+  caCertificateIdentifier: "rds-ca-rsa2048-g1"
 zapLogger:
   develMode: true
   level: debug

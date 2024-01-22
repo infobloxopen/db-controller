@@ -102,6 +102,7 @@ type input struct {
 	EnablePerfInsight          bool
 	EnableCloudwatchLogsExport []*string
 	BackupRetentionDays        int64
+	CACertificateIdentifier    string
 }
 
 const (
@@ -249,16 +250,18 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 
 	r.Input = &input{}
 	var (
-		fragmentKey          string
-		err                  error
-		manageCloudDB        bool
-		sharedDBHost         bool
-		enablePerfInsight    bool
-		cloudwatchLogsExport []*string
-		backupRetentionDays  int64
+		fragmentKey             string
+		err                     error
+		manageCloudDB           bool
+		sharedDBHost            bool
+		enablePerfInsight       bool
+		cloudwatchLogsExport    []*string
+		backupRetentionDays     int64
+		caCertificateIdentifier string
 	)
 
 	backupRetentionDays = r.Config.GetInt64("backupRetentionDays")
+	caCertificateIdentifier = r.Config.GetString("caCertificateIdentifier")
 	enablePerfInsight = r.Config.GetBool("enablePerfInsight")
 	enableCloudwatchLogsExport := r.Config.GetString("enableCloudwatchLogsExport")
 	postgresCloudwatchLogsExportLabels := []string{"postgresql", "upgrade"}
@@ -310,6 +313,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		EnablePerfInsight:          enablePerfInsight,
 		EnableCloudwatchLogsExport: cloudwatchLogsExport,
 		BackupRetentionDays:        backupRetentionDays,
+		CACertificateIdentifier:    caCertificateIdentifier,
 	}
 	if manageCloudDB {
 		//check if dbclaim.name is > maxNameLen and if so, error out
@@ -1879,7 +1883,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 				},
 				Spec: crossplanerds.DBInstanceSpec{
 					ForProvider: crossplanerds.DBInstanceParameters{
-						Region: region,
+						CACertificateIdentifier: &r.Input.CACertificateIdentifier,
+						Region:                  region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
@@ -1996,7 +2001,8 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 				},
 				Spec: crossplanerds.DBInstanceSpec{
 					ForProvider: crossplanerds.DBInstanceParameters{
-						Region: region,
+						CACertificateIdentifier: &r.Input.CACertificateIdentifier,
+						Region:                  region,
 						CustomDBInstanceParameters: crossplanerds.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
@@ -2428,6 +2434,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	enablePerfInsight := r.Input.EnablePerfInsight
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
 	dbInstance.Spec.DeletionPolicy = params.DeletionPolicy
+	dbInstance.Spec.ForProvider.CACertificateIdentifier = &r.Input.CACertificateIdentifier
 
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
