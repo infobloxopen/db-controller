@@ -56,24 +56,25 @@ type Error string
 func (e Error) Error() string { return string(e) }
 
 const (
-	defaultPassLen           = 32
-	defaultNumDig            = 10
-	defaultNumSimb           = 10
-	minRotationTime          = 60 // rotation time in minutes
-	maxRotationTime          = 1440
-	maxWaitTime              = 10
-	maxNameLen               = 44 // max length of dbclaim name
-	defaultRotationTime      = minRotationTime
-	serviceNamespaceEnvVar   = "SERVICE_NAMESPACE"
-	defaultPostgresStr       = "postgres"
-	defaultAuroraPostgresStr = "aurora-postgresql"
-	defaultRestoreFromSource = "Snapshot"
-	defaultBackupPolicyKey   = "Backup"
-	tempTargetPassword       = "targetPassword"
-	tempSourceDsn            = "sourceDsn"
-	masterSecretSuffix       = "-master"
-	masterPasswordKey        = "password"
-	ErrMaxNameLen            = Error("dbclaim name is too long. max length is 44 characters")
+	defaultPassLen                  = 32
+	defaultNumDig                   = 10
+	defaultNumSimb                  = 10
+	minRotationTime                 = 60 // rotation time in minutes
+	maxRotationTime                 = 1440
+	maxWaitTime                     = 10
+	maxNameLen                      = 44 // max length of dbclaim name
+	defaultRotationTime             = minRotationTime
+	serviceNamespaceEnvVar          = "SERVICE_NAMESPACE"
+	defaultPostgresStr              = "postgres"
+	defaultAuroraPostgresStr        = "aurora-postgresql"
+	defaultRestoreFromSource        = "Snapshot"
+	defaultBackupPolicyKey          = "Backup"
+	tempTargetPassword              = "targetPassword"
+	tempSourceDsn                   = "sourceDsn"
+	cachedMasterPasswdForExistingDB = "cachedMasterPasswdForExistingDB"
+	masterSecretSuffix              = "-master"
+	masterPasswordKey               = "password"
+	ErrMaxNameLen                   = Error("dbclaim name is too long. max length is 44 characters")
 	// InfoLevel is used to set V level to 0 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	InfoLevel = 0
@@ -609,6 +610,18 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	dbClaim.Status.NewDB.SourceDataFrom = dbClaim.Spec.SourceDataFrom.DeepCopy()
 
 	logr.Info("creating database client")
+	masterPassword, err := r.getMasterPasswordForExistingDB(ctx, dbClaim)
+	if err != nil {
+		logr.Error(err, "get master password for existing db error")
+		return err
+	}
+	//cache master password for existing db
+	err = r.setMasterPasswordInTempSecret(ctx, masterPassword, dbClaim)
+	if err != nil {
+		logr.Error(err, "cache master password error")
+		return err
+	}
+	existingDBConnInfo.Password = masterPassword
 	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
 	if err != nil {
 		logr.Error(err, "creating database client error")
@@ -780,6 +793,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		}
 		sourceMasterConn.Password, err = r.getSrcAdminPasswdFromSecret(ctx, dbClaim)
 		if err != nil {
+			logr.Error(err, "source master secret and cached master secret not found")
 			return r.manageError(ctx, dbClaim, err)
 		}
 	} else if r.Mode == M_UpgradeDBInProgress ||
@@ -1107,11 +1121,33 @@ func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, 
 
 }
 
-func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
-	dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
+func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Context,
+	dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
 	secretKey := "password"
 	gs := &corev1.Secret{}
+
+	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
+	if ns == "" {
+		ns = dbClaim.Namespace
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+	password := string(gs.Data[secretKey])
+
+	if password == "" {
+		return "", fmt.Errorf("invalid credentials (password)")
+	}
+	return password, nil
+}
+
+func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
+	dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
 
 	if connInfo == nil {
 		return nil, fmt.Errorf("invalid connection info")
@@ -1132,21 +1168,6 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, lo
 	if connInfo.SSLMode == "" {
 		return nil, fmt.Errorf("invalid sslMode")
 	}
-
-	r.Log.Info("using credentials from secret")
-
-	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
-	if ns == "" {
-		ns = dbClaim.Namespace
-	}
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Namespace: ns,
-		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
-	}, gs)
-	if err != nil {
-		return nil, err
-	}
-	connInfo.Password = string(gs.Data[secretKey])
 
 	if connInfo.Password == "" {
 		return nil, fmt.Errorf("invalid credentials (password)")
@@ -1622,11 +1643,7 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 	if err != nil {
 		return err
 	}
-	err = dbClient.ManageCreateRole(status.ConnectionInfo.Username, r.Input.EnableSuperUser)
-	if err != nil {
-		return err
-	}
-	err = dbClient.ManageCreateRole(dbu.NextUser(status.ConnectionInfo.Username), r.Input.EnableSuperUser)
+	err = dbClient.ManageCreateRole(baseUsername, r.Input.EnableSuperUser)
 	if err != nil {
 		return err
 	}
@@ -2586,6 +2603,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
 	exSecret.Data["hostname"] = []byte(connInfo.Host)
 	exSecret.Data["port"] = []byte(connInfo.Port)
+	exSecret.Data["database"] = []byte(connInfo.DatabaseName)
 	exSecret.Data["username"] = []byte(connInfo.Username)
 	exSecret.Data["password"] = []byte(connInfo.Password)
 	exSecret.Data["sslmode"] = []byte(connInfo.SSLMode)
@@ -2748,10 +2766,19 @@ func (r *DatabaseClaimReconciler) getSrcAdminPasswdFromSecret(ctx context.Contex
 		Namespace: ns,
 		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
 	}, gs)
+	if err == nil {
+		return string(gs.Data[secretKey]), nil
+	}
+	//err!=nil
+	if !errors.IsNotFound(err) {
+		return "", err
+	}
+	//not found - check temp secret
+	p, err := r.getMasterPasswordFromTempSecret(ctx, dbClaim)
 	if err != nil {
 		return "", err
 	}
-	return string(gs.Data[secretKey]), nil
+	return p, nil
 }
 
 func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
@@ -2848,6 +2875,26 @@ func (r *DatabaseClaimReconciler) getTargetPasswordFromTempSecret(ctx context.Co
 	return string(gs.Data[tempTargetPassword]), nil
 }
 
+func (r *DatabaseClaimReconciler) getMasterPasswordFromTempSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+
+	secretName := "temp-" + dbClaim.Spec.SecretName
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+	return string(gs.Data[cachedMasterPasswdForExistingDB]), nil
+}
+
 func (r *DatabaseClaimReconciler) setSourceDsnInTempSecret(ctx context.Context, dsn string, dbClaim *persistancev1.DatabaseClaim) error {
 
 	tSecret, err := r.getTempSecret(ctx, dbClaim)
@@ -2869,6 +2916,18 @@ func (r *DatabaseClaimReconciler) setTargetPasswordInTempSecret(ctx context.Cont
 
 	r.Log.Info("updating temp secret target password")
 	tSecret.Data[tempTargetPassword] = []byte(password)
+	return r.Client.Update(ctx, tSecret)
+}
+
+func (r *DatabaseClaimReconciler) setMasterPasswordInTempSecret(ctx context.Context, password string, dbClaim *persistancev1.DatabaseClaim) error {
+
+	tSecret, err := r.getTempSecret(ctx, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	r.Log.Info("updating temp secret target password")
+	tSecret.Data[cachedMasterPasswdForExistingDB] = []byte(password)
 	return r.Client.Update(ctx, tSecret)
 }
 
@@ -2904,8 +2963,9 @@ func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *pe
 				},
 			},
 			Data: map[string][]byte{
-				tempTargetPassword: nil,
-				tempSourceDsn:      nil,
+				tempTargetPassword:              nil,
+				tempSourceDsn:                   nil,
+				cachedMasterPasswdForExistingDB: nil,
 			},
 		}
 

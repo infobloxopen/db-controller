@@ -131,7 +131,15 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 	})
 	Context("Migrate Use Existing RDS to a local RDS", func() {
 		It("should create a new RDS and migrate Existing database", func() {
-			By("Removing the useExistingFlag in dbclaim")
+			By("deleting master secret to access existing RDS")
+			//delete master secret if it exists
+			e2e_k8sClient.Delete(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      newdbcMasterSecretName,
+					Namespace: dbcNamespace,
+				},
+			})
+			By("Removing the useExistingFlag in dbclaim and forcing the use of cached secret")
 			MigrateUseExistingToNewRDS()
 		})
 	})
@@ -154,15 +162,6 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 
 		cleanupdb(db1)
 		cleanupdb(db2)
-		//delete master secret if it exists
-		By("deleting the master secret")
-		e2e_k8sClient.Delete(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      newdbcMasterSecretName,
-				Namespace: dbcNamespace,
-			},
-		})
-
 		//delete the namespace
 		By("deleting the namespace")
 		e2e_k8sClient.Delete(ctx, &corev1.Namespace{
@@ -254,10 +253,15 @@ func MigrateUseExistingToNewRDS() {
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created and host name contains 1ec9b27c")
 	//box-3-end2end-test-2-dbclaim-1ec9b27c
-	Eventually(func() error {
-		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, &corev1.Secret{})
-	}, timeout_e2e, interval_e2e).Should(BeNil())
-
+	newSecret := &corev1.Secret{}
+	Eventually(func() bool {
+		e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, newSecret)
+		if string(newSecret.Data["database"]) == "sample_db_new" {
+			return true
+		} else {
+			return false
+		}
+	}, timeout_e2e, interval_e2e).Should(BeTrue())
 }
 
 func UseExistingPostgresRDSTest() {
@@ -277,7 +281,7 @@ func UseExistingPostgresRDSTest() {
 		Spec: persistancev1.DatabaseClaimSpec{
 			Class:                 &class,
 			AppID:                 "sample-app",
-			DatabaseName:          "sample_db",
+			DatabaseName:          "sample_db_new",
 			SecretName:            "sample-secret",
 			Username:              "sample_user",
 			Type:                  "postgres",
