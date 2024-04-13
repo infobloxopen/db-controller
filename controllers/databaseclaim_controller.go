@@ -1587,9 +1587,16 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 	rotationTime := r.getPasswordRotationTime()
 
 	// create role
-	_, err := dbClient.CreateGroup(dbName, baseUsername)
+	roleCreated, err := dbClient.CreateGroup(dbName, baseUsername)
 	if err != nil {
 		return err
+	}
+	if roleCreated {
+		// take care of special extentions related to the user
+		err = dbClient.CreateSpecialExtentions(dbName, baseUsername)
+		if err != nil {
+			return err
+		}
 	}
 
 	if dbu.IsUserChanged(*status) {
