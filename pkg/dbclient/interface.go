@@ -7,6 +7,7 @@ type Client interface {
 	CreateUser(username, role, userPassword string) (bool, error)
 	CreateGroup(dbName, username string) (bool, error)
 	CreateDefaultExtentions(dbName string) error
+	CreateSpecialExtentions(dbName string, role string) error
 	RenameUser(oldUsername string, newUsername string) error
 	UpdateUser(oldUsername, newUsername, rolename, password string) error
 	UpdatePassword(username string, userPassword string) error

@@ -133,13 +133,12 @@ func (x *Dump) modifyPgDumpInfo() error {
 		return fmt.Errorf("error running sed command to comment create policy: %w", err)
 	}
 
-	// If pg_cron is installed, grant usage on schema cron to public
-	grantCmd := exec.Command("sed", "-i", "/^CREATE EXTENSION IF NOT EXISTS pg_cron/a GRANT USAGE ON SCHEMA cron TO public;", filePath)
-	grantCmd.Stderr = os.Stderr
-	grantCmd.Stdout = os.Stdout
-
-	if err := grantCmd.Run(); err != nil {
-		return fmt.Errorf("error running sed command to grant usage on schema cron: %w", err)
+	// add if not exists to partman schema creation
+	replaceCmd := exec.Command("sed", "-i", "s/CREATE SCHEMA partman;/CREATE SCHEMA IF NOT EXISTS partman;/", filePath)
+	replaceCmd.Stderr = os.Stderr
+	replaceCmd.Stdout = os.Stdout
+	if err := replaceCmd.Run(); err != nil {
+		return fmt.Errorf("error running sed command add if not exists to partman schema creation: %w", err)
 	}
 
 	return nil

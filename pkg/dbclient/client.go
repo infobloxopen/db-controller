@@ -21,9 +21,14 @@ const (
 	RDSSuperUserRole   = "rds_superuser"
 )
 
-var extensions = []string{"citext", "uuid-ossp",
+var defaultExtensions = []string{"citext", "uuid-ossp",
 	"pgcrypto", "hstore", "pg_stat_statements",
-	"plpgsql", "pg_partman", "hll", "pg_cron"}
+	"plpgsql", "hll"}
+
+var specialExtensionsMap = map[string]func(*client, string, string) error{
+	"pg_partman": (*client).pg_partman,
+	"pg_cron":    (*client).pg_cron,
+}
 
 type client struct {
 	dbType string
@@ -110,8 +115,9 @@ func (pc *client) CreateDataBase(name string) (bool, error) {
 	return pc.CreateDatabase(name)
 }
 
+// unit test override
 var getDefaulExtensions = func() []string {
-	return extensions
+	return defaultExtensions
 }
 
 func (pc *client) CreateDatabase(dbName string) (bool, error) {
@@ -157,19 +163,75 @@ func (pc *client) CreateDefaultExtentions(dbName string) error {
 		}
 		pc.log.Info("created extension " + s)
 	}
-	var exists bool
-	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = $1)", "pg_cron").Scan(&exists)
+
+	return nil
+}
+
+func (pc *client) CreateSpecialExtentions(dbName string, role string) error {
+	db, err := pc.getDB(dbName)
 	if err != nil {
+		pc.log.Error(err, "could not connect to db", "database", dbName)
 		return err
 	}
-	if exists {
-		// pg_cron extension is enabled - grant permission
-		_, err = db.Exec("GRANT USAGE ON SCHEMA cron TO public")
-		if err != nil {
-			pc.log.Error(err, "could not GRANT USAGE ON SCHEMA cron TO public")
+	pc.log.Info("connected to " + dbName)
+	defer db.Close()
+	for functionName := range specialExtensionsMap {
+		if err := specialExtensionsMap[functionName](pc, dbName, role); err != nil {
+			pc.log.Error(err, "error creating extention %s", functionName)
 			return err
 		}
 	}
+	return nil
+}
+func (pc *client) pg_cron(dbName string, role string) error {
+	// create extension pg_cron and grant usage to public
+	db, err := pc.getDB(dbName)
+	if err != nil {
+		pc.log.Error(err, "Failed to connect to database", "database", dbName)
+		return err
+	}
+	defer db.Close()
+
+	pc.log.Info("Connected to database", "database", dbName)
+
+	_, err = db.Exec(fmt.Sprintf(`
+		CREATE EXTENSION IF NOT EXISTS pg_cron;
+		GRANT USAGE ON SCHEMA cron TO %s;
+	`, pq.QuoteIdentifier(role)))
+	if err != nil {
+		pc.log.Error(err, "Failed to create extension pg_cron and grant usage on schema cron to public", "database", dbName)
+		return fmt.Errorf("failed to create extension pg_cron and grant usage on schema cron to public: %w", err)
+	}
+
+	pc.log.Info("Created pg_cron extension and granted usage on schema cron", "role", role)
+
+	return nil
+}
+func (pc *client) pg_partman(dbName string, role string) error {
+
+	db, err := pc.getDB(dbName)
+	if err != nil {
+		pc.log.Error(err, "could not connect to db", "database", dbName)
+		return err
+	}
+	defer db.Close()
+	createPartman := fmt.Sprintf(`
+		CREATE SCHEMA IF NOT EXISTS partman;
+		CREATE EXTENSION IF NOT EXISTS pg_partman WITH SCHEMA partman;
+		GRANT ALL ON SCHEMA partman TO %s;
+		GRANT ALL ON ALL TABLES IN SCHEMA partman TO %s;
+		GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA partman TO %s;
+		GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA partman TO %s;
+	`, pq.QuoteIdentifier(role), pq.QuoteIdentifier(role),
+		pq.QuoteIdentifier(role), pq.QuoteIdentifier(role))
+
+	_, err = db.Exec(createPartman)
+	if err != nil {
+		pc.log.Error(err, "could not create extension pg_partman")
+		return err
+	}
+	pc.log.Info("Created pg_partmann extension and granted usage on schema partman", "role", role)
+
 	return nil
 }
 
