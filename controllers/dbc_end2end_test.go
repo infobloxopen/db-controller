@@ -102,7 +102,7 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
-		rds1 = "box-3-" + db1 + "-1ec9b27c"
+		rds1 = "box-3-" + db1 + "-1d9fb876"
 		newdbcMasterSecretName = rds1 + "-master"
 		createNamespace()
 	})
@@ -226,7 +226,7 @@ func MigratePostgresToAuroraRDS() {
 			return "", err
 		}
 		return string(secret.Data["hostname"]), nil
-	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-bb1e7196"))
+	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
 }
 
 func MigrateUseExistingToNewRDS() {
@@ -288,7 +288,7 @@ func UseExistingPostgresRDSTest() {
 			DSNName:               "dsn",
 			EnableReplicationRole: &falseVal,
 			UseExistingSource:     &trueVal,
-			DBVersion:             "15.3",
+			DBVersion:             "15.5",
 			DeletionPolicy:        "delete",
 			SourceDataFrom: &persistancev1.SourceDataFrom{
 				Type: persistancev1.SourceDataType("database"),
@@ -393,7 +393,7 @@ func createPostgresRDSTest() {
 			DSNName:               "dsn",
 			EnableReplicationRole: &falseVal,
 			UseExistingSource:     &falseVal,
-			DBVersion:             "15.3",
+			DBVersion:             "15.5",
 		},
 	}
 	Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
@@ -437,7 +437,7 @@ func cleanupdb(db string) {
 			DSNName:               "dsn",
 			EnableReplicationRole: &falseVal,
 			UseExistingSource:     &falseVal,
-			DBVersion:             "15.3",
+			DBVersion:             "15.5",
 			DeletionPolicy:        "delete",
 		},
 	}

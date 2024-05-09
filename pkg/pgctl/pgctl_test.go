@@ -36,8 +36,8 @@ var (
 	TargetDBUserDsn  string
 	ExportFilePath   = "/tmp/"
 	repository       = "postgres"
-	sourceVersion    = "10"
-	targetVersion    = "12.3"
+	sourceVersion    = "13.14"
+	targetVersion    = "15.6"
 	sourcePort       = "5435"
 	targetPort       = "5436"
 	testDBNetwork    = "testDBNetwork"
@@ -79,14 +79,27 @@ func realTestMain(m *testing.M) int {
 	}
 
 	//validate that no other network is lingering around from a prev test
-	networks, err := pool.NetworksByName(testDBNetwork)
+	//networks, err := pool.NetworksByName(testDBNetwork)
+	networks, err := pool.Client.ListNetworks()
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
-	if len(networks) != 0 {
-		fmt.Printf("Expected 0 but got %v networks\n", len(networks))
-		return 1
+	networkExists := false
+	netID := ""
+	for _, network := range networks {
+		if network.Name == testDBNetwork {
+			networkExists = true
+			netID = network.ID
+			break
+		}
+	}
+	if networkExists {
+		err = pool.Client.RemoveNetwork(netID)
+		if err != nil {
+			fmt.Println(err)
+			return 1
+		}
 	}
 
 	network, err := pool.CreateNetwork(testDBNetwork)
