@@ -229,9 +229,37 @@ func (s *create_publication_state) Execute() (State, error) {
 			FROM pg_catalog.pg_publication 
 			WHERE pubname = $1)`
 
+	// dynamically creating the table list to be included in the publication
+	// this would avoid the issue related to partition extention tables. These schemas are getting
+	// changed significantly between versions and the publication would fail if we include them.
+	// Tried using schema name syntax but it does not in older version of postgres
+	// there are 13.x used by tide in EU prod
+	// After all RDSs are upgraded, we can remove this logic and include schema based publications
+
 	createPub := fmt.Sprintf(`
-		CREATE PUBLICATION %s 
-		FOR ALL TABLES`, DefaultPubName)
+		DO $$
+		DECLARE
+			table_list TEXT := '';
+		BEGIN
+			SELECT INTO table_list string_agg(quote_ident(relname), ', ')
+			FROM pg_class c
+			JOIN pg_namespace n ON c.relnamespace = n.oid
+			WHERE n.nspname = 'public' -- Only public schema
+			AND c.relkind = 'r'        -- Only include ordinary tables
+			AND c.relpersistence = 'p' -- Only include persistent tables
+			AND NOT EXISTS (           -- Exclude foreign tables
+				SELECT 1 FROM pg_foreign_table ft WHERE ft.ftrelid = c.oid
+			)
+			AND NOT EXISTS (           -- Exclude materialized views
+				SELECT 1 FROM pg_matviews mv WHERE mv.matviewname = c.relname AND mv.schemaname = n.nspname
+			);
+
+			IF table_list != '' THEN
+				EXECUTE 'CREATE PUBLICATION %s FOR TABLE ' || table_list;
+			ELSE
+				EXECUTE 'CREATE PUBLICATION %s';
+			END IF;
+		END $$`, DefaultPubName, DefaultPubName)
 
 	err = sourceDBAdmin.QueryRow(q, DefaultPubName).Scan(&exists)
 	if err != nil {
@@ -492,14 +520,14 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 			AND slot_name like '%s_%%'
 			AND temporary = 't'
 		)`, DefaultPubName)
-	relExistsQuery := fmt.Sprintf(`
-		SELECT EXISTS
-		(
-			SELECT 1
-			FROM pg_subscription s, pg_subscription_rel sr
-			WHERE s.oid = sr.srsubid
-			AND s.subname = '%s'
-		)`, DefaultSubName)
+	// relExistsQuery := fmt.Sprintf(`
+	// 	SELECT EXISTS
+	// 	(
+	// 		SELECT 1
+	// 		FROM pg_subscription s, pg_subscription_rel sr
+	// 		WHERE s.oid = sr.srsubid
+	// 		AND s.subname = '%s'
+	// 	)`, DefaultSubName)
 
 	subQuery := fmt.Sprintf(`
 		SELECT count(srrelid) 
@@ -518,15 +546,16 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 		return retry(s.config), nil
 	}
 
-	err = targetDBAdmin.QueryRow(relExistsQuery).Scan(&exists)
-	if err != nil {
-		log.Error(err, "could not query for subscription rel for records present")
-		return nil, err
-	}
-	if !exists {
-		log.Info("target yet to start receiving data - retry check in a few seconds")
-		return retry(s.config), nil
-	}
+	// 15.5 seems to behave differently than previous versions regarding the subscription rel
+	// err = targetDBAdmin.QueryRow(relExistsQuery).Scan(&exists)
+	// if err != nil {
+	// 	log.Error(err, "could not query for subscription rel for records present")
+	// 	return nil, err
+	// }
+	// if !exists {
+	// 	log.Info("target yet to start receiving data - retry check in a few seconds")
+	// 	return retry(s.config), nil
+	// }
 
 	err = targetDBAdmin.QueryRow(subQuery).Scan(&count)
 	if err != nil {

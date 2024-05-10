@@ -22,6 +22,9 @@ pipeline {
     stage("Setup") {
       steps {
         prepareBuild()
+        sh 'echo "deb http://apt.postgresql.org/pub/repos/apt $(sudo lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list'
+        sh 'sudo wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -'
+        sh 'sudo apt-get update -y'
       }
     }
     stage("Run tests") {
@@ -32,7 +35,7 @@ pipeline {
         }
         dir("$DIRECTORY") {
           sh "sudo apt-get update"
-          sh "sudo apt-get -y install postgresql-client"
+          sh "sudo apt-get -y install postgresql-client-14"
           sh "echo 'db-controller-name' > .id"
           sh "make test"
           sh "sudo apt-get -y remove postgresql-client"

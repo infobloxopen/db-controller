@@ -141,5 +141,13 @@ func (x *Dump) modifyPgDumpInfo() error {
 		return fmt.Errorf("error running sed command add if not exists to partman schema creation: %w", err)
 	}
 
+	// create pg_cron without specifying the schema
+	replacePgCronCmd := exec.Command("sed", "-i", "s/CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA public;/CREATE EXTENSION IF NOT EXISTS pg_cron;/", filePath)
+	replacePgCronCmd.Stderr = os.Stderr
+	replacePgCronCmd.Stdout = os.Stdout
+	if err := replacePgCronCmd.Run(); err != nil {
+		return fmt.Errorf("error running sed command to create pg_cron without specifying the schema: %w", err)
+	}
+
 	return nil
 }
