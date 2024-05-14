@@ -22,6 +22,7 @@ import (
 	"time"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	hosterrors "github.com/infobloxopen/db-controller/pkg/hostparams"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -109,6 +110,18 @@ var _ = Describe("db-controller end to end testing", Label("integration"), Order
 
 	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
+	Context("Creating a Postgres RDS using a dbclaim with error", func() {
+		It("should validate that dbVersion is not empty", func() {
+			By("erroring out when DBClaim does not contain dbVersion")
+			createPostgresRDSWithEmptyDbVersionTest()
+		})
+	})
+	Context("Creating a Postgres RDS using a dbclaim invalid version", func() {
+		It("should validate that specified dbVersion is available", func() {
+			By("erroring out when AWS does not support dbVersion")
+			createPostgresRDSWithNonExistentDbVersionTest()
+		})
+	})
 	Context("Creating a Postgres RDS using a dbclaim ", func() {
 		It("should create a RDS in AWS", func() {
 			By("creating a new DB Claim")
@@ -368,8 +381,55 @@ func deletePostgresRDSTest() {
 		}
 	}, timeout_e2e, time.Second*5).Should(Succeed())
 }
-
 func createPostgresRDSTest() {
+	key := types.NamespacedName{
+		Name:      db1,
+		Namespace: namespace,
+	}
+	prevDbClaim := &persistancev1.DatabaseClaim{}
+	By("Getting the prev dbclaim")
+	Expect(e2e_k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
+	By("Updating with version 15.3 dbVersion")
+	prevDbClaim.Spec.DBVersion = "15.5"
+	Expect(e2e_k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
+	updatedDbClaim := &persistancev1.DatabaseClaim{}
+	By("checking dbclaim status is ready")
+	Eventually(func() (persistancev1.DbState, error) {
+		err := e2e_k8sClient.Get(ctx, key, updatedDbClaim)
+		if err != nil {
+			return "", err
+		}
+		return updatedDbClaim.Status.ActiveDB.DbState, nil
+	}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
+	By("checking if the secret is created")
+	Eventually(func() error {
+		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
+	}, timeout_e2e, interval_e2e).Should(BeNil())
+}
+
+func createPostgresRDSWithNonExistentDbVersionTest() {
+	key := types.NamespacedName{
+		Name:      db1,
+		Namespace: namespace,
+	}
+	prevDbClaim := &persistancev1.DatabaseClaim{}
+	By("Getting the prev dbclaim")
+	Expect(e2e_k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
+	By("Updating with version 15.3 dbVersion")
+	prevDbClaim.Spec.DBVersion = "15.3"
+	Expect(e2e_k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
+	updatedDbClaim := &persistancev1.DatabaseClaim{}
+	By("checking dbclaim status.error message is not empty")
+	Eventually(func() (string, error) {
+		err := e2e_k8sClient.Get(ctx, key, updatedDbClaim)
+		if err != nil {
+			return "", err
+		}
+		return updatedDbClaim.Status.Error, nil
+	}, time.Minute*2, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
+}
+
+func createPostgresRDSWithEmptyDbVersionTest() {
 	key := types.NamespacedName{
 		Name:      db1,
 		Namespace: namespace,
@@ -393,24 +453,20 @@ func createPostgresRDSTest() {
 			DSNName:               "dsn",
 			EnableReplicationRole: &falseVal,
 			UseExistingSource:     &falseVal,
-			DBVersion:             "15.5",
 		},
 	}
 	Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 	// time.Sleep(time.Minute * 5)
+
 	createdDbClaim := &persistancev1.DatabaseClaim{}
-	By("checking dbclaim status is ready")
-	Eventually(func() (persistancev1.DbState, error) {
+	By("checking dbclaim status.error message is not empty")
+	Eventually(func() (string, error) {
 		err := e2e_k8sClient.Get(ctx, key, createdDbClaim)
 		if err != nil {
 			return "", err
 		}
-		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
-	By("checking if the secret is created")
-	Eventually(func() error {
-		return e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
-	}, timeout_e2e, interval_e2e).Should(BeNil())
+		return createdDbClaim.Status.Error, nil
+	}, time.Second*10, time.Second*5).Should(Equal(hosterrors.ErrEngineVersionNotSpecified.Error()))
 }
 
 func cleanupdb(db string) {

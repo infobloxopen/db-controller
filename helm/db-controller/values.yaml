@@ -132,10 +132,7 @@ controllerConfig:
   dbMultiAZEnabled: false
   dbSubnetGroupNameRef:
   defaultBackupPolicyValue: Bronze
-  defaultShape: db.t4g.medium
   defaultMinStorageGB: 50
-  defaultEngine: postgres
-  defaultEngineVersion: 15.3
   defaultMasterPort: 5432
   defaultSslMode: require
   defaultMasterUsername: root
