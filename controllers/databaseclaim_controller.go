@@ -668,6 +668,13 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+		if dbClaim.Status.Error != "" {
+			//resetting error
+			dbClaim.Status.Error = ""
+			if err := r.updateClientStatus(ctx, dbClaim); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		if !isReady {
 			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
@@ -684,6 +691,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		r.Input.MasterConnInfo.Username = connInfo.Username
 
 	} else {
+		//was used only for local testing
 		password, err := r.readMasterPassword(ctx, dbClaim)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
@@ -710,12 +718,10 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 	} else {
 		updateClusterStatus(&dbClaim.Status.NewDB, &r.Input.HostParams)
 	}
-
 	if err := r.manageDatabase(dbClient, &dbClaim.Status.NewDB); err != nil {
 		return ctrl.Result{}, err
 
 	}
-
 	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -1453,20 +1459,38 @@ func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
 }
 
 // FindStatusCondition finds the conditionType in conditions.
-func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus) bool {
-	conditions := resourceStatus.Conditions
+func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus) (bool, error) {
 	ready := xpv1.TypeReady
 	conditionTrue := corev1.ConditionTrue
-	for i := range conditions {
-		if conditions[i].Type == ready {
-			if conditions[i].Status == conditionTrue {
-				return true
-			} else {
-				return false
+	for _, condition := range resourceStatus.Conditions {
+		if condition.Type == ready && condition.Status == conditionTrue {
+			return true, nil
+		}
+		if condition.Reason == "ReconcileError" {
+			//handle the following error and provide a specific message to the user
+			//create failed: cannot create DBInstance in AWS: InvalidParameterCombination:
+			//Cannot find version 15.3 for postgres\n\tstatus code: 400, request id:
+			if strings.Contains(condition.Message, "InvalidParameterCombination: Cannot find version") {
+				// extract the version from the message and update the dbClaim
+				return false, fmt.Errorf("requested database version(%s) is not available",
+					extractVersion(condition.Message))
 			}
+			return false, fmt.Errorf("resource is not ready: %s", condition.Message)
 		}
 	}
-	return false
+	return false, nil
+}
+
+func extractVersion(message string) string {
+	versionStr := ""
+	splitMessage := strings.Split(message, " ")
+	for i, word := range splitMessage {
+		if word == "version" {
+			versionStr = splitMessage[i+1] // This should be of format "15.3"
+			break
+		}
+	}
+	return versionStr
 }
 
 func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secretName string, dbClaim *persistancev1.DatabaseClaim) (persistancev1.DatabaseClaimConnectionInfo, error) {
@@ -1769,6 +1793,10 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}, dbCluster)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			validationError := params.CheckEngineVersion()
+			if validationError != nil {
+				return false, validationError
+			}
 			dbCluster = &crossplanerds.DBCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -1844,7 +1872,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 		return false, err
 	}
 
-	return r.isResourceReady(dbCluster.Status.ResourceStatus), nil
+	return r.isResourceReady(dbCluster.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, dbHostName string,
@@ -1899,6 +1927,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	}, dbInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			validationError := params.CheckEngineVersion()
+			if validationError != nil {
+				return false, validationError
+			}
 			dbInstance = &crossplanerds.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -1986,7 +2018,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 	if err != nil {
 		return false, err
 	}
-	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
+	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, dbHostName string,
@@ -2017,6 +2049,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.Log.Info("aurora db instance not found. creating now")
+			validationError := params.CheckEngineVersion()
+			if validationError != nil {
+				return false, validationError
+			}
 			dbInstance = &crossplanerds.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -2071,7 +2107,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 		return false, err
 	}
 
-	return r.isResourceReady(dbInstance.Status.ResourceStatus), nil
+	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
@@ -2102,6 +2138,10 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			validationError := params.CheckEngineVersion()
+			if validationError != nil {
+				return pgName, validationError
+			}
 			dbParamGroup = &crossplanerds.DBParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -2184,6 +2224,10 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			validationError := params.CheckEngineVersion()
+			if validationError != nil {
+				return pgName, validationError
+			}
 			dbParamGroup = &crossplanerds.DBParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -2262,6 +2306,10 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			validationError := params.CheckEngineVersion()
+			if validationError != nil {
+				return pgName, validationError
+			}
 			dbParamGroup = &crossplanerds.DBClusterParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,

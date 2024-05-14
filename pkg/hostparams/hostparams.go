@@ -17,13 +17,20 @@ import (
 type Error string
 
 const (
-	defaultAuroraPostgresStr = "aurora-postgresql"
-	defaultPostgresStr       = "postgres"
-	shapeDelimiter           = "!"
-	INSTANCE_CLASS_INDEX     = 0
-	STORAGE_TYPE_INDEX       = 1
-	ErrMaxStorageReduced     = Error("reducing .spec.MaxStorageGB value is not allowed (Also not spacifying maxStorageGB if specified earlier is not allowed.)")
-	ErrMaxStorageLesser      = Error(".spec.MaxStorageGB should always be greater than spec.minStorageGB")
+	defaultAuroraPostgresStr     = "aurora-postgresql"
+	defaultPostgresStr           = "postgres"
+	shapeDelimiter               = "!"
+	INSTANCE_CLASS_INDEX         = 0
+	STORAGE_TYPE_INDEX           = 1
+	ErrMaxStorageReduced         = Error("reducing .spec.maxStorageGB value is not allowed (Also not spacifying maxStorageGB if specified earlier is not allowed.)")
+	ErrMaxStorageLesser          = Error(".spec.maxStorageGB should always be greater than spec.minStorageGB")
+	ErrEngineVersionNotSpecified = Error(".spec.dbVersion is a mandatory field and cannot be empty")
+	// DO NOT CHANGE THE DEFAULTS -
+	// They are used to determine the hash for RDS names. Any change will result in a new RDS instance being created for all applications!
+	// These values are purposely moved from the config file to the code to avoid accidental changes.
+	defaultShape         = "db.t4g.medium"
+	defaultEngineVersion = "15.3"
+	defaultEngine        = defaultPostgresStr
 )
 
 type HostParams struct {
@@ -107,6 +114,13 @@ func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 		p.HasVersionChanged(np.EngineVersion)
 }
 
+func (p *HostParams) CheckEngineVersion() error {
+	if p.isDefaultVersion {
+		return ErrEngineVersionNotSpecified
+	}
+	return nil
+}
+
 func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (*HostParams, error) {
 	var (
 		err   error
@@ -148,18 +162,18 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 
 	if hostParams.EngineVersion == "" {
 		hostParams.isDefaultVersion = true
-		hostParams.EngineVersion = config.GetString("defaultEngineVersion")
+		hostParams.EngineVersion = defaultEngineVersion
 	}
 
 	if hostParams.Shape == "" {
 		hostParams.isDefaultShape = true
 		hostParams.isDefaultInstanceClass = true
-		hostParams.Shape = config.GetString("defaultShape")
+		hostParams.Shape = defaultShape
 	}
 
 	if hostParams.Engine == "" {
 		hostParams.isDefaultEngine = true
-		hostParams.Engine = config.GetString("defaultEngine")
+		hostParams.Engine = defaultEngine
 	}
 
 	if hostParams.MinStorageGB == 0 {

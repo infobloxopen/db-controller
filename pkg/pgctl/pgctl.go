@@ -232,7 +232,7 @@ func (s *create_publication_state) Execute() (State, error) {
 	// dynamically creating the table list to be included in the publication
 	// this would avoid the issue related to partition extention tables. These schemas are getting
 	// changed significantly between versions and the publication would fail if we include them.
-	// Tried using schema name syntax but it does not in older version of postgres
+	// Tried using schema name syntax but it is not supported in the older version of postgres
 	// there are 13.x used by tide in EU prod
 	// After all RDSs are upgraded, we can remove this logic and include schema based publications
 

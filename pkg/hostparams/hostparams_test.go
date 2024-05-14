@@ -124,210 +124,177 @@ func TestHostParams_Hash(t *testing.T) {
 }
 
 func TestHostParams_IsUpgradeRequested(t *testing.T) {
-	type fields struct {
-		Engine                          string
-		Shape                           string
-		InstanceClass                   string
-		StorageType                     string
-		MinStorageGB                    int
-		EngineVersion                   string
-		MasterUsername                  string
-		SkipFinalSnapshotBeforeDeletion bool
-		PubliclyAccessible              bool
-		EnableIAMDatabaseAuthentication bool
-		DeletionPolicy                  xpv1.DeletionPolicy
-		Port                            int64
-		isDefaultEngine                 bool
-		isDefaultShape                  bool
-		isDefaultStorage                bool
-		isDefaultVersion                bool
-		isDefaultInstanceClass          bool
-	}
 	type args struct {
-		np *HostParams
+		config           *viper.Viper
+		fragmentKey      string
+		dbClaim          *persistancev1.DatabaseClaim
+		activeHostParams *HostParams
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   bool
+		name string
+		args args
+		want bool
 	}{
-		{name: "no-change-with-default", want: false,
-			fields: fields{Engine: "postgres",
-				Shape:           "db.t4g.medium",
-				InstanceClass:   "db.t4g.medium",
-				MinStorageGB:    20,
-				EngineVersion:   "12.11",
-				isDefaultEngine: true,
-			},
-			args: args{np: &HostParams{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
+		{
+			name: "no-change-with-default", want: false,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim:     &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					MinStorageGB:  20,
+					EngineVersion: "12.11",
+				},
 			},
 		},
-		{name: "shape-different", want: true,
-			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
-			args: args{np: &HostParams{Engine: "postgres",
-				Shape:         "db.t2.small",
-				InstanceClass: "db.t2.small",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
-			},
-		},
-		{name: "shape-different-default-shape", want: false,
-			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-
-				MinStorageGB:           20,
-				EngineVersion:          "12.11",
-				isDefaultShape:         true,
-				isDefaultInstanceClass: true,
-				isDefaultStorage:       false,
-				isDefaultVersion:       false,
-			},
-			args: args{np: &HostParams{Engine: "postgres",
-				Shape:         "db.t2.small",
-				InstanceClass: "db.t2.small",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
+		{
+			name: "shape-different", want: true,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "postgres",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+					DBVersion:    "12.11",
+				}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t2.small",
+					InstanceClass: "db.t2.small",
+					MinStorageGB:  200,
+					EngineVersion: "12.11",
+				},
 			},
 		},
-		{name: "version-different", want: true,
-			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-
-				MinStorageGB:           20,
-				EngineVersion:          "12.11",
-				isDefaultShape:         false,
-				isDefaultInstanceClass: false,
-				isDefaultStorage:       false,
-				isDefaultVersion:       false,
-			},
-			args: args{np: &HostParams{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-
-				MinStorageGB:  20,
-				EngineVersion: "13.11",
-			},
+		{
+			name: "shape-different-default-shape", want: false,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "postgres",
+					MinStorageGB: 20,
+					DBVersion:    "12.11",
+				}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "12.11",
+				},
 			},
 		},
-		{name: "version-different-default-version", want: false,
-			fields: fields{Engine: "postgres",
-				Shape:                  "db.t4g.medium",
-				InstanceClass:          "db.t4g.medium",
-				MinStorageGB:           20,
-				EngineVersion:          "12.11",
-				isDefaultShape:         true,
-				isDefaultInstanceClass: true,
-				isDefaultStorage:       false,
-				isDefaultVersion:       true,
-			},
-			args: args{np: &HostParams{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "13.11",
-			},
-			},
-		},
-		{name: "engine-different", want: true,
-			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
-			args: args{np: &HostParams{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
+		{
+			name: "version-different", want: true,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "postgres",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+					DBVersion:    "12.11",
+				}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "13.11",
+				},
 			},
 		},
-		{name: "storage-different-postgres", want: false,
-			fields: fields{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
-			args: args{np: &HostParams{Engine: "postgres",
-				Shape:         "db.t4g.medium",
-				MinStorageGB:  200,
-				InstanceClass: "db.t4g.medium",
-				EngineVersion: "12.11",
-			},
-			},
-		},
-		{name: "storage-different-aurora", want: false,
-			fields: fields{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-			},
-			args: args{np: &HostParams{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  200,
-				EngineVersion: "12.11",
-			},
+		{
+			name: "version-different-default-version", want: false,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim:     &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "13.11",
+				},
 			},
 		},
-		{name: "storage-different-aurora-with-io-shape", want: false,
-			fields: fields{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium!io1",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  20,
-				EngineVersion: "12.11",
-				StorageType:   "aurora-iopt1",
+		{
+			name: "engine-different", want: true,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:  "aurora-postgresql",
+					Shape: "db.t4g.different",
+				}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "13.11",
+				},
 			},
-			args: args{np: &HostParams{Engine: "aurora-postgresql",
-				Shape:         "db.t4g.medium",
-				InstanceClass: "db.t4g.medium",
-				MinStorageGB:  200,
-				EngineVersion: "12.11",
-				StorageType:   "aurora",
+		},
+		{
+			name: "storage-different-postgres", want: false,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "postgres",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+				activeHostParams: &HostParams{Engine: "postgres",
+					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "13.11",
+				},
 			},
+		},
+		{
+			name: "storage-different-aurora", want: false,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "aurora-postgresql",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+					Shape:         "db.t4g.medium",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "13.11",
+				},
+			},
+		},
+		{
+			name: "storage-different-aurora-with-io-shape", want: false,
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "aurora-postgresql",
+					Shape:        "db.t4g.medium!io1",
+					MinStorageGB: 20,
+				}},
+				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+					Shape:         "db.t4g.medium!io1",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "13.11",
+				},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &HostParams{
-				Engine:                          tt.fields.Engine,
-				Shape:                           tt.fields.Shape,
-				InstanceClass:                   tt.fields.InstanceClass,
-				MinStorageGB:                    tt.fields.MinStorageGB,
-				EngineVersion:                   tt.fields.EngineVersion,
-				MasterUsername:                  tt.fields.MasterUsername,
-				SkipFinalSnapshotBeforeDeletion: tt.fields.SkipFinalSnapshotBeforeDeletion,
-				PubliclyAccessible:              tt.fields.PubliclyAccessible,
-				EnableIAMDatabaseAuthentication: tt.fields.EnableIAMDatabaseAuthentication,
-				DeletionPolicy:                  tt.fields.DeletionPolicy,
-				Port:                            tt.fields.Port,
-				isDefaultEngine:                 tt.fields.isDefaultEngine,
-				isDefaultShape:                  tt.fields.isDefaultShape,
-				isDefaultStorage:                tt.fields.isDefaultStorage,
-				isDefaultVersion:                tt.fields.isDefaultVersion,
-				isDefaultInstanceClass:          tt.fields.isDefaultInstanceClass,
-			}
-			if got := p.IsUpgradeRequested(tt.args.np); got != tt.want {
-				t.Errorf("HostParams.IsUpgradeRequested() = %v, want %v", got, tt.want)
+			hp, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			if got := hp.IsUpgradeRequested(tt.args.activeHostParams); got != tt.want {
+				t.Errorf("IsUpgradeRequested() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -427,9 +394,6 @@ func TestGetActiveHostParams(t *testing.T) {
 var testConfig = []byte(`defaultMasterPort: 5432
 defaultMasterUsername: root
 defaultSslMode: require
-defaultEngineVersion: 13
-defaultShape: xyz
-defaultEngine: whocares
 defaultMinStorageGB: 42
 sample-connection:
 storageType: gp3
@@ -501,15 +465,15 @@ func TestNew(t *testing.T) {
 					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium",
+					Shape:        "db.t4g.large",
 					MinStorageGB: 20,
 				}},
 			},
 			want: &HostParams{Engine: "postgres",
-				Shape:         "db.t4g.medium",
+				Shape:         "db.t4g.large",
 				MinStorageGB:  20,
 				EngineVersion: "12.11",
-				InstanceClass: "db.t4g.medium",
+				InstanceClass: "db.t4g.large",
 				StorageType:   "gp3",
 			},
 			wantErr: false,
@@ -538,11 +502,11 @@ func TestNew(t *testing.T) {
 				fragmentKey: "sample-connection",
 				dbClaim:     &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 			},
-			want: &HostParams{Engine: "whocares",
-				Shape:         "xyz",
-				InstanceClass: "xyz",
+			want: &HostParams{Engine: "postgres",
+				Shape:         "db.t4g.medium",
+				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  42,
-				EngineVersion: "13",
+				EngineVersion: "15.3",
 			},
 			wantErr: false,
 		},
@@ -796,6 +760,56 @@ func TestDeletionPolicy(t *testing.T) {
 			got, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
 			if string(got.DeletionPolicy) != tt.want {
 				t.Errorf("DeletionPolicy = %v, want %v", got.DeletionPolicy, tt.want)
+			}
+		})
+	}
+}
+func TestCheckEngineVersion(t *testing.T) {
+	type args struct {
+		config      *viper.Viper
+		fragmentKey string
+		dbClaim     *persistancev1.DatabaseClaim
+	}
+	tests := []struct {
+		name string
+		args args
+		want error
+	}{
+		{
+			name: "test_default_EngineVersion",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "aurora-postgresql",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+			},
+			want: ErrEngineVersionNotSpecified,
+		},
+		{
+			name: "test_specific_EngineVersion",
+			args: args{
+				config:      NewConfig(testConfig),
+				fragmentKey: "",
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Port:         "5432",
+					Type:         "aurora-postgresql",
+					DBVersion:    "12.11",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+			},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hp, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			if got := hp.CheckEngineVersion(); got != tt.want {
+				t.Errorf("CheckEngineVersion() = %v, want %v", got, tt.want)
 			}
 		})
 	}
