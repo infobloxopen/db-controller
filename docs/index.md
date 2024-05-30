@@ -361,33 +361,72 @@ a database instance.  It includes the following properties:
 
 DatabaseClaim:
 
-   * spec:
+   * DatabaseClaimSpec:
+      - Class (optional): uses to run multiple instances of dbcontroller.
+      - SourceDataFrom (optional): specifies an existing database or backup to use when initially provisioning the database. *If the dbclaim has already provisioned a database, this field is ignored.
+      - UseExistingSource (optional): instructs the controller to perform user management on the database currently defined in the SourceDataFrom field.
+	      If sourceDataFrom is empty, this is ignored
+	      If this is set, .sourceDataFrom.Type and .type must match to use an existing source (since they must be the same)
+	      If this field was set and becomes unset, migration of data will commence.
+      - RestoreFrom (optional): Indicates the snapshot to restore the Database from. 
+      - EnableReplicationRole (optional): Will grant rds replication role to Username. This value is ignored if EnableSuperUser is set to true.
+      - EnableSuperUser (optional): Will grant rds_superuser and createrole role to Username. This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false.
       - AppID: Application ID used for the application.
       - SecretName: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.  The SecretName is Namespace scoped.
       - Type: The type of the database instance. E.g. Postgres
       - InstanceLabel: The matching fragment key name of the database instance that will host the database. The fragment keys are defined in the db-controller configMap and describe the connection information for the database instance that this DBClaim is associated with. The longest match will win. For example, the database claim can have a label of athena.hostapp but the only available RDS instances have a label of athena, atlas and northstar. So the controller would match the athena instance. If however an instance label has a label of athena.hostapp, then the hostapp claim would match it exactly.
       - Username: The username that the application will use for accessing the database.
       - DatabaseName: The name of the database instance. 
+      - DBVersion (optional): The version of the database.
       - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
       - DSNName: The key used for the client dsn connection string in the Secret
-      - Host: The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - Port: The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - Shape: The optional Shape values are arbitrary and help drive instance selection
-      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity
-      - DeletePolicy: The optional DeletePolicy value defines policy, default delete, possible values: delete, recycle
+      - Host (optional): The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Port (optional): The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Shape (optional): The optional Shape values are arbitrary and help drive instance selection
+      - MinStorageGB (optional): The optional MinStorageGB value requests the minimum database host storage capacity
+      - MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto. For auroraDB instance, this value is ignored.
+      - DeletePolicy (optional): The optional DeletePolicy value defines policy, default delete, possible values: delete, recycle
+      - BackupPolicy (optional): Specifies the duration at which db backups are taken.
+      - Tags (optional): Tags.
 
-   * status:
+   * DatabaseClaimStatus:
       - Error: Any errors related to provisioning this claim.
+      - NewDB (type: Status): Track the status of new db in the process of being created.
+      - ActiveDB (type: Status): Track the status of the active db being used by the application.
+      - MigrationState: Tracks status of DB migration. if empty, not started. Non empty denotes migration in progress, unless it is S_Completed.
+      - OldDB (type: StatusForOldDB): Tracks the DB which is migrated and not more operational.
+
+    * StatusForOldDB
+	    - ConnectionInfo (type: DatabaseClaimConnectionInfo): Time the connection info was updated/created.
+      - DBVersion: Version of the provisioned Database.
+      - Shape: The optional Shape values are arbitrary and help drive instance selection.
+      - Type: Specifies the type of database to provision. Only postgres is supported.
+      - PostMigrationActionStartedAt: Time at the process of post migration actions initiated.
+      - DbState: DbState of the DB. inprogress, "", ready.
+      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity in GBytes.
+
+    * Status: 
       - DbCreatedAt: Time the database was created.
-      - ConnectionInfoUpdatedAt: Time the connection info was updated/created.
       - MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
-      - ConnectionInfo[] (data in connection info is projected into a secret)
+      - ConnectionInfo{} (data in connection info is projected into a secret)
          - Username: The username that the application will use for accessing the database. 
          - Password: The password associated with the Username.
          - Host: The host name where the database instance is located.
          - Port: The port to use for connecting to the host.
          - DatabaseName: The name of the database instance.
-         - UserUpdatedAt: Time that this user connection information was last updated
+      - DBVersion: Version of the provisioned Database.
+      - Shape: The optional Shape values are arbitrary and help drive instance selection
+      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
+      - MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+      For auroraDB instance, this value is ignored.
+      - Type: Specifies the type of database to provision. Only postgres is supported.
+      - ConnectionInfoUpdatedAt: Time the connection info was updated/created.
+      - UserUpdatedAt: Time the user/password was updated/created
+      - DbState: DbState of the DB. inprogress, "", ready
+      - SourceDataFrom: SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+      If the dbclaim has already provisioned a database, this field is ignored.
+      This field used when claim is use-existing-db and attempting to migrate to newdb
+      
 
 ## Secrets
 During the processing of each DatabaseClaim, the db-controller will generate the 

@@ -43,17 +43,19 @@ The deployment resource passes this mounted as configmap
 to the application:
 
 ```yaml
-          args:
+  args:
 ...
-            - --config-file=/etc/config/config.yaml
+  - --config-file=/etc/config/config.yaml
 ```
 For local debugging created a config file:
 ```bash
 cmd/config/config.yaml
 ```
-Added program argument when running it local:
+Adde/
 ```bash
 --config-file=cmd/config/config.yaml
+#if you are debugging use this one instead (cause debugger runs in /cmd/manager):
+--config-file=../../cmd/config/config.yaml
 ```
 After these changes you can now run the db-controller locally:
 ```bash
@@ -126,30 +128,27 @@ helm install -n db-controller postgres .
 ```
 Make sure it is running
 ```bash
-kubectl get pods
+kubectl get pods -n db-controller
 NAME                    READY   STATUS    RESTARTS   AGE
 postgres-postgresql-0   1/1     Running   0          16h
 ```
 
 port-forward so that you can reach it from localhost:5432
 ```bash
-kubectl port-forward postgres-postgresql-0 5432:5432
+kubectl port-forward postgres-postgresql-0 5432:5432 -n db-controller
 ```
 Here is what the config.yaml configuration for this
 local setup looks like for local setup:
 
 ```yaml
 sample-connection:
-  username: postgres
-  host: localhost
-  port: 5432
+  masterUsername: postgres
+  Host: localhost
+  Port: 5432
   sslMode: disable
-  passwordSecretRef: postgres-postgresql
-  passwordSecretKey: postgresql-password
+  PasswordSecretRef: postgres-postgresql
+  PasswordSecretKey: postgresql-password
   ```
-
-Here is what the config.yaml configuration for this
-local setup looks like for local setup:
 
 This make us get to get the client secret:
 ```bash
@@ -208,9 +207,9 @@ dynamic-connection:
 There will be two local debugging environment:
 
 * one will be to setup crossplane on kind cluster and debug as that will be the fastest way to bring up the environment.
-  - This will require having a EKS cluster that you can reference for setting up the subnet-group and security group which tied to EKS vpc
+  - This will require having an EKS cluster that you can reference for setting up the subnet-group and security group which tied to EKS vpc
   - It will also require setting up a different ProviderConfig right now it is using IRSA and will need local credentials
-* second will be to setup crossplane on EKS and this will the closest to production testing
+* second will be to setup crossplane on EKS and this will be the closest to production testing
 
 For kind environment run the deploy setps:
 ***TODO - This is not working yet, see above notes***
@@ -248,7 +247,6 @@ There is this error about connectivity problem:
 ```json
 {
   "level": "error",
-  "ts": 1651940225.8717563,
   "logger": "controllers.DatabaseClaim",
   "msg": "error creating database postgresURI postgres://root:@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require",
   "databaseclaim": "<some namespace>/databaseclaim-dynamic-1",
@@ -318,11 +316,11 @@ the logs and you will need to find the value from the secret in db-controller na
 this database as part of your connection string.
 ```bash
 kubectl -n postgres exec -it postgres-postgresql-0 /bin/sh
-PGPASSWORD=PGPASSHEREz... createdb -h db-controller-dynamic.<some-region>.rds.amazonaws.com  -U root -p 10000 sample_app_claim_1
+PGPASSWORD=PASSHERE... createdb -h db-controller-dynamic.<some-region>.rds.amazonaws.com  -U root -p 10000 sample_app_claim_1
 psql postgres://root:<password>@db-controller-dynamic.<some region>.rds.amazonaws.com:5432/sample_app_claim_1?sslmode=require
 ```
 psql postgres://root:PASSHERE@<db-controller-full-aws-arn>:5432/sample_app_claim_1?sslmode=require
 psql postgres://root:PASSHERE@<db-controller-full-aws-arn>:10000/sample_app_claim_1?sslmode=require
 
-PGPASSWORD=PASSHERE createdb -h <db-controller-full-aws-arn>  -U root -p 5432 sample_app_claim_1
-PGPASSWORD=PASSHERE  createdb -h <db-controller-full-aws-arn> -U root -p 5432 sample_app_claim_1
+PGPASSWORD=PASSHERE createdb -h <db-controller-full-aws-arn> -U root -p 5432  sample_app_claim_1
+PGPASSWORD=PASSHERE createdb -h <db-controller-full-aws-arn> -U root -p 10000 sample_app_claim_1

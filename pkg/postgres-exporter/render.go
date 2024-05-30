@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"strings"
 	"text/template"
 
@@ -175,7 +175,7 @@ func Render(ctx context.Context, cfg *Config) (string, string, error) {
 		err error
 	)
 
-	bs, err = ioutil.ReadFile(cfg.DepYamlPath)
+	bs, err = os.ReadFile(cfg.DepYamlPath)
 	if err != nil {
 		return "", "", fmt.Errorf("unable load depYamlPath: %w", err)
 	}
@@ -184,7 +184,7 @@ func Render(ctx context.Context, cfg *Config) (string, string, error) {
 		return "", "", err
 	}
 
-	bs, err = ioutil.ReadFile(cfg.ConfigYamlPath)
+	bs, err = os.ReadFile(cfg.ConfigYamlPath)
 	if err != nil {
 		return "", "", err
 	}

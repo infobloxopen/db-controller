@@ -149,6 +149,7 @@ func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
 	return true
 }
 
+// Get the type (nature) of the operation. If it's a new DB, sharedDB, useexisting, etc...
 func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) ModeEnum {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getMode")
 	//default mode is M_UseNewDB. any non supported combination needs to be identfied and set to M_NotSupported
@@ -246,6 +247,7 @@ func (r *DatabaseClaimReconciler) getMode(dbClaim *persistancev1.DatabaseClaim) 
 	return M_UseNewDB
 }
 
+// Load base values and configs to kick off the whole process
 func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClaim) error {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
@@ -284,6 +286,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 		}
 		sharedDBHost = true
 	}
+	r.Input.FragmentKey = fragmentKey
 	connInfo := r.getClientConn(dbClaim)
 	if connInfo.Port == "" {
 		return fmt.Errorf("cannot get master port")
@@ -385,7 +388,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 					logr.Error(err, "unable to update status. ignoring this error")
 				}
 				//ignore delete request, continue to process rds migration
-				return r.updateStatus(ctx, &dbClaim)
+				return r.executeDbClaimRequest(ctx, &dbClaim)
 			}
 			// our finalizer is present, so lets handle any external dependency
 			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
@@ -417,7 +420,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
 		return ctrl.Result{}, err
 	}
-	return r.updateStatus(ctx, &dbClaim)
+	return r.executeDbClaimRequest(ctx, &dbClaim)
 }
 
 func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, dbClaim persistancev1.DatabaseClaim) error {
@@ -432,7 +435,8 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 
-func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
+// Create, migrate or upgrade database
+func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
 		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
@@ -634,7 +638,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	dbName := existingDBConnInfo.DatabaseName
 	updateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
 	if err != nil {
 		return err
 	}
@@ -718,11 +722,11 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 	} else {
 		updateClusterStatus(&dbClaim.Status.NewDB, &r.Input.HostParams)
 	}
-	if err := r.manageDatabase(dbClient, &dbClaim.Status.NewDB); err != nil {
+	if err := r.createDatabaseAndExtensions(dbClient, &dbClaim.Status.NewDB); err != nil {
 		return ctrl.Result{}, err
 
 	}
-	err = r.manageUser(dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1577,7 +1581,8 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	}
 	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 }
-func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, status *persistancev1.Status) error {
+
+func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(dbClient dbclient.Client, status *persistancev1.Status) error {
 	logr := r.Log.WithValues("func", "manageDatabase")
 
 	dbName := r.Input.MasterConnInfo.DatabaseName
@@ -1588,11 +1593,11 @@ func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, statu
 		return err
 	}
 	if created && r.Mode == M_UseNewDB {
-		//the migrations usecase takes care of copying extentions
+		//the migrations usecase takes care of copying extensions
 		//only in newDB workflow they need to be created explicitly
-		err = dbClient.CreateDefaultExtentions(dbName)
+		err = dbClient.CreateDefaultExtensions(dbName)
 		if err != nil {
-			msg := fmt.Sprintf("error creating default extentions for %s", dbName)
+			msg := fmt.Sprintf("error creating default extensions for %s", dbName)
 			logr.Error(err, msg)
 			return err
 		}
@@ -1603,7 +1608,7 @@ func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, statu
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
 	logr := r.Log.WithValues("func", "manageUser")
 
 	// baseUsername := dbClaim.Spec.Username
@@ -1616,8 +1621,8 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 		return err
 	}
 	if roleCreated {
-		// take care of special extentions related to the user
-		err = dbClient.CreateSpecialExtentions(dbName, baseUsername)
+		// take care of special extensions related to the user
+		err = dbClient.CreateSpecialExtensions(dbName, baseUsername)
 		if err != nil {
 			return err
 		}
@@ -2691,6 +2696,7 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, dbClai
 	return string(gs.Data[secretKey]), nil
 }
 
+// Load settings into the DBClaim (connection, config, controllerconfig...)
 func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *persistancev1.DatabaseClaim) (string, error) {
 	settingsMap := r.Config.AllSettings()
 
