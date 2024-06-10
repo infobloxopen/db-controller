@@ -324,3 +324,16 @@ psql postgres://root:PASSHERE@<db-controller-full-aws-arn>:10000/sample_app_clai
 
 PGPASSWORD=PASSHERE createdb -h <db-controller-full-aws-arn> -U root -p 5432  sample_app_claim_1
 PGPASSWORD=PASSHERE createdb -h <db-controller-full-aws-arn> -U root -p 10000 sample_app_claim_1
+
+
+### Run integration tests
+
+1. Integration tests run against server box-3. Before running your tests, you'll have to update the cluster you are running against with the version you have your changes. 
+Otherwise it'll run against an old version
+
+2. Update file dbc_end2end_test.go (line 56) with a class name of your own (let's say you username). That will be used to create a namespace and the CRDs under it.
+
+3. if you want to read a single test at a time replace It() by Fit(), this is a focused test and only this test will run (output shows failure, but this is intended
+not to fool you ran everything successfully)
+
+4. 
