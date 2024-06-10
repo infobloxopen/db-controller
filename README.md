@@ -336,4 +336,4 @@ Otherwise it'll run against an old version
 3. if you want to read a single test at a time replace It() by Fit(), this is a focused test and only this test will run (output shows failure, but this is intended
 not to fool you ran everything successfully)
 
-4. 
+4. update file .id with the same name you used in step 2
