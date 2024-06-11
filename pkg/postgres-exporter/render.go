@@ -82,12 +82,14 @@ func MustReadValues(data []byte) Values {
 	return vals
 }
 
+const DefaultDBFileName = "uri_dsn.txt"
+
 var DefaultConfig = Config{
 
 	Release:            "dbclaim-exporter",
 	ImageRepo:          "quay.io/prometheuscommunity/postgres-exporter",
 	ImageTag:           "v0.10.1",
-	DatasourceFileName: "dsn.txt",
+	DatasourceFileName: DefaultDBFileName,
 
 	Resources: map[string]map[string]string{
 		"requests": {

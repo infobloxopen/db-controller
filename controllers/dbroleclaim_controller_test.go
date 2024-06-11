@@ -113,14 +113,14 @@ var _ = Describe("dbRoleClaim controller", func() {
 				},
 				Type: "Opaque",
 				Data: map[string][]byte{
-					"database": []byte("dGVzdGRhdGFiYXNl"),
-					"dsn.txt":  []byte("aG9zdD10ZXN0aG9zdC50ZXN0LnVzLWVhc3QtMS5yZHMuYW1hem9uYXdzLmNvbSBwb3J0PTU0MzIgdXNlcj11c2VyX2EgcGFzc3dvcmQ9dGVzdHBhc3N3b3JkIGRibmFtZT10ZXN0ZGF0YWJhc2Ugc3NsbW9kZT1yZXF1aXJl"),
-					"hostname": []byte("dGVzdGhvc3QudGVzdC51cy1lYXN0LTEucmRzLmFtYXpvbmF3cy5jb20="),
-					"password": []byte("dGVzdHBhc3N3b3Jk"),
-					"port":     []byte("NTQzMg=="),
-					"sslmode":  []byte("cmVxdWlyZQ=="),
-					URIDSN:     []byte(DSN),
-					"username": []byte("dXNlcl9h"),
+					"database":    []byte("dGVzdGRhdGFiYXNl"),
+					"uri_dsn.txt": []byte("aG9zdD10ZXN0aG9zdC50ZXN0LnVzLWVhc3QtMS5yZHMuYW1hem9uYXdzLmNvbSBwb3J0PTU0MzIgdXNlcj11c2VyX2EgcGFzc3dvcmQ9dGVzdHBhc3N3b3JkIGRibmFtZT10ZXN0ZGF0YWJhc2Ugc3NsbW9kZT1yZXF1aXJl"),
+					"hostname":    []byte("dGVzdGhvc3QudGVzdC51cy1lYXN0LTEucmRzLmFtYXpvbmF3cy5jb20="),
+					"password":    []byte("dGVzdHBhc3N3b3Jk"),
+					"port":        []byte("NTQzMg=="),
+					"sslmode":     []byte("cmVxdWlyZQ=="),
+					URIDSN:        []byte(DSN),
+					"username":    []byte("dXNlcl9h"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, roleSecret)).Should(Succeed())
