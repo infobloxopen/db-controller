@@ -1606,6 +1606,10 @@ func (r *DatabaseClaimReconciler) manageDatabase(dbClient dbclient.Client, statu
 func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *persistancev1.Status, dbName string, baseUsername string) error {
 	logr := r.Log.WithValues("func", "manageUser")
 
+	if status == nil {
+		return fmt.Errorf("status is nil")
+	}
+
 	// baseUsername := dbClaim.Spec.Username
 	dbu := dbuser.NewDBUser(baseUsername)
 	rotationTime := r.getPasswordRotationTime()
@@ -1623,8 +1627,14 @@ func (r *DatabaseClaimReconciler) manageUser(dbClient dbclient.Client, status *p
 		}
 	}
 
-	if dbu.IsUserChanged(*status) {
-		oldUsername := dbu.TrimUserSuffix(status.ConnectionInfo.Username)
+	if status.ConnectionInfo == nil {
+		return fmt.Errorf("connection info is nil")
+	}
+
+	userName := status.ConnectionInfo.Username
+
+	if dbu.IsUserChanged(userName) {
+		oldUsername := dbuser.TrimUserSuffix(userName)
 		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
 			return err
 		}

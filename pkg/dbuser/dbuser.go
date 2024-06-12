@@ -2,8 +2,6 @@ package dbuser
 
 import (
 	"strings"
-
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
 const (
@@ -25,25 +23,17 @@ func NewDBUser(baseName string) DBUser {
 	}
 }
 
-func (dbu DBUser) IsUserChanged(status persistancev1.Status) bool {
-	prevUsername := dbu.TrimUserSuffix(status.ConnectionInfo.Username)
+func (dbu DBUser) IsUserChanged(currentUserName string) bool {
 
-	if dbu.rolename != prevUsername && status.ConnectionInfo.Username != "" {
-		return true
+	if currentUserName == "" {
+		return false
 	}
 
-	return false
+	return TrimUserSuffix(currentUserName) != dbu.rolename
 }
 
-func (dbu DBUser) TrimUserSuffix(in string) string {
-	var out string
-	if strings.HasSuffix(in, SuffixA) {
-		out = strings.TrimSuffix(in, SuffixA)
-	} else {
-		out = strings.TrimSuffix(in, SuffixB)
-	}
-
-	return out
+func TrimUserSuffix(in string) string {
+	return strings.TrimSuffix(strings.TrimSuffix(in, SuffixA), SuffixB)
 }
 
 func (dbu DBUser) GetUserA() string {
@@ -54,14 +44,14 @@ func (dbu DBUser) GetUserB() string {
 	return dbu.userB
 }
 
+// NextUser returns UserB unless the current user is already UserB.
+// Invalid users also return UserB as the next user. This is to prevent
+// changes in current behavior of the func.
 func (dbu DBUser) NextUser(curUser string) string {
-	var nextUser string
 
 	if dbu.userA == curUser {
-		nextUser = dbu.userB
-	} else {
-		nextUser = dbu.userA
+		return dbu.GetUserB()
 	}
 
-	return nextUser
+	return dbu.GetUserA()
 }
