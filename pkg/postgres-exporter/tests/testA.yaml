@@ -40,7 +40,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: "secret/data"
-                key: dsn.txt
+                key: uri_dsn.txt
           - name: DATA_SOURCE_USER
             value: data
           image: ":"
