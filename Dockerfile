@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager cmd/manager/mai
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM alpine:3.18
-RUN apk --update add  postgresql15-client=15.6-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/v3.18/main
+RUN apk --update add  postgresql15-client --repository=http://dl-cdn.alpinelinux.org/alpine/v3.18/main
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/config/ /config/
