@@ -51,7 +51,7 @@ For local debugging created a config file:
 ```bash
 cmd/config/config.yaml
 ```
-Adde/
+Added program argument when running it local:
 ```bash
 --config-file=cmd/config/config.yaml
 #if you are debugging use this one instead (cause debugger runs in /cmd/manager):
