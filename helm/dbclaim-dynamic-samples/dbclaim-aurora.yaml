@@ -9,5 +9,5 @@ spec:
   type: aurora-postgresql
   userName: sample_user
   databaseName: pub-aurora
-  dsnName: dsn.txt
+  dsnName: uri_dsn.txt
   useExistingSource: false
