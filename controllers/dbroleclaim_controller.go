@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -246,7 +247,6 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	log := log.FromContext(ctx).WithValues("databaserole", "copySourceSecret")
 
 	secretName := dbRoleClaim.Spec.SecretName
-	truePtr := true
 	sourceSecretData := sourceSecret.Data
 	role_secret := &corev1.Secret{}
 
@@ -269,19 +269,19 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 						Kind:               "DbRoleClaim",
 						Name:               dbRoleClaim.Name,
 						UID:                dbRoleClaim.UID,
-						Controller:         &truePtr,
-						BlockOwnerDeletion: &truePtr,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
 					},
 				},
 			},
 			Data: sourceSecretData,
 		}
 		log.Info("creating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
-		r.Client.Create(ctx, role_secret)
-	} else {
-		role_secret.Data = sourceSecretData
-		log.Info("updating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
-		return r.Client.Update(ctx, role_secret)
+		return r.Client.Create(ctx, role_secret)
 	}
-	return nil
+
+	role_secret.Data = sourceSecretData
+	log.Info("updating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
+	return r.Client.Update(ctx, role_secret)
+
 }
