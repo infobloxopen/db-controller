@@ -232,7 +232,7 @@ type Tag struct {
 
 // DatabaseClaimStatus defines the observed state of DatabaseClaim
 type DatabaseClaimStatus struct {
-	// Any errors related to provisioning this claim.
+	// Error is the most recent error reported during provisioning
 	Error string `json:"error,omitempty"`
 	//track the status of new db in the process of being created
 	NewDB Status `json:"newDB,omitempty"`
@@ -258,30 +258,30 @@ type StatusForOldDB struct {
 	// Specifies the type of database to provision. Only postgres is supported.
 	Type DatabaseType `json:"type,omitempty"`
 
-	// Time at the process of post migration actions initiated
-	PostMigrationActionStartedAt *metav1.Time `json:"postMigrationActionStartedAt,omitempty"`
-
 	// DbState of the DB. inprogress, "", ready
 	DbState DbState `json:"DbState,omitempty"`
 
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	MinStorageGB int `json:"minStorageGB,omitempty"`
+
+	// Time at the process of post migration actions initiated
+	PostMigrationActionStartedAt *metav1.Time `json:"postMigrationActionStartedAt,omitempty"`
 }
 
 type Status struct {
+	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo"`
+
+	// Time the connection info was updated/created.
+	ConnectionInfoUpdatedAt *metav1.Time `json:"connectionUpdatedAt,omitempty"`
+
 	// Time the database was created
 	DbCreatedAt *metav1.Time `json:"dbCreateAt,omitempty"`
-
-	// The name of the label that was successfully matched against the fragment key names in the db-controller configMap
-	MatchedLabel string `json:"matchLabel,omitempty"`
-
-	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo"`
 
 	// Version of the provisioned Database
 	DBVersion string `json:"dbversion,omitempty"`
 
-	// The optional Shape values are arbitrary and help drive instance selection
-	Shape string `json:"shape,omitempty"`
+	// The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+	MatchedLabel string `json:"matchLabel,omitempty"`
 
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	MinStorageGB int `json:"minStorageGB,omitempty"`
@@ -290,11 +290,11 @@ type Status struct {
 	// For auroraDB instance, this value is ignored.
 	MaxStorageGB int64 `json:"maxStorageGB,omitempty"`
 
+	// The optional Shape values are arbitrary and help drive instance selection
+	Shape string `json:"shape,omitempty"`
+
 	// Specifies the type of database to provision. Only postgres is supported.
 	Type DatabaseType `json:"type,omitempty"`
-
-	// Time the connection info was updated/created.
-	ConnectionInfoUpdatedAt *metav1.Time `json:"connectionUpdatedAt,omitempty"`
 
 	// Time the user/password was updated/created
 	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`

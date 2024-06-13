@@ -393,7 +393,7 @@ spec:
                 - connectionInfo
                 type: object
               error:
-                description: Any errors related to provisioning this claim.
+                description: Error is the most recent error reported during provisioning
                 type: string
               migrationState:
                 description: tracks status of DB migration. if empty, not started.
