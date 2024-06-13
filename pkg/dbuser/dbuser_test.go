@@ -3,8 +3,6 @@ package dbuser
 import (
 	"flag"
 	"testing"
-
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
 // The following gingo struct and associted init() is required to run go test with ginkgo related flags
@@ -21,82 +19,66 @@ func init() {
 }
 
 func TestDBUser_IsUserChanged(t *testing.T) {
-	type mockDBUser struct {
-		role  string
-		userA string
-		userB string
-	}
-	type args struct {
-		dbClaim *persistancev1.DatabaseClaim
-	}
 	tests := []struct {
-		name   string
-		dbuser mockDBUser
-		args   args
-		want   bool
+		name            string
+		rolename        string
+		currentUserName string
+		want            bool
 	}{
 		{
-			"User unchanged",
-			mockDBUser{
-				role: "oldUser",
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
-							Username: "oldUser",
-						},
-						},
-					},
-				},
-			},
-			false,
+			name:            "User unchanged",
+			rolename:        "oldUser",
+			currentUserName: "oldUser",
+			want:            false,
 		},
 		{
-			"User unchanged",
-			mockDBUser{
-				role: "oldUser",
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
-							Username: "",
-						},
-						},
-					},
-				},
-			},
-			false,
+			name:            "User never set",
+			rolename:        "oldUser",
+			currentUserName: "",
+			want:            false,
 		},
 		{
-			"User changed",
-			mockDBUser{
-				role: "newUser",
-			},
-			args{
-				dbClaim: &persistancev1.DatabaseClaim{
-					Spec: persistancev1.DatabaseClaimSpec{
-						Username: "newUser",
-					},
-					Status: persistancev1.DatabaseClaimStatus{
-						ActiveDB: persistancev1.Status{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
-							Username: "oldUser",
-						},
-						},
-					},
-				},
-			},
-			true,
+			name:            "User changed",
+			rolename:        "newUser",
+			currentUserName: "oldUser",
+			want:            true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := DBUser{
-				rolename: tt.dbuser.role,
+				rolename: tt.rolename,
 			}
-			if got := d.IsUserChanged(tt.args.dbClaim.Status.ActiveDB); got != tt.want {
+			if got := d.IsUserChanged(tt.currentUserName); got != tt.want {
 				t.Errorf("isUserChanged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNextUs(t *testing.T) {
+	dbu := NewDBUser("test")
+
+	tests := []struct {
+		name    string
+		current string
+		want    string
+	}{
+		{
+			name:    "User A",
+			current: dbu.GetUserA(),
+			want:    dbu.GetUserB(),
+		},
+		{
+			name:    "User B",
+			current: dbu.GetUserB(),
+			want:    dbu.GetUserA(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := dbu.NextUser(tt.current); got != tt.want {
+				t.Errorf("NextUser() = %v, want %v", got, tt.want)
 			}
 		})
 	}
