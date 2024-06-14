@@ -17,8 +17,10 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"testing"
 	"time"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -57,8 +59,15 @@ var (
 	// class = "default"
 )
 
-var _ = Describe("db-controller end to end testing", Label("integration"), Ordered, func() {
+var _ = Describe("db-controller end to end testing", Ordered, func() {
+
 	var _ = BeforeAll(func() {
+
+		if testing.Short() {
+			Skip("skipping k8s based tests")
+		}
+		log.Println("FIXME: move integration tests to a separate package kubebuilder uses testing/e2e")
+
 		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 		kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &clientcmd.ConfigOverrides{})
 

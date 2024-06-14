@@ -20,17 +20,17 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/armon/go-radix"
+	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,10 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -49,24 +47,23 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/pgctl"
 	exporter "github.com/infobloxopen/db-controller/pkg/postgres-exporter"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+
+	// FIXME: upgrade kubebuilder so this package will be removed
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-type Error string
+var (
+	minRotationTime = 60 * time.Minute // rotation time in minutes
+	maxRotationTime = 1440 * time.Minute
+	maxWaitTime     = 10 * time.Minute
 
-func (e Error) Error() string { return string(e) }
-
-const (
-	defaultPassLen                  = 32
-	defaultNumDig                   = 10
-	defaultNumSimb                  = 10
-	minRotationTime                 = 60 // rotation time in minutes
-	maxRotationTime                 = 1440
-	maxWaitTime                     = 10
-	maxNameLen                      = 44 // max length of dbclaim name
-	defaultRotationTime             = minRotationTime
-	serviceNamespaceEnvVar          = "SERVICE_NAMESPACE"
-	defaultPostgresStr              = "postgres"
-	defaultAuroraPostgresStr        = "aurora-postgresql"
+	defaultPassLen         = 32
+	defaultNumDig          = 10
+	defaultNumSimb         = 10
+	maxNameLen             = 44 // max length of dbclaim name
+	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
+	//defaultPostgresStr              = "postgres"
+	//defaultAuroraPostgresStr        = "aurora-postgresql"
 	defaultRestoreFromSource        = "Snapshot"
 	defaultBackupPolicyKey          = "Backup"
 	tempTargetPassword              = "targetPassword"
@@ -74,7 +71,6 @@ const (
 	cachedMasterPasswdForExistingDB = "cachedMasterPasswdForExistingDB"
 	masterSecretSuffix              = "-master"
 	masterPasswordKey               = "password"
-	ErrMaxNameLen                   = Error("dbclaim name is too long. max length is 44 characters")
 	// InfoLevel is used to set V level to 0 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	InfoLevel = 0
@@ -87,16 +83,21 @@ const (
 	operationalStatusActiveValue   string = "active"
 )
 
+var ErrMaxNameLen = fmt.Errorf("dbclaim name is too long. max length is 44 characters")
+
 type ModeEnum int
 
 type input struct {
+
+	// FIXME: this is type DatabaseType, not string
+	DbType string
+
 	FragmentKey                string
 	ManageCloudDB              bool
 	SharedDBHost               bool
 	MasterConnInfo             persistancev1.DatabaseClaimConnectionInfo
 	TempSecret                 string
 	DbHostIdentifier           string
-	DbType                     string
 	HostParams                 hostparams.HostParams
 	EnableReplicationRole      bool
 	EnableSuperUser            bool
@@ -471,7 +472,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 
 		var dbParamGroupName string
 		// get name of DBParamGroup from connectionInfo
-		if dbClaim.Status.OldDB.Type == defaultAuroraPostgresStr {
+		if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
 			dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
 		} else {
 			dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
@@ -716,7 +717,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
 		}
-		if r.Input.HostParams.Engine == defaultPostgresStr && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
+		if r.Input.HostParams.Engine == string(v1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
 			dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
 		}
 	} else {
@@ -1396,13 +1397,14 @@ func (r *DatabaseClaimReconciler) getSSLMode(dbClaim *persistancev1.DatabaseClai
 }
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
-	prt := r.Config.GetInt("passwordconfig::passwordRotationPeriod")
+	prt := time.Duration(r.Config.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
+
 	if prt < minRotationTime || prt > maxRotationTime {
 		r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
-		return time.Duration(defaultRotationTime) * time.Minute
+		return minRotationTime
 	}
 
-	return time.Duration(prt) * time.Minute
+	return prt
 }
 
 func (r *DatabaseClaimReconciler) isPasswordComplexity() bool {
@@ -1452,14 +1454,14 @@ func (r *DatabaseClaimReconciler) getSystemFunctions() map[string]string {
 }
 
 func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
-	t := r.Config.GetInt("dynamicHostWaitTimeMin")
+	t := time.Duration(r.Config.GetInt("dynamicHostWaitTimeMin")) * time.Minute
+
 	if t > maxWaitTime {
-		msg := "dynamic host wait time is out of range, should be between 1 " + strconv.Itoa(maxWaitTime) + " min"
-		r.Log.Info(msg)
+		r.Log.Info(fmt.Sprintf("dynamic host wait time is out of range, should be between 1min and %s", maxWaitTime))
 		return time.Minute
 	}
 
-	return time.Duration(t) * time.Minute
+	return t
 }
 
 // FindStatusCondition finds the conditionType in conditions.
@@ -1545,10 +1547,12 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbC
 	hostName := r.getDynamicHostName(dbClaim)
 	params := &r.Input.HostParams
 
-	switch r.Input.DbType {
-	case defaultPostgresStr:
+	dbType := v1.DatabaseType(r.Input.DbType)
+
+	switch dbType {
+	case v1.Postgres:
 		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
-	case defaultAuroraPostgresStr:
+	case v1.AuroraPostgres:
 		return hostName + "-a-" + (strings.Split(params.EngineVersion, "."))[0]
 	default:
 		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
@@ -1558,28 +1562,31 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbC
 func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
-	if dbClaim.Spec.Type == defaultPostgresStr {
+	if dbClaim.Spec.Type == v1.Postgres {
 		return r.managePostgresDBInstance(ctx, dbHostIdentifier, dbClaim)
-	} else if dbClaim.Spec.Type == defaultAuroraPostgresStr {
-		_, err := r.manageDBCluster(ctx, dbHostIdentifier, dbClaim)
-		if err != nil {
-			return false, err
-		}
-		r.Log.Info("dbcluster is ready. proceeding to manage dbinstance")
-		firstInsReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
-		if err != nil {
-			return false, err
-		}
-		secondInsReady := true
-		if r.getMultiAZEnabled() {
-			secondInsReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
-			if err != nil {
-				return false, err
-			}
-		}
-		return firstInsReady && secondInsReady, nil
 	}
-	return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
+
+	if dbClaim.Spec.Type != v1.AuroraPostgres {
+		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
+	}
+
+	_, err := r.manageDBCluster(ctx, dbHostIdentifier, dbClaim)
+	if err != nil {
+		return false, err
+	}
+	r.Log.Info("dbcluster is ready. proceeding to manage dbinstance")
+	firstInsReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
+	if err != nil {
+		return false, err
+	}
+	secondInsReady := true
+	if r.getMultiAZEnabled() {
+		secondInsReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
+		if err != nil {
+			return false, err
+		}
+	}
+	return firstInsReady && secondInsReady, nil
 }
 
 func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(dbClient dbclient.Client, status *persistancev1.Status) error {
@@ -2502,7 +2509,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
 	params := &r.Input.HostParams
-	if dbClaim.Spec.Type == defaultPostgresStr {
+	if dbClaim.Spec.Type == v1.Postgres {
 		multiAZ := r.getMultiAZEnabled()
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
@@ -2599,12 +2606,12 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	var dsn, dbURI string
 
 	switch dbType {
-	case defaultPostgresStr:
+	case v1.Postgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
-	case defaultAuroraPostgresStr:
+	case v1.AuroraPostgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
@@ -2812,7 +2819,7 @@ func updateClusterStatus(status *persistancev1.Status, hostParams *hostparams.Ho
 	status.Type = persistancev1.DatabaseType(hostParams.Engine)
 	status.Shape = hostParams.Shape
 	status.MinStorageGB = hostParams.MinStorageGB
-	if hostParams.Engine == defaultPostgresStr {
+	if hostParams.Engine == string(v1.Postgres) {
 		status.MaxStorageGB = hostParams.MaxStorageGB
 	}
 }

@@ -929,7 +929,7 @@ func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 				Config: NewConfig(passwordRotationLess60),
 				Log:    zap.New(zap.UseDevMode(true)),
 			},
-			defaultRotationTime * time.Minute,
+			minRotationTime,
 		},
 		{
 			"Get password rotation time greater 1440 min",
@@ -937,7 +937,7 @@ func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 				Config: NewConfig(passwordRotationLess60),
 				Log:    zap.New(zap.UseDevMode(true)),
 			},
-			defaultRotationTime * time.Minute,
+			minRotationTime,
 		},
 	}
 	for _, tt := range tests {
