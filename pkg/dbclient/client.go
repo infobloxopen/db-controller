@@ -148,7 +148,7 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	return created, err
 }
 
-func (pc *client) CreateDefaultExtentions(dbName string) error {
+func (pc *client) CreateDefaultExtensions(dbName string) error {
 	db, err := pc.getDB(dbName)
 	if err != nil {
 		pc.log.Error(err, "could not connect to db", "database", dbName)
@@ -167,7 +167,7 @@ func (pc *client) CreateDefaultExtentions(dbName string) error {
 	return nil
 }
 
-func (pc *client) CreateSpecialExtentions(dbName string, role string) error {
+func (pc *client) CreateSpecialExtensions(dbName string, role string) error {
 	db, err := pc.getDB(dbName)
 	if err != nil {
 		pc.log.Error(err, "could not connect to db", "database", dbName)
