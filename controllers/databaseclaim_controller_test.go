@@ -1231,7 +1231,7 @@ func TestDatabaseClaimReconciler_isClassPermitted(t *testing.T) {
 				Config: tt.reconciler.Config,
 				Class:  tt.reconciler.Class,
 			}
-			got := r.isClassPermitted(tt.args.claimClass)
+			got := isClassPermitted(r.Class, tt.args.claimClass)
 			if got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.isClassPermitted() = %v, want %v", got, tt.want)
 			}

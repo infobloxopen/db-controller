@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"log"
+	"testing"
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
@@ -10,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -38,11 +41,15 @@ var _ = Describe("db-controller", func() {
 					Namespace: BDClaimNamespace,
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
-					AppID:         "sample-app",
-					DatabaseName:  "sample_app",
-					InstanceLabel: "sample-connection",
-					SecretName:    "sample-secret",
-					Username:      "sample_user",
+					Class:                 ptr.To(""),
+					AppID:                 "sample-app",
+					DatabaseName:          "sample_app",
+					InstanceLabel:         "sample-connection",
+					SecretName:            "sample-secret",
+					Username:              "sample_user",
+					EnableSuperUser:       ptr.To(false),
+					EnableReplicationRole: ptr.To(false),
+					UseExistingSource:     ptr.To(false),
 				},
 			}
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
@@ -62,6 +69,11 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 	dnInstance3 := &crossplanerds.DBInstance{}
 
 	BeforeAll(func() {
+		if testing.Short() {
+			Skip("skipping k8s based tests")
+		}
+		log.Println("FIXME: move integration tests to a separate package kubebuilder uses testing/e2e")
+
 		By("Creating objects beforehand of DBClsuerParameterGroup, DBCluser, DBParameterGroup and DBInstance")
 		testString := "test"
 		ctx := context.Background()
@@ -380,6 +392,9 @@ var _ = Describe("canTagResources", Ordered, func() {
 
 	// Creating resources required to do tests beforehand
 	BeforeAll(func() {
+		if testing.Short() {
+			Skip("skipping k8s based tests")
+		}
 		ctx := context.Background()
 		dbClaim := &persistancev1.DatabaseClaim{
 			TypeMeta: metav1.TypeMeta{

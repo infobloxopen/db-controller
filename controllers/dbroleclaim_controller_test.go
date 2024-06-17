@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
 
 // +kubebuilder:docs-gen:collapse=Imports
@@ -25,11 +26,10 @@ var _ = Describe("dbRoleClaim controller", func() {
 		URIDSN           = "uri-dsn"
 		DSN              = "cG9zdGdyZXM6Ly91c2VyX2E6dGVzdHBhc3N3b3JkQHRlc3Rob3N0LnRlc3QudXMtZWFzdC0xLnJkcy5hbWF6b25hd3MuY29tOjU0MzIvdGVzdGRhdGFiYXNlP3NzbG1vZGU9cmVxdWlyZQ=="
 
-		timeout  = time.Second * 10
-		duration = time.Second * 10
+		timeout  = time.Second * 1
 		interval = time.Millisecond * 250
 	)
-	Class := "donotreconcile"
+	className := ptr.To("donotreconcile")
 	Context("When creating dbRoleClaim", func() {
 		It("Should eventually create a secret", func() {
 			By("creating a new dbRoleClaim with a dbclaim status error")
@@ -44,6 +44,7 @@ var _ = Describe("dbRoleClaim controller", func() {
 					Namespace: defaultNamespace,
 				},
 				Spec: persistancev1.DbRoleClaimSpec{
+					Class: ptr.To(""),
 					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
 						Name:      DBClaimName,
 						Namespace: defaultNamespace,
@@ -60,6 +61,7 @@ var _ = Describe("dbRoleClaim controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 			Expect(createdDbRoleClaim.Status.MatchedSourceClaim).Should(Equal(""))
+
 			Eventually(func() (string, error) {
 				err := k8sClient.Get(ctx, roleClaimLookupKey, createdDbRoleClaim)
 				if err != nil {
@@ -67,6 +69,7 @@ var _ = Describe("dbRoleClaim controller", func() {
 				}
 				return createdDbRoleClaim.Status.Error, nil
 			}, timeout, interval).Should(Equal(DBClaimName + " dbclaim not found"))
+
 			By("updating dbRoleClaim with a secret status error")
 			dbClaim := &persistancev1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
@@ -78,12 +81,16 @@ var _ = Describe("dbRoleClaim controller", func() {
 					Namespace: defaultNamespace,
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
-					Class:        &Class,
+					Class:        className,
 					SecretName:   DBClaimSecret,
 					Type:         "postgres",
 					Username:     "sample_user",
 					DatabaseName: "sampledb",
 					DSNName:      "postgres-dsn",
+					// We shouldnt use pointers for defaults
+					EnableSuperUser:       ptr.To(false),
+					EnableReplicationRole: ptr.To(false),
+					UseExistingSource:     ptr.To(false),
 				},
 			}
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())

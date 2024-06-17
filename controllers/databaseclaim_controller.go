@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -133,9 +134,9 @@ type DatabaseClaimReconciler struct {
 	MetricsConfigYamlPath string
 }
 
-func (r *DatabaseClaimReconciler) isClassPermitted(claimClass string) bool {
-	// r.Log.Info("in isClassPermitted", "claimClass", claimClass, "r.Class", r.Class)
-	controllerClass := r.Class
+func isClassPermitted(ctrlClass, claimClass string) bool {
+
+	controllerClass := ctrlClass
 
 	if claimClass == "" {
 		claimClass = "default"
@@ -358,7 +359,11 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	logr.Info("object information", "uid", dbClaim.ObjectMeta.UID)
 
-	if permitted := r.isClassPermitted(*dbClaim.Spec.Class); !permitted {
+	if dbClaim.Spec.Class == nil {
+		dbClaim.Spec.Class = ptr.To("default")
+	}
+
+	if permitted := isClassPermitted(r.Class, *dbClaim.Spec.Class); !permitted {
 		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
 		return ctrl.Result{}, nil
 	}
