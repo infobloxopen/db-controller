@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -79,6 +80,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if dbRoleClaim.Spec.SourceDatabaseClaim.Name == "" {
+		log.Error(fmt.Errorf("sourcedatabaseclaim cannot be nil"), "invalid_spec_source_database_claim_name")
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("sourcedatabaseclaim cannot be nil"))
 	}
 
@@ -99,30 +101,34 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	foundSecret := &corev1.Secret{}
 	err = r.Get(ctx, types.NamespacedName{Name: foundDbClaim.Spec.SecretName, Namespace: dbclaimNamespace}, foundSecret)
 	if err != nil {
-		log.Error(err, "specified dbclaimSecret not found", "dbclaim secret name", foundDbClaim.Spec.SecretName, "dbclaimNamespace", dbclaimNamespace)
+		log.Error(err, "dbclaim_secret_not_found", "secret_name", foundDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
 		r.Recorder.Event(&dbRoleClaim, "Warning", "Not found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, foundDbClaim.Spec.SecretName))
 		dbRoleClaim.Status.SourceSecret = ""
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s source secret not found", foundDbClaim.Spec.SecretName))
 	}
-	log.V(DebugLevel).Info("found dbclaimsecret", "secretName", foundDbClaim.Spec.SecretName, "secret", foundSecret)
+	log.V(DebugLevel).Info("dbclaim_secret", "secret_name", foundDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
 
 	dbRoleClaim.Status.SourceSecret = foundSecret.Namespace + "/" + foundSecret.Name
 	r.Recorder.Event(&dbRoleClaim, "Normal", "Found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, foundDbClaim.Spec.SecretName))
 
-	if foundSecret.GetResourceVersion() != dbRoleClaim.Status.SourceSecretResourceVersion {
-		if err = r.copySourceSecret(ctx, foundSecret, &dbRoleClaim); err != nil {
-			r.Recorder.Event(&dbRoleClaim, "Warning", "Update Failed", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
-			return r.manageError(ctx, &dbRoleClaim, err)
-		}
-		dbRoleClaim.Status.SourceSecretResourceVersion = foundSecret.GetResourceVersion()
-		timeNow := metav1.Now()
-		dbRoleClaim.Status.SecretUpdatedAt = &timeNow
-		r.Recorder.Event(&dbRoleClaim, "Normal", "Updated", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
-	} else {
+	if foundSecret.GetResourceVersion() == dbRoleClaim.Status.SourceSecretResourceVersion {
 		log.Info("source secret has not changed, update not called",
 			"sourceVersion", foundSecret.GetResourceVersion(),
 			"statusVersion", dbRoleClaim.Status.SourceSecretResourceVersion)
+		return r.manageSuccess(ctx, &dbRoleClaim)
 	}
+
+	if err = r.copySourceSecret(ctx, foundSecret, &dbRoleClaim); err != nil {
+		log.Error(err, "failed_copy_source_secret")
+		r.Recorder.Event(&dbRoleClaim, "Warning", "Update Failed", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
+		return r.manageError(ctx, &dbRoleClaim, err)
+	}
+
+	dbRoleClaim.Status.SourceSecretResourceVersion = foundSecret.GetResourceVersion()
+	timeNow := metav1.Now()
+	dbRoleClaim.Status.SecretUpdatedAt = &timeNow
+	r.Recorder.Event(&dbRoleClaim, "Normal", "Updated", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
+
 	return r.manageSuccess(ctx, &dbRoleClaim)
 }
 
@@ -207,6 +213,7 @@ func (r *DbRoleClaimReconciler) isClassPermitted(claimClass string) bool {
 }
 
 func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *persistancev1.DbRoleClaim, inErr error) (ctrl.Result, error) {
+
 	dbRoleClaim.Status.Error = inErr.Error()
 
 	err := r.Client.Status().Update(ctx, dbRoleClaim)
@@ -217,7 +224,6 @@ func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *pe
 		}
 		return ctrl.Result{}, err
 	}
-	// r.Log.Error(inErr, "error")
 	return ctrl.Result{}, inErr
 }
 
@@ -241,7 +247,6 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	log := log.FromContext(ctx).WithValues("databaserole", "copySourceSecret")
 
 	secretName := dbRoleClaim.Spec.SecretName
-	truePtr := true
 	sourceSecretData := sourceSecret.Data
 	role_secret := &corev1.Secret{}
 
@@ -264,19 +269,19 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 						Kind:               "DbRoleClaim",
 						Name:               dbRoleClaim.Name,
 						UID:                dbRoleClaim.UID,
-						Controller:         &truePtr,
-						BlockOwnerDeletion: &truePtr,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
 					},
 				},
 			},
 			Data: sourceSecretData,
 		}
 		log.Info("creating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
-		r.Client.Create(ctx, role_secret)
-	} else {
-		role_secret.Data = sourceSecretData
-		log.Info("updating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
-		return r.Client.Update(ctx, role_secret)
+		return r.Client.Create(ctx, role_secret)
 	}
-	return nil
+
+	role_secret.Data = sourceSecretData
+	log.Info("updating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
+	return r.Client.Update(ctx, role_secret)
+
 }

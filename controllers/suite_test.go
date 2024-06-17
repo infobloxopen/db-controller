@@ -161,8 +161,12 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 	err := testEnv.Stop()
+	// FIXME: this hack is fixed in a later version of kubebuilder
 	//  commented that line due to controller-runtime issue: https://github.com/kubernetes-sigs/controller-runtime/issues/1571 Should be reverted later
-	//	Expect(err).ToNot(HaveOccurred())
+	// Expect(err).ToNot(HaveOccurred())
+	if err == nil {
+		return
+	}
 	if err.Error() != "timeout waiting for process kube-apiserver to stop" {
 		Expect(err).ToNot(HaveOccurred())
 	} else {

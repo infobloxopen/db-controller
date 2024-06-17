@@ -929,7 +929,7 @@ func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 				Config: NewConfig(passwordRotationLess60),
 				Log:    zap.New(zap.UseDevMode(true)),
 			},
-			defaultRotationTime * time.Minute,
+			minRotationTime,
 		},
 		{
 			"Get password rotation time greater 1440 min",
@@ -937,7 +937,7 @@ func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 				Config: NewConfig(passwordRotationLess60),
 				Log:    zap.New(zap.UseDevMode(true)),
 			},
-			defaultRotationTime * time.Minute,
+			minRotationTime,
 		},
 	}
 	for _, tt := range tests {
@@ -1231,7 +1231,7 @@ func TestDatabaseClaimReconciler_isClassPermitted(t *testing.T) {
 				Config: tt.reconciler.Config,
 				Class:  tt.reconciler.Class,
 			}
-			got := r.isClassPermitted(tt.args.claimClass)
+			got := isClassPermitted(r.Class, tt.args.claimClass)
 			if got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.isClassPermitted() = %v, want %v", got, tt.want)
 			}

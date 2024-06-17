@@ -1,6 +1,7 @@
 package hostparams
 
 import (
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"strconv"
@@ -8,33 +9,36 @@ import (
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
 	"github.com/spf13/viper"
 )
 
-type Error string
-
-const (
-	defaultAuroraPostgresStr     = "aurora-postgresql"
-	defaultPostgresStr           = "postgres"
-	shapeDelimiter               = "!"
-	INSTANCE_CLASS_INDEX         = 0
-	STORAGE_TYPE_INDEX           = 1
-	ErrMaxStorageReduced         = Error("reducing .spec.maxStorageGB value is not allowed (Also not spacifying maxStorageGB if specified earlier is not allowed.)")
-	ErrMaxStorageLesser          = Error(".spec.maxStorageGB should always be greater than spec.minStorageGB")
-	ErrEngineVersionNotSpecified = Error(".spec.dbVersion is a mandatory field and cannot be empty")
+var (
+	defaultAuroraPostgresStr = "aurora-postgresql"
+	shapeDelimiter           = "!"
+	INSTANCE_CLASS_INDEX     = 0
+	STORAGE_TYPE_INDEX       = 1
 	// DO NOT CHANGE THE DEFAULTS -
 	// They are used to determine the hash for RDS names. Any change will result in a new RDS instance being created for all applications!
 	// These values are purposely moved from the config file to the code to avoid accidental changes.
 	defaultShape         = "db.t4g.medium"
 	defaultEngineVersion = "15.3"
-	defaultEngine        = defaultPostgresStr
+	defaultEngine        = v1.Postgres
+)
+
+var (
+	ErrMaxStorageReduced         = errors.New("reducing .spec.maxStorageGB value is not allowed (Also not spacifying maxStorageGB if specified earlier is not allowed.)")
+	ErrMaxStorageLesser          = errors.New(".spec.maxStorageGB should always be greater than spec.minStorageGB")
+	ErrEngineVersionNotSpecified = errors.New(".spec.dbVersion is a mandatory field and cannot be empty")
 )
 
 type HostParams struct {
-	Engine                          string
+	// FIXME: this should be DatabaseType, not string
+	Engine string
+
 	Shape                           string
 	MinStorageGB                    int
 	MaxStorageGB                    int64
@@ -53,8 +57,6 @@ type HostParams struct {
 	isDefaultStorage                bool
 	isDefaultVersion                bool
 }
-
-func (e Error) Error() string { return string(e) }
 
 func (p *HostParams) String() string {
 	return fmt.Sprintf("%s-%s-%s", p.Engine, p.InstanceClass, p.EngineVersion)
@@ -173,7 +175,7 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 
 	if hostParams.Engine == "" {
 		hostParams.isDefaultEngine = true
-		hostParams.Engine = defaultEngine
+		hostParams.Engine = string(defaultEngine)
 	}
 
 	if hostParams.MinStorageGB == 0 {
@@ -200,7 +202,7 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 		return &HostParams{}, err
 	}
 
-	if hostParams.Engine == defaultPostgresStr {
+	if hostParams.Engine == string(v1.Postgres) {
 		if hostParams.MaxStorageGB == 0 {
 			if dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
 				return &HostParams{}, ErrMaxStorageReduced
