@@ -2646,7 +2646,6 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, dsn, dbURI string, connInfo *persistancev1.DatabaseClaimConnectionInfo) error {
 	secretName := dbClaim.Spec.SecretName
-	truePtr := true
 	dsnName := dbClaim.Spec.DSNName
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2659,8 +2658,8 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *per
 					Kind:               "DatabaseClaim",
 					Name:               dbClaim.Name,
 					UID:                dbClaim.UID,
-					Controller:         &truePtr,
-					BlockOwnerDeletion: &truePtr,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
 				},
 			},
 		},
@@ -3028,7 +3027,6 @@ func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *pe
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
-		truePtr := true
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: dbClaim.Namespace,
@@ -3040,8 +3038,8 @@ func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *pe
 						Kind:               "DatabaseClaim",
 						Name:               dbClaim.Name,
 						UID:                dbClaim.UID,
-						Controller:         &truePtr,
-						BlockOwnerDeletion: &truePtr,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
 					},
 				},
 			},
@@ -3055,10 +3053,9 @@ func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *pe
 		r.Log.Info("creating temp secret", "name", secret.Name, "namespace", secret.Namespace)
 		err = r.Client.Create(ctx, secret)
 		return secret, err
-	} else {
-		r.Log.Info("secret exists returning temp secret", "name", secretName)
-		return gs, nil
 	}
+	r.Log.Info("secret exists returning temp secret", "name", secretName)
+	return gs, nil
 }
 
 func getTempSecretName(dbClaim *persistancev1.DatabaseClaim) string {
