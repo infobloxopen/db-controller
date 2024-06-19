@@ -197,7 +197,6 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		ctx         context.Context
 		fragmentKey string
 		namespace   string
-		dbclaim     persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name       string
@@ -286,7 +285,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 				Input:              &input{FragmentKey: tt.args.fragmentKey},
 			}
 			// got, err := r.readMasterPassword(tt.args.ctx, tt.args.fragmentKey, &tt.args.dbclaim, tt.args.namespace)
-			got, err := r.readMasterPassword(tt.args.ctx, &tt.args.dbclaim)
+			got, err := r.readMasterPassword(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("readMasterPassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -575,7 +574,7 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 			}
 			t.Log("getMasterPort() Port overridden by DB claim PASS")
 
-			if got := r.getMasterUser(tt.args[4].dbClaim); got != tt.want[4] {
+			if got := r.getMasterUser(); got != tt.want[4] {
 				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[4])
 			}
 			t.Log("getMasterUser() PASS")
@@ -588,7 +587,7 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 				Input:  &input{FragmentKey: tt.args[5].fragmentKey},
 			}
 
-			if got := r.getMasterUser(tt.args[5].dbClaim); got != tt.want[5] {
+			if got := r.getMasterUser(); got != tt.want[5] {
 				t.Errorf("getMasterUser() = %v, want %v", got, tt.want[5])
 			}
 			t.Log("getMasterUser() Username from default value in config PASS")
@@ -598,7 +597,7 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 			}
 			t.Log("getMasterPort() Port from default value in config PASS")
 
-			if got := r.getSSLMode(tt.args[7].dbClaim); got != tt.want[7] {
+			if got := r.getSSLMode(); got != tt.want[7] {
 				t.Errorf("getSSLMode() = %v, want %v", got, tt.want[7])
 			}
 
@@ -690,7 +689,7 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 				Config: tt.reconciler.Config,
 				Input:  &input{FragmentKey: tt.args.fragmentKey},
 			}
-			if got := r.getSSLMode(tt.args.dbClaim); got != tt.want {
+			if got := r.getSSLMode(); got != tt.want {
 				t.Errorf("getSSLMode() = %v, want %v", got, tt.want)
 			}
 			t.Log("getSSLMode() PASS")
