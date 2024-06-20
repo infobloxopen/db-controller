@@ -1,5 +1,5 @@
 /*
-
+Copyright 2024.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -335,7 +335,7 @@ type DatabaseClaimConnectionInfo struct {
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.activeDB.DbState`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:printcolumn:name="MigrationState",type="string",priority=1,JSONPath=".status.migrationState"
-// +kubebuilder:resource:shortName=dbc;dbclaim
+// +kubebuilder:resource:shortName=dbc
 // +kubebuilder:subresource:status
 
 // DatabaseClaim is the Schema for the databaseclaims API

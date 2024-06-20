@@ -1,14 +1,9 @@
 apiVersion: persistance.atlas.infoblox.com/v1
 kind: DatabaseClaim
 metadata:
-  name: databaseclaim-dynamic-1
+  labels:
+    app.kubernetes.io/name: migration
+    app.kubernetes.io/managed-by: kustomize
+  name: databaseclaim-sample
 spec:
-  appId: sample-app
-  secretName: databaseclaim-dynamic-1
-  type: postgres
-  instanceLabel: dynamic-connection
-  userName: sample_user
-  databaseName: sample_app_claim_1
-  dsnName: dynamic-postgres-dsn
-  shape: db.t2.small
-  minStorageGB: 20
+  # TODO(user): Add fields here
