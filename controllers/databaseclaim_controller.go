@@ -58,13 +58,11 @@ var (
 	maxRotationTime = 1440 * time.Minute
 	maxWaitTime     = 10 * time.Minute
 
-	defaultPassLen         = 32
-	defaultNumDig          = 10
-	defaultNumSimb         = 10
-	maxNameLen             = 44 // max length of dbclaim name
-	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
-	//defaultPostgresStr              = "postgres"
-	//defaultAuroraPostgresStr        = "aurora-postgresql"
+	defaultPassLen                  = 32
+	defaultNumDig                   = 10
+	defaultNumSimb                  = 10
+	maxNameLen                      = 44 // max length of dbclaim name
+	serviceNamespaceEnvVar          = "SERVICE_NAMESPACE"
 	defaultRestoreFromSource        = "Snapshot"
 	defaultBackupPolicyKey          = "Backup"
 	tempTargetPassword              = "targetPassword"
