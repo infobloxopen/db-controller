@@ -721,6 +721,7 @@ var multiConfig = []byte(`
   defaultDeletionPolicy: orphan
   providerConfig: default
   defaultBackupPolicyValue: Bronze
+  enableCloudwatchLogsExport: postgresql
   passwordConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
@@ -1216,7 +1217,7 @@ func TestDatabaseClaimReconciler_isClassPermitted(t *testing.T) {
 			"denied  - non default",
 			mockReconciler{
 				Config: NewConfig(testConfig),
-				Class:  "bjeevan",
+				Class:  "ecalgarotto",
 			},
 			args{
 				claimClass: "",

@@ -685,7 +685,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 			}
 		}
 		if !isReady {
-			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
+			logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
 		logr.Info("cloud instance ready. reading generated master secret")
@@ -1494,7 +1494,7 @@ func extractVersion(message string) string {
 	splitMessage := strings.Split(message, " ")
 	for i, word := range splitMessage {
 		if word == "version" {
-			versionStr = splitMessage[i+1] // This should be of format "15.3"
+			versionStr = splitMessage[i+1] // This should be of format "15.5"
 			break
 		}
 	}
