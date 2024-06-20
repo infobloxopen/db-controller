@@ -33,7 +33,7 @@ const (
 	Postgres       DatabaseType = "postgres"
 	MySQL          DatabaseType = "mysql"
 	Aurora         DatabaseType = "aurora"
-	AuroraPostgres DatabaseType = "aurora-postgres"
+	AuroraPostgres DatabaseType = "aurora-postgresql"
 )
 
 type SQLEngine string
