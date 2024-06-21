@@ -2138,7 +2138,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 func GetcloudWatchLogExportArrNone() []*string {
 	cloudWatchLogExportArrNone := []*string{}
 	none := "none"
-	cloudWatchLogExportArrNone[0] = &none
+	cloudWatchLogExportArrNone = append(cloudWatchLogExportArrNone, &none)
 	return cloudWatchLogExportArrNone
 }
 
