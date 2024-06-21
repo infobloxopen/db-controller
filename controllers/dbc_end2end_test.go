@@ -398,7 +398,7 @@ func createPostgresRDSTest() {
 	prevDbClaim := &persistancev1.DatabaseClaim{}
 	By("Getting the prev dbclaim")
 	Expect(e2e_k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
-	By("Updating with version 15.3 dbVersion")
+	By("Updating with version 15.5 dbVersion")
 	prevDbClaim.Spec.DBVersion = "15.5"
 	Expect(e2e_k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
 	updatedDbClaim := &persistancev1.DatabaseClaim{}

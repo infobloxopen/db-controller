@@ -40,7 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -475,7 +474,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 
 		var dbParamGroupName string
 		// get name of DBParamGroup from connectionInfo
-		if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
+		if dbClaim.Status.OldDB.Type == persistancev1.AuroraPostgres {
 			dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
 		} else {
 			dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
@@ -630,7 +629,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 		return err
 	}
 	existingDBConnInfo.Password = masterPassword
-	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
+	dbClient, err := r.getClientForExistingDB(dbClaim, existingDBConnInfo)
 	if err != nil {
 		logr.Error(err, "creating database client error")
 		return err
@@ -684,11 +683,11 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 			}
 		}
 		if !isReady {
-			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
+			logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
 		logr.Info("cloud instance ready. reading generated master secret")
-		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier, dbClaim)
+		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 		if err != nil {
 			logr.Info("unable to read the complete secret. requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
@@ -700,7 +699,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 
 	} else {
 		//was used only for local testing
-		password, err := r.readMasterPassword(ctx, dbClaim)
+		password, err := r.readMasterPassword(ctx)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -720,7 +719,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
 		}
-		if r.Input.HostParams.Engine == string(v1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
+		if r.Input.HostParams.Engine == string(persistancev1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
 			dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
 		}
 	} else {
@@ -776,7 +775,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	logr.Info("Migration is progress", "state", migrationState)
 
 	logr.Info("cloud instance ready. reading generated master secret")
-	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier, dbClaim)
+	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 	if err != nil {
 		logr.Info("unable to read the complete secret. requeueing")
 		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
@@ -814,7 +813,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		r.Mode == M_InitiateDBUpgrade {
 		activeHost, _, _ := strings.Cut(dbClaim.Status.ActiveDB.ConnectionInfo.Host, ".")
 
-		activeConnInfo, err := r.readResourceSecret(ctx, activeHost, dbClaim)
+		activeConnInfo, err := r.readResourceSecret(ctx, activeHost)
 		if err != nil {
 			logr.Info("unable to read the complete secret. requeueing")
 			return r.manageError(ctx, dbClaim, err)
@@ -1160,8 +1159,7 @@ func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Con
 	return password, nil
 }
 
-func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
-	dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
+func (r *DatabaseClaimReconciler) getClientForExistingDB(dbClaim *persistancev1.DatabaseClaim, connInfo *persistancev1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
 
 	if connInfo == nil {
 		return nil, fmt.Errorf("invalid connection info")
@@ -1196,8 +1194,8 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *persistancev1.DatabaseC
 
 	connInfo.Host = r.getMasterHost(dbClaim)
 	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = r.getMasterUser(dbClaim)
-	connInfo.SSLMode = r.getSSLMode(dbClaim)
+	connInfo.Username = r.getMasterUser()
+	connInfo.SSLMode = r.getSSLMode()
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
@@ -1263,7 +1261,7 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 
 		if reclaimPolicy == "delete" {
 			dbHostName := r.getDynamicHostName(dbClaim)
-			pgName := r.getParameterGroupName(ctx, dbClaim)
+			pgName := r.getParameterGroupName(dbClaim)
 			if fragmentKey == "" {
 				// Delete
 				if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
@@ -1366,8 +1364,7 @@ func (r *DatabaseClaimReconciler) getMasterHost(dbClaim *persistancev1.DatabaseC
 	return r.Config.GetString(fmt.Sprintf("%s::Host", r.Input.FragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getMasterUser(dbClaim *persistancev1.DatabaseClaim) string {
-
+func (r *DatabaseClaimReconciler) getMasterUser() string {
 	u := r.Config.GetString(fmt.Sprintf("%s::masterUsername", r.Input.FragmentKey))
 	if u != "" {
 		return u
@@ -1389,7 +1386,7 @@ func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *persistancev1.DatabaseC
 	return r.Config.GetString("defaultMasterPort")
 }
 
-func (r *DatabaseClaimReconciler) getSSLMode(dbClaim *persistancev1.DatabaseClaim) string {
+func (r *DatabaseClaimReconciler) getSSLMode() string {
 
 	s := r.Config.GetString(fmt.Sprintf("%s::sslMode", r.Input.FragmentKey))
 	if s != "" {
@@ -1495,14 +1492,14 @@ func extractVersion(message string) string {
 	splitMessage := strings.Split(message, " ")
 	for i, word := range splitMessage {
 		if word == "version" {
-			versionStr = splitMessage[i+1] // This should be of format "15.3"
+			versionStr = splitMessage[i+1] // This should be of format "15.5"
 			break
 		}
 	}
 	return versionStr
 }
 
-func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secretName string, dbClaim *persistancev1.DatabaseClaim) (persistancev1.DatabaseClaimConnectionInfo, error) {
+func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secretName string) (persistancev1.DatabaseClaimConnectionInfo, error) {
 	rs := &corev1.Secret{}
 	connInfo := persistancev1.DatabaseClaimConnectionInfo{}
 
@@ -1546,16 +1543,16 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *persistancev1.Data
 	return prefix + r.Input.FragmentKey + suffix
 }
 
-func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) string {
+func (r *DatabaseClaimReconciler) getParameterGroupName(dbClaim *persistancev1.DatabaseClaim) string {
 	hostName := r.getDynamicHostName(dbClaim)
 	params := &r.Input.HostParams
 
-	dbType := v1.DatabaseType(r.Input.DbType)
+	dbType := persistancev1.DatabaseType(r.Input.DbType)
 
 	switch dbType {
-	case v1.Postgres:
+	case persistancev1.Postgres:
 		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
-	case v1.AuroraPostgres:
+	case persistancev1.AuroraPostgres:
 		return hostName + "-a-" + (strings.Split(params.EngineVersion, "."))[0]
 	default:
 		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
@@ -1565,11 +1562,11 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbC
 func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
-	if dbClaim.Spec.Type == v1.Postgres {
+	if dbClaim.Spec.Type == persistancev1.Postgres {
 		return r.managePostgresDBInstance(ctx, dbHostIdentifier, dbClaim)
 	}
 
-	if dbClaim.Spec.Type != v1.AuroraPostgres {
+	if dbClaim.Spec.Type != persistancev1.AuroraPostgres {
 		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 	}
 
@@ -2145,7 +2142,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(ctx, dbClaim)
+	pgName := r.getParameterGroupName(dbClaim)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
@@ -2231,7 +2228,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(ctx, dbClaim)
+	pgName := r.getParameterGroupName(dbClaim)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
@@ -2313,7 +2310,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(ctx, dbClaim)
+	pgName := r.getParameterGroupName(dbClaim)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
@@ -2512,7 +2509,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
 	params := &r.Input.HostParams
-	if dbClaim.Spec.Type == v1.Postgres {
+	if dbClaim.Spec.Type == persistancev1.Postgres {
 		multiAZ := r.getMultiAZEnabled()
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
@@ -2578,7 +2575,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 		return false, nil
 	}
 	r.Log.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
-	r.Client.Patch(ctx, dbCluster, patchDBCluster)
+	err = r.Client.Patch(ctx, dbCluster, patchDBCluster)
 	if err != nil {
 		return false, err
 	}
@@ -2609,12 +2606,12 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	var dsn, dbURI string
 
 	switch dbType {
-	case v1.Postgres:
+	case persistancev1.Postgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
-	case v1.AuroraPostgres:
+	case persistancev1.AuroraPostgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
@@ -2692,7 +2689,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	return r.Client.Update(ctx, exSecret)
 }
 
-func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context) (string, error) {
 	gs := &corev1.Secret{}
 	secretName := r.getSecretRef(r.Input.FragmentKey)
 	secretKey := r.getSecretKey(r.Input.FragmentKey)
@@ -2822,7 +2819,7 @@ func updateClusterStatus(status *persistancev1.Status, hostParams *hostparams.Ho
 	status.Type = persistancev1.DatabaseType(hostParams.Engine)
 	status.Shape = hostParams.Shape
 	status.MinStorageGB = hostParams.MinStorageGB
-	if hostParams.Engine == string(v1.Postgres) {
+	if hostParams.Engine == string(persistancev1.Postgres) {
 		status.MaxStorageGB = hostParams.MaxStorageGB
 	}
 }
