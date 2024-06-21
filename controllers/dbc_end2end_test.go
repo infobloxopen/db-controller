@@ -112,7 +112,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
-		rds1 = "box-3-" + db1 + "-11111111"
+		rds1 = "box-3-" + db1 + "-1d9fb876"
 		newdbcMasterSecretName = rds1 + "-master"
 		createNamespace()
 	})
@@ -263,7 +263,7 @@ func MigratePostgresToAuroraRDS() {
 			return "", err
 		}
 		return string(secret.Data["hostname"]), nil
-	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-22222222"))
+	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
 }
 
 func MigrateUseExistingToNewRDS() {
