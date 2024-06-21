@@ -10,7 +10,7 @@ vpcSecurityGroupIDRefs: demo-box-1
 dbSubnetGroupNameRef: demo-box-1
 dynamicHostWaitTimeMin: 1
 defaultShape: db.t4g.medium
-defaultMinStorageGB: 20
+defaultMinStorageGB: 400
 defaultEngine: postgres
 defaultEngineVersion: 12.11
 defaultMasterPort: 5432
@@ -24,7 +24,7 @@ defaultDeletionPolicy: Orphan
 defaultBackupPolicyValue: Bronze
 backupRetentionDays: 0
 enablePerfInsight: false
-enableCloudwatchLogsExport: "postgresql"
+enableCloudwatchLogsExport: "none"
 
 passwordConfig:
   passwordComplexity: enabled

@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -2522,7 +2523,9 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		}
 
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
-		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		if dbClaim.Spec.Type == v1.Postgres {
+			dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		}
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
 	enablePerfInsight := r.Input.EnablePerfInsight

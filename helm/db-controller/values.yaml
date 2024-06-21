@@ -144,7 +144,7 @@ controllerConfig:
   dynamicHostWaitTimeMin: 1
   enablePerfInsight: true
   # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
-  enableCloudwatchLogsExport: "postgresql"
+  enableCloudwatchLogsExport: "none"
   providerConfig: default
   # The number of days for which automated backups are retained. Setting this parameter to a positive number enables backups.
   # Setting this parameter to 0 disables automated backups (in case of Aurora, 0 is N/A and will be set to 1 by default).

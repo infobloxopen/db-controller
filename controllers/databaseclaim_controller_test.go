@@ -721,7 +721,7 @@ var multiConfig = []byte(`
   defaultDeletionPolicy: orphan
   providerConfig: default
   defaultBackupPolicyValue: Bronze
-  enableCloudwatchLogsExport: postgresql
+  enableCloudwatchLogsExport: none
   passwordConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
