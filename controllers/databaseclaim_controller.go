@@ -683,7 +683,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 			}
 		}
 		if !isReady {
-			logr.Info("cloud instance provioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
+			logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
 		logr.Info("cloud instance ready. reading generated master secret")
@@ -2526,6 +2526,11 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
 		if dbClaim.Spec.Type == persistancev1.Postgres {
 			dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		} else {
+			strArr := []*string{}
+			none := "none"
+			strArr[0] = &none
+			dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = strArr
 		}
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
