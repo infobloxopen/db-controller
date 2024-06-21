@@ -40,7 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -475,7 +474,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 
 		var dbParamGroupName string
 		// get name of DBParamGroup from connectionInfo
-		if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
+		if dbClaim.Status.OldDB.Type == persistancev1.AuroraPostgres {
 			dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
 		} else {
 			dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
@@ -720,7 +719,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		if dbClaim.Status.NewDB.MinStorageGB != r.Input.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = r.Input.HostParams.MinStorageGB
 		}
-		if r.Input.HostParams.Engine == string(v1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
+		if r.Input.HostParams.Engine == string(persistancev1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(r.Input.HostParams.MaxStorageGB) {
 			dbClaim.Status.NewDB.MaxStorageGB = r.Input.HostParams.MaxStorageGB
 		}
 	} else {
@@ -1550,12 +1549,12 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbC
 	hostName := r.getDynamicHostName(dbClaim)
 	params := &r.Input.HostParams
 
-	dbType := v1.DatabaseType(r.Input.DbType)
+	dbType := persistancev1.DatabaseType(r.Input.DbType)
 
 	switch dbType {
-	case v1.Postgres:
+	case persistancev1.Postgres:
 		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
-	case v1.AuroraPostgres:
+	case persistancev1.AuroraPostgres:
 		return hostName + "-a-" + (strings.Split(params.EngineVersion, "."))[0]
 	default:
 		return hostName + "-" + (strings.Split(params.EngineVersion, "."))[0]
@@ -1565,11 +1564,11 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbC
 func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
-	if dbClaim.Spec.Type == v1.Postgres {
+	if dbClaim.Spec.Type == persistancev1.Postgres {
 		return r.managePostgresDBInstance(ctx, dbHostIdentifier, dbClaim)
 	}
 
-	if dbClaim.Spec.Type != v1.AuroraPostgres {
+	if dbClaim.Spec.Type != persistancev1.AuroraPostgres {
 		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 	}
 
@@ -1856,6 +1855,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						StorageEncrypted:                &encryptStrg,
 						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
+						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretCluster,
@@ -2099,10 +2099,9 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBInstanceClass: &params.InstanceClass,
 						Tags:            ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
 						// Items from Config
-						PubliclyAccessible:          &params.PubliclyAccessible,
-						DBClusterIdentifier:         &dbClusterIdentifier,
-						EnablePerformanceInsights:   &r.Input.EnablePerfInsight,
-						EnableCloudwatchLogsExports: r.Input.EnableCloudwatchLogsExport,
+						PubliclyAccessible:        &params.PubliclyAccessible,
+						DBClusterIdentifier:       &dbClusterIdentifier,
+						EnablePerformanceInsights: &r.Input.EnablePerfInsight,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -2512,7 +2511,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
 	params := &r.Input.HostParams
-	if dbClaim.Spec.Type == v1.Postgres {
+	if dbClaim.Spec.Type == persistancev1.Postgres {
 		multiAZ := r.getMultiAZEnabled()
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
@@ -2525,7 +2524,9 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		}
 
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
-		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		if dbClaim.Spec.Type == persistancev1.Postgres {
+			dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		}
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
 	enablePerfInsight := r.Input.EnablePerfInsight
@@ -2609,12 +2610,12 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	var dsn, dbURI string
 
 	switch dbType {
-	case v1.Postgres:
+	case persistancev1.Postgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
-	case v1.AuroraPostgres:
+	case persistancev1.AuroraPostgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
 			connInfo.DatabaseName, connInfo.SSLMode)
 		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password,
@@ -2822,7 +2823,7 @@ func updateClusterStatus(status *persistancev1.Status, hostParams *hostparams.Ho
 	status.Type = persistancev1.DatabaseType(hostParams.Engine)
 	status.Shape = hostParams.Shape
 	status.MinStorageGB = hostParams.MinStorageGB
-	if hostParams.Engine == string(v1.Postgres) {
+	if hostParams.Engine == string(persistancev1.Postgres) {
 		status.MaxStorageGB = hostParams.MaxStorageGB
 	}
 }
