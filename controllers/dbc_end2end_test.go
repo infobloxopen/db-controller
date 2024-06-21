@@ -5,7 +5,7 @@
 * 4. Migrate Use Existing RDS to a local RDS
 * 5. Migrate postgres RDS to Aurora RDS
 * The tests are run in box-3 cluster. The tests are skipped if the cluster is not box-3
-* It runs in the namespace specified in .id + e2e file in the root directory (eg: bjeevan-e2e)
+* It runs in the namespace specified in .id + e2e file in the root directory (eg: ecalgarotto-e2e)
 * The tests create RDS resources in AWS. The resources are cleaned up after the tests are complete.
 * At this time these tests can be run manually only using:
 * make integration-test
@@ -55,7 +55,7 @@ var (
 	ctx                    = context.Background()
 	//set this class to default if you want to use the controller running db-controller namespace
 	//set it to you .id if you want to use the controller running in your namespace
-	class = "bjeevan"
+	class = "ecalgarotto"
 	// class = "default"
 )
 
@@ -240,7 +240,7 @@ func MigratePostgresToAuroraRDS() {
 	}, time.Minute*20, interval_e2e).Should(Equal(expectedState))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created")
-	//box-3-bjeevan-e2e-db-2-bb1e7196
+	//box-3-ecalgarotto-e2e-db-2-bb1e7196
 	Eventually(func() (string, error) {
 		secret := &corev1.Secret{}
 		err := e2e_k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, secret)

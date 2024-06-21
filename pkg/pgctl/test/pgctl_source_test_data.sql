@@ -323,7 +323,7 @@ INSERT INTO tab_11
     VALUES (generate_series(1, :end), 'data' || generate_series(1, :end));
 
 --CREATE publication mypub FOR ALL tables;
-/*create subscription mysub connection 'dbname=pub host=localhost user=bjeevan port=5433' publication mypub;
+/*create subscription mysub connection 'dbname=pub host=localhost user=ecalgarotto port=5433' publication mypub;
 
 select * from pg_stat_replication;
 

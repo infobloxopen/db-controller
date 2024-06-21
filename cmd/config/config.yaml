@@ -24,7 +24,7 @@ defaultDeletionPolicy: Orphan
 defaultBackupPolicyValue: Bronze
 backupRetentionDays: 0
 enablePerfInsight: false
-enableCloudwatchLogsExport: "none"
+enableCloudwatchLogsExport: "postgresql"
 
 passwordConfig:
   passwordComplexity: enabled

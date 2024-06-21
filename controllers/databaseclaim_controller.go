@@ -1856,6 +1856,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						StorageEncrypted:                &encryptStrg,
 						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
+						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretCluster,
@@ -2099,10 +2100,9 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBInstanceClass: &params.InstanceClass,
 						Tags:            ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
 						// Items from Config
-						PubliclyAccessible:          &params.PubliclyAccessible,
-						DBClusterIdentifier:         &dbClusterIdentifier,
-						EnablePerformanceInsights:   &r.Input.EnablePerfInsight,
-						EnableCloudwatchLogsExports: r.Input.EnableCloudwatchLogsExport,
+						PubliclyAccessible:        &params.PubliclyAccessible,
+						DBClusterIdentifier:       &dbClusterIdentifier,
+						EnablePerformanceInsights: &r.Input.EnablePerfInsight,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
