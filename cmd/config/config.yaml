@@ -10,7 +10,7 @@ vpcSecurityGroupIDRefs: demo-box-1
 dbSubnetGroupNameRef: demo-box-1
 dynamicHostWaitTimeMin: 1
 defaultShape: db.t4g.medium
-defaultMinStorageGB: 400
+defaultMinStorageGB: 50
 defaultEngine: postgres
 defaultEngineVersion: 12.11
 defaultMasterPort: 5432

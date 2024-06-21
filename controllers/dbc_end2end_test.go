@@ -51,6 +51,8 @@ var (
 	rds1                   string
 	db2                    string
 	db3                    string
+	randomNumDb1           string = time.Now().Format("020405") + "1"
+	randomNumDb2           string = time.Now().Format("020405") + "2"
 	dbcNamespace           string
 	ctx                    = context.Background()
 	//set this class to default if you want to use the controller running db-controller namespace
@@ -112,7 +114,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
-		rds1 = "box-3-" + db1 + "-1d9fb876"
+		rds1 = "box-3-" + db1 + "-" + randomNumDb1
 		newdbcMasterSecretName = rds1 + "-master"
 		createNamespace()
 	})
@@ -248,7 +250,7 @@ func MigratePostgresToAuroraRDS() {
 			return "", err
 		}
 		return string(secret.Data["hostname"]), nil
-	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
+	}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-" + randomNumDb2))
 }
 
 func MigrateUseExistingToNewRDS() {
