@@ -2099,9 +2099,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBInstanceClass: &params.InstanceClass,
 						Tags:            ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
 						// Items from Config
-						PubliclyAccessible:        &params.PubliclyAccessible,
-						DBClusterIdentifier:       &dbClusterIdentifier,
-						EnablePerformanceInsights: &r.Input.EnablePerfInsight,
+						PubliclyAccessible:          &params.PubliclyAccessible,
+						DBClusterIdentifier:         &dbClusterIdentifier,
+						EnablePerformanceInsights:   &r.Input.EnablePerfInsight,
+						EnableCloudwatchLogsExports: GetcloudWatchLogExportArrNone(),
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -2132,6 +2133,13 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	}
 
 	return r.isResourceReady(dbInstance.Status.ResourceStatus)
+}
+
+func GetcloudWatchLogExportArrNone() []*string {
+	cloudWatchLogExportArrNone := []*string{}
+	none := "none"
+	cloudWatchLogExportArrNone[0] = &none
+	return cloudWatchLogExportArrNone
 }
 
 func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
