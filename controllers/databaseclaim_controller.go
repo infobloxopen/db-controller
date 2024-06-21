@@ -2532,20 +2532,16 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		}
 
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
-		if dbClaim.Spec.Type == persistancev1.Postgres {
-			dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
-		} else {
-			strArr := []*string{}
-			none := "none"
-			strArr[0] = &none
-			dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = strArr
-		}
+		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
 	enablePerfInsight := r.Input.EnablePerfInsight
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
 	dbInstance.Spec.DeletionPolicy = params.DeletionPolicy
 	dbInstance.Spec.ForProvider.CACertificateIdentifier = &r.Input.CACertificateIdentifier
+	if dbClaim.Spec.Type == persistancev1.AuroraPostgres {
+		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = GetcloudWatchLogExportArrNone()
+	}
 
 	// Compute a json patch based on the changed DBInstance
 	dbInstancePatchData, err := patchDBInstance.Data(dbInstance)
