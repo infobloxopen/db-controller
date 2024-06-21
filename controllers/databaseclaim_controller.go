@@ -2102,7 +2102,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						PubliclyAccessible:          &params.PubliclyAccessible,
 						DBClusterIdentifier:         &dbClusterIdentifier,
 						EnablePerformanceInsights:   &r.Input.EnablePerfInsight,
-						EnableCloudwatchLogsExports: GetcloudWatchLogExportArrNone(),
+						EnableCloudwatchLogsExports: nil,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -2135,12 +2135,12 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
-func GetcloudWatchLogExportArrNone() []*string {
-	cloudWatchLogExportArrNone := []*string{}
-	none := "none"
-	cloudWatchLogExportArrNone = append(cloudWatchLogExportArrNone, &none)
-	return cloudWatchLogExportArrNone
-}
+// func GetcloudWatchLogExportArrNone() []*string {
+// 	cloudWatchLogExportArrNone := []*string{}
+// 	none := "none"
+// 	cloudWatchLogExportArrNone = append(cloudWatchLogExportArrNone, &none)
+// 	return cloudWatchLogExportArrNone
+// }
 
 func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
@@ -2540,7 +2540,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	dbInstance.Spec.DeletionPolicy = params.DeletionPolicy
 	dbInstance.Spec.ForProvider.CACertificateIdentifier = &r.Input.CACertificateIdentifier
 	if dbClaim.Spec.Type == persistancev1.AuroraPostgres {
-		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = GetcloudWatchLogExportArrNone()
+		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = nil
 	}
 
 	// Compute a json patch based on the changed DBInstance
