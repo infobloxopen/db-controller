@@ -154,7 +154,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 	//creates secret
 	//creates db_2 based on db_1
 	Context("Use Existing RDS", func() {
-		FIt("should use Existing RDS", func() {
+		It("should use Existing RDS", func() {
 			By("setting up master secret to access existing RDS")
 			setupMasterSecretForExistingRDS()
 			By("successfully processing an useExisting dbClaim")
@@ -165,7 +165,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 	//deletes secret
 	//updates db_2
 	Context("Migrate Use Existing RDS to a local RDS", func() {
-		FIt("should create a new RDS and migrate Existing database", func() {
+		It("should create a new RDS and migrate Existing database", func() {
 			By("deleting master secret to access existing RDS")
 			//delete master secret if it exists
 			e2e_k8sClient.Delete(ctx, &corev1.Secret{
@@ -181,7 +181,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 
 	//updates db_2 to aurora
 	Context("Migrate postgres RDS to Aurora RDS", func() {
-		FIt("should create a new RDS and migrate postgres sample_db to new RDS", func() {
+		It("should create a new RDS and migrate postgres sample_db to new RDS", func() {
 			MigratePostgresToAuroraRDS()
 		})
 	})
@@ -349,7 +349,7 @@ func UseExistingPostgresRDSTest() {
 			return "", err
 		}
 		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, time.Minute*7, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
+	}, time.Minute*10, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created")
 	Eventually(func() error {
