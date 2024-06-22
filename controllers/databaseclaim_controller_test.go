@@ -1217,7 +1217,7 @@ func TestDatabaseClaimReconciler_isClassPermitted(t *testing.T) {
 			"denied  - non default",
 			mockReconciler{
 				Config: NewConfig(testConfig),
-				Class:  "ecalgarotto",
+				Class:  "bjeevan",
 			},
 			args{
 				claimClass: "",
