@@ -2135,13 +2135,6 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
-// func GetcloudWatchLogExportArrNone() []*string {
-// 	cloudWatchLogExportArrNone := []*string{}
-// 	none := "none"
-// 	cloudWatchLogExportArrNone = append(cloudWatchLogExportArrNone, &none)
-// 	return cloudWatchLogExportArrNone
-// }
-
 func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 
 	logical := "rds.logical_replication"

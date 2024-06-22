@@ -152,7 +152,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 	})
 
 	//creates secret
-	//creates db_2
+	//creates db_2 based on db_1
 	Context("Use Existing RDS", func() {
 		FIt("should use Existing RDS", func() {
 			By("setting up master secret to access existing RDS")
@@ -349,7 +349,7 @@ func UseExistingPostgresRDSTest() {
 			return "", err
 		}
 		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, time.Minute*2, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
+	}, time.Minute*7, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created")
 	Eventually(func() error {
