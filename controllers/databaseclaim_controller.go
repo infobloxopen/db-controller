@@ -1856,6 +1856,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
 						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
+						IOPS:                            nil,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretCluster,

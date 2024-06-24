@@ -132,7 +132,7 @@ controllerConfig:
   dbMultiAZEnabled: false
   dbSubnetGroupNameRef:
   defaultBackupPolicyValue: Bronze
-  defaultMinStorageGB: 400
+  defaultMinStorageGB: 50
   defaultMasterPort: 5432
   defaultSslMode: require
   defaultMasterUsername: root
