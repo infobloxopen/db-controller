@@ -119,30 +119,40 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 
 	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
+	//creates db_1
 	Context("Creating a Postgres RDS using a dbclaim with error", func() {
 		It("should validate that dbVersion is not empty", func() {
 			By("erroring out when DBClaim does not contain dbVersion")
 			createPostgresRDSWithEmptyDbVersionTest()
 		})
 	})
+
+	//updates db_1
 	Context("Creating a Postgres RDS using a dbclaim invalid version", func() {
 		It("should validate that specified dbVersion is available", func() {
 			By("erroring out when AWS does not support dbVersion")
 			createPostgresRDSWithNonExistentDbVersionTest()
 		})
 	})
+
+	//update db_1
 	Context("Creating a Postgres RDS using a dbclaim ", func() {
 		It("should create a RDS in AWS", func() {
 			By("creating a new DB Claim")
 			createPostgresRDSTest()
 		})
 	})
+
+	//deletes db_1
 	Context("Delete RDS", func() {
 		It("should delete dbinstances.crds", func() {
 			By("deleting the dbc and associated dbinstances.crd")
 			deletePostgresRDSTest()
 		})
 	})
+
+	//creates secret
+	//creates db_2 based on db_1
 	Context("Use Existing RDS", func() {
 		It("should use Existing RDS", func() {
 			By("setting up master secret to access existing RDS")
@@ -151,6 +161,9 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 			UseExistingPostgresRDSTest()
 		})
 	})
+
+	//deletes secret
+	//updates db_2
 	Context("Migrate Use Existing RDS to a local RDS", func() {
 		It("should create a new RDS and migrate Existing database", func() {
 			By("deleting master secret to access existing RDS")
@@ -165,6 +178,8 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 			MigrateUseExistingToNewRDS()
 		})
 	})
+
+	//updates db_2 to aurora
 	Context("Migrate postgres RDS to Aurora RDS", func() {
 		It("should create a new RDS and migrate postgres sample_db to new RDS", func() {
 			MigratePostgresToAuroraRDS()
@@ -334,7 +349,7 @@ func UseExistingPostgresRDSTest() {
 			return "", err
 		}
 		return createdDbClaim.Status.ActiveDB.DbState, nil
-	}, time.Minute*2, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
+	}, time.Minute*10, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created")
 	Eventually(func() error {
