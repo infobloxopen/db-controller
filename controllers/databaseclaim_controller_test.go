@@ -3,7 +3,6 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -14,16 +13,14 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+	. "github.com/infobloxopen/db-controller/tests"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 
 	"github.com/stretchr/testify/assert"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -133,56 +130,6 @@ func NewConfig(in []byte) *viper.Viper {
 	return c
 }
 
-type mockClient struct {
-	client.Client
-}
-
-var opts = zap.Options{
-	Development: true,
-}
-
-func (m mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	_ = ctx
-	if (key.Namespace == "testNamespace") &&
-		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" ||
-			key.Name == "dbc-sample-claim") {
-		sec, ok := obj.(*corev1.Secret)
-		if !ok {
-			return fmt.Errorf("can't assert type")
-		}
-		sec.Data = map[string][]byte{
-			"password": []byte("masterpassword"),
-		}
-		return nil
-	} else if (key.Namespace == "testNamespaceWithDbIdentifierPrefix") &&
-		(key.Name == "dbc-box-sample-claim") {
-		sec, ok := obj.(*corev1.Secret)
-		if !ok {
-			return fmt.Errorf("can't assert type")
-		}
-		sec.Data = map[string][]byte{
-			"password": []byte("masterpassword"),
-		}
-		return nil
-	}
-	return errors.NewNotFound(schema.GroupResource{Group: "core", Resource: "secret"}, key.Name)
-}
-func (m mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	_ = ctx
-	if (obj.GetNamespace() == "testNamespace") &&
-		(obj.GetName() == "create-master-secret") {
-		sec, ok := obj.(*corev1.Secret)
-		if !ok {
-			return fmt.Errorf("can't assert type")
-		}
-		sec.Data = map[string][]byte{
-			"password": []byte("masterpassword"),
-		}
-		return nil
-	}
-	return fmt.Errorf("can't create object")
-}
-
 func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 	type mockReconciler struct {
 		Client             client.Client
@@ -209,7 +156,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		{
 			"Get master password ok",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretRef),
 			},
 			args{
@@ -222,7 +169,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		{
 			"Get master password no secret name",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretRef),
 			},
 			args{
@@ -235,7 +182,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		// {
 		// 	"Get dynamic database master password no fragment, with env Name",
 		// 	mockReconciler{
-		// 		Client: &mockClient{},
+		// 		Client: &MockClient{},
 		// 		Config: NewConfig(secretRef),
 		// 	},
 		// 	args{
@@ -250,7 +197,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		{
 			"Get dynamic database master password no fragment host",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretNoHostRef),
 			},
 			args{
@@ -263,7 +210,7 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		{
 			"Get master password secret not found",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretRef),
 			},
 			args{
@@ -317,7 +264,7 @@ func TestGetReclaimPolicy(t *testing.T) {
 		{
 			"Get retain with empty fragment key",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretNoHostRef),
 			},
 			args{
@@ -328,7 +275,7 @@ func TestGetReclaimPolicy(t *testing.T) {
 		{
 			"Get delete with empty fragment key",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretNoHostDeleteRef),
 			},
 			args{
@@ -339,7 +286,7 @@ func TestGetReclaimPolicy(t *testing.T) {
 		{
 			"Get delete with fragment key",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretNoHosFragmentDeleteRef),
 			},
 			args{
@@ -350,7 +297,7 @@ func TestGetReclaimPolicy(t *testing.T) {
 		{
 			"Get retain with fragment key",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretNoHostFragmentRetainRef),
 			},
 			args{
@@ -361,7 +308,7 @@ func TestGetReclaimPolicy(t *testing.T) {
 		{
 			"Get delete from defaultReclaimPolicy with no fragment key",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(secretNoHostFragmentRetainRef),
 			},
 			args{
@@ -1598,6 +1545,10 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 	}
 }
 
+var opts = zap.Options{
+	Development: true,
+}
+
 func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 	tru := true
 	flse := false
@@ -2429,7 +2380,7 @@ func TestManageMasterPassword(t *testing.T) {
 	}{
 		{"use existing master secret",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(multiConfig),
 				Log:    zap.New(zap.UseFlagOptions(&opts)),
 			},
@@ -2446,7 +2397,7 @@ func TestManageMasterPassword(t *testing.T) {
 		},
 		{"create master secret",
 			mockReconciler{
-				Client: &mockClient{},
+				Client: &MockClient{},
 				Config: NewConfig(multiConfig),
 				Log:    zap.New(zap.UseFlagOptions(&opts)),
 			},

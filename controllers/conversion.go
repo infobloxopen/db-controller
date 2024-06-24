@@ -33,7 +33,3 @@ func (r DBClaimTags) Less(i, j int) bool {
 }
 
 func (r DBClaimTags) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
-
-func SortTags(input []persistancev1.Tag) {
-	sort.Sort(DBClaimTags(input))
-}

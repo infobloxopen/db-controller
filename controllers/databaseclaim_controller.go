@@ -769,7 +769,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context,
 	dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileMigrationInProgress")
-
+	dbClaim.DeepCopyObject()
 	migrationState := dbClaim.Status.MigrationState
 
 	logr.Info("Migration is progress", "state", migrationState)
@@ -898,7 +898,6 @@ loop:
 	if dbClaim.Status.ActiveDB.DbState != persistancev1.UsingExistingDB {
 		timenow := metav1.Now()
 		dbClaim.Status.OldDB = persistancev1.StatusForOldDB{ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{}}
-		//dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
 		MakeDeepCopyToOldDB(&dbClaim.Status.OldDB, &dbClaim.Status.ActiveDB)
 		dbClaim.Status.OldDB.DbState = persistancev1.PostMigrationInProgress
 		dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow

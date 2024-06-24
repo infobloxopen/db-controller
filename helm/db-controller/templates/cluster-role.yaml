@@ -29,6 +29,7 @@ rules:
     resources:
       - databaseclaims
       - dbroleclaims
+      - schemauserclaims
     verbs:
       - create
       - delete
@@ -42,6 +43,7 @@ rules:
     resources:
       - databaseclaims/status
       - dbroleclaims/status
+      - schemauserclaims/status
     verbs:
       - get
       - patch

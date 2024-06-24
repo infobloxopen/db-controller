@@ -254,6 +254,7 @@ endef
 update_crds: manifests
 	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_databaseclaims.yaml
 	cp ./config/crd/bases/persistance.atlas.infoblox.com_dbroleclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_dbroleclaims.yaml
+	cp ./config/crd/bases/persistance.atlas.infoblox.com_schemauserclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_schemauserclaims.yaml
 
 # find or download controller-gen
 # download controller-gen if necessary
@@ -265,7 +266,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.0 ;\
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.15.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen

@@ -2,7 +2,6 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -42,6 +41,32 @@ rules:
   - persistance.atlas.infoblox.com
   resources:
   - dbroleclaims/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - schemauserclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - schemauserclaims/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - schemauserclaims/status
   verbs:
   - get
   - patch
