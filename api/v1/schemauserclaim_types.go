@@ -39,6 +39,9 @@ type SchemaUserClaimSpec struct {
 
 	// Schemas holds the schemas to be created and the user names to be created and granted access to this schema.
 	Schemas []SchemaUserType `json:"schemas"`
+
+	// Database defines the connection information to an existing db
+	Database *Database `json:"database,omitempty"`
 }
 
 // SchemaUserClaimStatus defines the observed state of SchemaUserClaim

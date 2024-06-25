@@ -18,19 +18,22 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type SchemaUserClaimReconciler struct {
 	Class string
 	client.Client
+	Config   *viper.Viper
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
@@ -43,33 +46,120 @@ type SchemaUserClaimReconciler struct {
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("UserSchemaClaim", req.NamespacedName).V(InfoLevel)
-	var dbRoleClaim persistancev1.SchemaUserClaim
-	if err := r.Get(ctx, req.NamespacedName, &dbRoleClaim); err != nil {
+	log := r.Log.WithValues("UserSchemaClaim", req.NamespacedName).V(InfoLevel)
+
+	//fetch schemauserclaim
+	var schemaUserClaim persistancev1.SchemaUserClaim
+	if err := r.Get(ctx, req.NamespacedName, &schemaUserClaim); err != nil {
 		log.Error(err, "unable to fetch SchemaUser")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if permitted := r.isClassPermitted(*dbRoleClaim.Spec.Class); !permitted {
-		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbRoleClaim.Spec.Class, "controllerClass", r.Class)
+	//check if class is allowed
+	if permitted := IsClassPermitted(r.Class, *schemaUserClaim.Spec.Class); !permitted {
+		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *schemaUserClaim.Spec.Class, "controllerClass", r.Class)
 		return ctrl.Result{}, nil
+	}
+
+	//basic validation
+	if len(schemaUserClaim.Spec.Schemas) == 0 {
+		log.Info("At least one schema has to be provided.")
+		return ctrl.Result{}, nil
+	}
+
+	//parse connstring to database
+	existingDBConnInfo, err := persistancev1.ParseUri(schemaUserClaim.Spec.Database.DSN)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	//retrieve dB master password
+	masterPassword, err := r.getMasterPasswordForExistingDB(ctx, &schemaUserClaim)
+	if err != nil {
+		log.Error(err, "get master password for existing db error.")
+		return ctrl.Result{}, err
+	}
+	existingDBConnInfo.Password = masterPassword
+
+	//get client to DB
+	dbClient, err := GetClientForExistingDB(existingDBConnInfo, &r.Log)
+	if err != nil {
+		log.Error(err, "creating database client error.")
+		return ctrl.Result{}, err
+	}
+	defer dbClient.Close()
+
+	for _, schema := range schemaUserClaim.Spec.Schemas {
+		//if schema doesn't exist, create it
+		schemaExists, err := dbClient.SchemaExists(schema.Name)
+		if err != nil {
+			log.Error(err, "checking if schema ["+schema.Name+"] exists.")
+			return ctrl.Result{}, err
+		}
+		if !schemaExists {
+			createSchema, err := dbClient.CreateSchema(schema.Name)
+			if err != nil || !createSchema {
+				log.Error(err, "creating schema ["+schema.Name+"].")
+				return ctrl.Result{}, err
+			}
+
+		}
+		//check if role exists, if not: create it
+		roleExists, err := dbClient.RoleExists(schema.Name)
+		if err != nil {
+			log.Error(err, "checking if role ["+schema.Name+"] exists.")
+			return ctrl.Result{}, err
+		}
+		if !roleExists {
+			roleCreated, err := dbClient.CreateRole(existingDBConnInfo.DatabaseName, schema.Name)
+			//TODO: "|| !roleCreated" might be a problem if the role exists already
+			if err != nil || !roleCreated {
+				log.Error(err, "creating schema ["+schema.Name+"].")
+				return ctrl.Result{}, err
+			}
+
+		}
+		//create user and assign role
+		userPassword, err := GeneratePassword(r.Config)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		for _, user := range schema.Users {
+			userCreated, err := dbClient.CreateUser(user.UserName, schema.Name, userPassword) //second param is the ROLE name
+
+			//TODO: "|| !userCreated" might be a problem if the user exists already
+			if err != nil || !userCreated {
+				log.Error(err, "creating user ["+user.UserName+"].")
+				return ctrl.Result{}, err
+			}
+		}
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *SchemaUserClaimReconciler) isClassPermitted(claimClass string) bool {
-	controllerClass := r.Class
+// TODO: check if it can be transfered to a UTILS class
+func (r *SchemaUserClaimReconciler) getMasterPasswordForExistingDB(ctx context.Context, suClaim *persistancev1.SchemaUserClaim) (string, error) {
+	secretKey := "password"
+	gs := &corev1.Secret{}
 
-	if claimClass == "" {
-		claimClass = "default"
+	ns := suClaim.Spec.Database.SecretRef.Namespace
+	if ns == "" {
+		ns = suClaim.Namespace
 	}
-	if controllerClass == "" {
-		controllerClass = "default"
-	}
-	if claimClass != controllerClass {
-		return false
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      suClaim.Spec.Database.SecretRef.Name,
+	}, gs)
+
+	if err != nil {
+		return "", err
 	}
 
-	return true
+	password := string(gs.Data[secretKey])
+
+	if password == "" {
+		return "", fmt.Errorf("invalid credentials (password)")
+	}
+	return password, nil
 }

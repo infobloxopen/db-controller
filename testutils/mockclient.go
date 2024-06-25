@@ -18,8 +18,8 @@ type MockClient struct {
 
 func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	_ = ctx
-	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix") &&
-		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim") {
+	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest") &&
+		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")
@@ -35,6 +35,10 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		sec.Spec.Class = ptr.String("default")
 		sec.Name = "schema1"
+		sec.Spec.Database = &persistancev1.Database{
+			DSN:       "postgres://r@h:5432/pub?sslmode=require",
+			SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+		}
 		sec.Spec.Schemas = []persistancev1.SchemaUserType{
 			{
 				Name: "Schema0",

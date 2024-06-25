@@ -183,6 +183,7 @@ func (pc *client) CreateSpecialExtensions(dbName string, role string) error {
 	}
 	return nil
 }
+
 func (pc *client) pg_cron(dbName string, role string) error {
 	// create extension pg_cron and grant usage to public
 	db, err := pc.getDB(dbName)
@@ -207,6 +208,7 @@ func (pc *client) pg_cron(dbName string, role string) error {
 
 	return nil
 }
+
 func (pc *client) pg_partman(dbName string, role string) error {
 
 	db, err := pc.getDB(dbName)
@@ -312,12 +314,50 @@ func (pc *client) ManageSystemFunctions(dbName string, functions map[string]stri
 	return nil
 }
 
-func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
+func (pc *client) SchemaExists(schemaName string) (bool, error) {
+	var exists bool
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = '%1')", schemaName).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for schema "+schemaName)
+		return false, err
+	}
+	return exists, nil
+}
+
+func (pc *client) CreateSchema(schemaName string) (bool, error) {
+	createSchema := strings.Replace(`
+			CREATE SCHEMA IF NOT EXISTS %schema%;
+			REVOKE ALL ON SCHEMA %schema% FROM PUBLIC;
+			GRANT USAGE ON SCHEMA %schema% TO PUBLIC;			
+			REVOKE ALL ON ALL TABLES IN SCHEMA %schema% FROM PUBLIC ;
+			GRANT SELECT ON ALL TABLES IN SCHEMA %schema% TO PUBLIC;
+		`, "%schema%", schemaName, -1)
+	//create schema
+	_, err := pc.DB.Exec(createSchema)
+	if err != nil {
+		pc.log.Error(err, "could not create schema "+schemaName)
+		return false, err
+	}
+	return true, nil
+}
+
+func (pc *client) RoleExists(roleName string) (bool, error) {
+	var exists bool
+
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", roleName).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for role "+roleName)
+		return false, err
+	}
+	return exists, nil
+}
+
+func (pc *client) CreateRole(dbName, rolename string) (bool, error) {
 	start := time.Now()
 	var exists bool
 	created := false
 
-	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for role")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
@@ -374,7 +414,7 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 	return created, nil
 }
 
-func (pc *client) setGroup(username, rolename string) error {
+func (pc *client) assignRoleToUser(username, rolename string) error {
 	db := pc.DB
 	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {
 		return err
@@ -383,13 +423,13 @@ func (pc *client) setGroup(username, rolename string) error {
 	return nil
 }
 
-func (pc *client) CreateUser(username, rolename, userPassword string) (bool, error) {
+func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, error) {
 	start := time.Now()
 	var exists bool
 	db := pc.DB
 	created := false
 
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", userName).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
@@ -397,25 +437,25 @@ func (pc *client) CreateUser(username, rolename, userPassword string) (bool, err
 	}
 
 	if !exists {
-		pc.log.Info("creating a user", "user", username)
+		pc.log.Info("creating a user", "user", userName)
 
-		s := fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword), pq.QuoteIdentifier(rolename))
+		s := fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(userName), pq.QuoteLiteral(userPassword), pq.QuoteIdentifier(roleName))
 		_, err = pc.DB.Exec(s)
 		if err != nil {
-			pc.log.Error(err, "could not create user "+username)
+			pc.log.Error(err, "could not create user "+userName)
 			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
 			return created, err
 		}
 
-		if err := pc.setGroup(username, rolename); err != nil {
-			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, username))
+		if err := pc.assignRoleToUser(userName, roleName); err != nil {
+			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", roleName, userName))
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 
 			return created, err
 		}
 
 		created = true
-		pc.log.Info("user has been created", "user", username)
+		pc.log.Info("user has been created", "user", userName)
 		metrics.UsersCreated.Inc()
 		duration := time.Since(start)
 		metrics.UsersCreateTime.Observe(duration.Seconds())
@@ -466,7 +506,7 @@ func (pc *client) UpdateUser(oldUsername, newUsername, rolename, password string
 			return err
 		}
 
-		if err := pc.setGroup(newUsername, rolename); err != nil {
+		if err := pc.assignRoleToUser(newUsername, rolename); err != nil {
 			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, newUsername))
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 
@@ -511,6 +551,7 @@ func (pc *client) UpdatePassword(username string, userPassword string) error {
 
 	return nil
 }
+
 func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) error {
 	var (
 		hasSuperUser bool

@@ -5,7 +5,7 @@ import "github.com/aws/aws-sdk-go-v2/aws"
 type Client interface {
 	CreateDatabase(dbName string) (bool, error)
 	CreateUser(username, role, userPassword string) (bool, error)
-	CreateGroup(dbName, username string) (bool, error)
+	CreateRole(dbName, username string) (bool, error)
 	CreateDefaultExtensions(dbName string) error
 	CreateSpecialExtensions(dbName string, role string) error
 	RenameUser(oldUsername string, newUsername string) error
@@ -15,6 +15,9 @@ type Client interface {
 	ManageSuperUserRole(username string, enableSuperUser bool) error
 	ManageCreateRole(username string, enableCreateRole bool) error
 	ManageSystemFunctions(dbName string, functions map[string]string) error
+	SchemaExists(schemaName string) (bool, error)
+	RoleExists(roleName string) (bool, error)
+	CreateSchema(schemaName string) (bool, error)
 
 	DBCloser
 }

@@ -22,7 +22,7 @@ func awsAuthBuilder(ctx context.Context, cliCfg Config) (string, error) {
 
 func awsAuthBuilderWithConfig(ctx context.Context, cliCfg Config, awsCfg aws.Config) (string, error) {
 
-	parsed, err := url.Parse(cliCfg.DSN)
+	parsed, _ := url.Parse(cliCfg.DSN)
 	info := parsed.User
 
 	authToken, err := auth.BuildAuthToken(

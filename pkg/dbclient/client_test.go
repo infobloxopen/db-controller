@@ -244,19 +244,19 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s CreateDataBase() is passed", succeed)
 
-			t.Logf("CreateGroup()")
-			got, err = pc.CreateGroup(tt.args.dbName, tt.args.role)
+			t.Logf("CreateRole()")
+			got, err = pc.CreateRole(tt.args.dbName, tt.args.role)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("\t%s CreateGroup() error = %v, wantErr %v", failed, err, tt.wantErr)
+				t.Errorf("\t%s CreateRole() error = %v, wantErr %v", failed, err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("\t%sCreateGroup() got = %v, want %v", failed, got, tt.want)
+				t.Errorf("\t%sCreateRole() got = %v, want %v", failed, got, tt.want)
 			}
 
 			err = pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", tt.args.role).Scan(&exists)
 			if err != nil {
-				t.Errorf("\t%s CreateGroup error = %v", failed, err)
+				t.Errorf("\t%s CreateRole error = %v", failed, err)
 			}
 
 			if exists {
@@ -264,7 +264,7 @@ func TestPostgresClientOperations(t *testing.T) {
 			} else {
 				t.Errorf("\t%s can't find user %v", failed, tt.args.role)
 			}
-			t.Logf("\t%s CreateGroup() is passed", succeed)
+			t.Logf("\t%s CreateRole() is passed", succeed)
 
 			t.Logf("CreateUser()")
 			got, err = pc.CreateUser(tt.args.username, tt.args.role, tt.args.userPassword)
