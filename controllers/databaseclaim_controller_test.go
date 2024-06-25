@@ -13,7 +13,7 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
-	. "github.com/infobloxopen/db-controller/tests"
+	. "github.com/infobloxopen/db-controller/testutils"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 

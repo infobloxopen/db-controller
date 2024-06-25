@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	. "github.com/infobloxopen/db-controller/tests"
+	. "github.com/infobloxopen/db-controller/testutils"
 	_ "github.com/lib/pq"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

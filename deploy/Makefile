@@ -2,7 +2,7 @@ export AWS_REGION   = us-west-1
 export AWS_PROFILE ?= bloxinabox
 export AWS_ACCOUNT ?= $(shell aws --profile $(AWS_PROFILE) sts get-caller-identity --output text --query 'Account')
 
-K8S_VERSION := 1.21
+K8S_VERSION := 1.25
 K8S_WAIT := wait --timeout=120s
 K8S_DEST_SERVER := https://kubernetes.default.svc
 

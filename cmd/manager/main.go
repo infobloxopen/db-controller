@@ -137,8 +137,8 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     fmt.Sprintf("%s:%d", metricsAddr, metricsPort),
+		Scheme: scheme,
+		//MetricsBindAddress:     fmt.Sprintf("%s:%d", metricsAddr, metricsPort),
 		HealthProbeBindAddress: fmt.Sprintf("%s:%d", probeAddr, probePort),
 		WebhookServer:          webhook.NewServer(webhookOptions),
 		LeaderElection:         enableLeaderElection,
@@ -196,12 +196,14 @@ func main() {
 			setupLog.V(controllers.DebugLevel).Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
 
 			setupLog.Info("registering with webhook server for DbProxy")
+			decoder := admission.NewDecoder(mgr.GetScheme())
+
 			webHookServer.Register("/mutate", &webhook.Admission{
 				Handler: &dbwebhook.DBProxyInjector{
 					Name:                 "DB Proxy",
 					Client:               mgr.GetClient(),
 					DBProxySidecarConfig: cfg,
-					Decoder:              admission.NewDecoder(mgr.GetScheme()),
+					Decoder:              &decoder,
 				},
 			})
 		}
@@ -216,12 +218,13 @@ func main() {
 			setupLog.V(controllers.DebugLevel).Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
 
 			setupLog.Info("registering with webhook server for DsnExec")
+			decoder := admission.NewDecoder(mgr.GetScheme())
 			webHookServer.Register("/mutate-dsnexec", &webhook.Admission{
 				Handler: &dbwebhook.DsnExecInjector{
 					Name:                 "Dsnexec",
 					Client:               mgr.GetClient(),
 					DsnExecSidecarConfig: cfg,
-					Decoder:              admission.NewDecoder(mgr.GetScheme()),
+					Decoder:              &decoder,
 				},
 			})
 		}

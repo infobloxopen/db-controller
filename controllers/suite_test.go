@@ -130,8 +130,8 @@ var _ = BeforeSuite(func() {
 	Expect(createdSecret.Name).Should(Equal(MasterSecretName))
 
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:                 scheme.Scheme,
-		MetricsBindAddress:     "0",
+		Scheme: scheme.Scheme,
+		//MetricsBindAddress:     "0",
 		HealthProbeBindAddress: "0",
 	})
 	Expect(err).ToNot(HaveOccurred())
