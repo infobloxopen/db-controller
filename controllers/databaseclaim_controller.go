@@ -1515,7 +1515,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(dbClient dbclient.Clie
 	rotationTime := r.getPasswordRotationTime()
 
 	// create role
-	roleCreated, err := dbClient.CreateRole(dbName, baseUsername)
+	roleCreated, err := dbClient.CreateRole(dbName, baseUsername, "")
 	if err != nil {
 		return err
 	}

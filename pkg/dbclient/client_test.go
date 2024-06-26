@@ -245,7 +245,7 @@ func TestPostgresClientOperations(t *testing.T) {
 			t.Logf("\t%s CreateDataBase() is passed", succeed)
 
 			t.Logf("CreateRole()")
-			got, err = pc.CreateRole(tt.args.dbName, tt.args.role)
+			got, err = pc.CreateRole(tt.args.dbName, tt.args.role, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("\t%s CreateRole() error = %v, wantErr %v", failed, err, tt.wantErr)
 				return

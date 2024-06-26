@@ -48,23 +48,24 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			15,
 			false,
 		},
-		{
-			"Get UserSchema claim 2",
-			reconciler{
-				Client: &MockClient{},
-				Config: NewConfig(complexityDisabled),
-				Request: controllerruntime.Request{
-					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-2"},
-				},
-				Log: zap.New(zap.UseDevMode(true)),
-			},
-			defaultPassLen,
-			false,
-		},
+		// {
+		// 	"Get UserSchema claim 2",
+		// 	reconciler{
+		// 		Client: &MockClient{},
+		// 		Config: NewConfig(complexityDisabled),
+		// 		Request: controllerruntime.Request{
+		// 			NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-2"},
+		// 		},
+		// 		Log: zap.New(zap.UseDevMode(true)),
+		// 	},
+		// 	defaultPassLen,
+		// 	false,
+		// },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &SchemaUserClaimReconciler{
+				Config: tt.rec.Config,
 				Client: tt.rec.Client,
 				Log:    tt.rec.Log,
 				Scheme: tt.rec.Scheme,

@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -31,8 +32,8 @@ import (
 )
 
 type SchemaUserClaimReconciler struct {
-	Class string
 	client.Client
+	Class    string
 	Config   *viper.Viper
 	Log      logr.Logger
 	Scheme   *runtime.Scheme
@@ -90,16 +91,18 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	defer dbClient.Close()
 
 	for _, schema := range schemaUserClaim.Spec.Schemas {
+		schema.Name = strings.ToLower(schema.Name)
+
 		//if schema doesn't exist, create it
 		schemaExists, err := dbClient.SchemaExists(schema.Name)
 		if err != nil {
-			log.Error(err, "checking if schema ["+schema.Name+"] exists.")
+			log.Error(err, "checking if schema ["+schema.Name+"] exists error.")
 			return ctrl.Result{}, err
 		}
 		if !schemaExists {
 			createSchema, err := dbClient.CreateSchema(schema.Name)
 			if err != nil || !createSchema {
-				log.Error(err, "creating schema ["+schema.Name+"].")
+				log.Error(err, "creating schema ["+schema.Name+"] error.")
 				return ctrl.Result{}, err
 			}
 
@@ -107,25 +110,28 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		//check if role exists, if not: create it
 		roleExists, err := dbClient.RoleExists(schema.Name)
 		if err != nil {
-			log.Error(err, "checking if role ["+schema.Name+"] exists.")
+			log.Error(err, "checking if role ["+schema.Name+"] exists error.")
 			return ctrl.Result{}, err
 		}
 		if !roleExists {
-			roleCreated, err := dbClient.CreateRole(existingDBConnInfo.DatabaseName, schema.Name)
+			roleCreated, err := dbClient.CreateRole(existingDBConnInfo.DatabaseName, schema.Name, schema.Name)
 			//TODO: "|| !roleCreated" might be a problem if the role exists already
 			if err != nil || !roleCreated {
-				log.Error(err, "creating schema ["+schema.Name+"].")
+				log.Error(err, "creating schema ["+schema.Name+"] error.")
 				return ctrl.Result{}, err
 			}
 
 		}
 		//create user and assign role
-		userPassword, err := GeneratePassword(r.Config)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
 		for _, user := range schema.Users {
-			userCreated, err := dbClient.CreateUser(user.UserName, schema.Name, userPassword) //second param is the ROLE name
+			userPassword, err := GeneratePassword(r.Config)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			fmt.Printf("User: %s Password: %s", strings.ToLower(user.UserName), userPassword)
+
+			userCreated, err := dbClient.CreateUser(strings.ToLower(user.UserName), strings.ToLower(schema.Name), userPassword) //second param is the ROLE name
 
 			//TODO: "|| !userCreated" might be a problem if the user exists already
 			if err != nil || !userCreated {

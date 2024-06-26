@@ -36,7 +36,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		sec.Spec.Class = ptr.String("default")
 		sec.Name = "schema1"
 		sec.Spec.Database = &persistancev1.Database{
-			DSN:       "postgres://r@h:5432/pub?sslmode=require",
+			DSN:       "public://postgres:password@127.0.0.1:5432/postgres?sslmode=disable",
 			SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
 		}
 		sec.Spec.Schemas = []persistancev1.SchemaUserType{
@@ -70,6 +70,9 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 					},
 					{
 						UserName: "user3_2",
+					},
+					{
+						UserName: "user3_3",
 					},
 				},
 			},
