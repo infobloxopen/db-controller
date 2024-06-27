@@ -81,8 +81,6 @@ func SetupSqlDB(t *testing.T, user, pass string) *testDB {
 		t.Fatalf("Unable to find an opened port for DB: %v", err)
 	}
 	t.Log("Got available port for DB: ", port)
-	//user := "test"
-	//pass := "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./"
 
 	// Create a new pool for docker containers
 	pool, err := dockertest.NewPool("")
