@@ -138,9 +138,11 @@ var _ = BeforeSuite(func() {
 
 	err = (&DatabaseClaimReconciler{
 		Client: k8sClient,
-		Scheme: k8sManager.GetScheme(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DB-controller"),
-		Config: NewConfig(controllerConfig),
+		BaseReconciler: BaseReconciler{
+			Log:    ctrl.Log.WithName("controllers").WithName("DB-controller"),
+			Scheme: k8sManager.GetScheme(),
+			Config: NewConfig(controllerConfig),
+		},
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

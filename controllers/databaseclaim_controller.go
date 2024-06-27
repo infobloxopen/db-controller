@@ -28,11 +28,8 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
-	gopassword "github.com/sethvargo/go-password/password"
-	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -119,16 +116,99 @@ const (
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
-	Log                   logr.Logger
-	Scheme                *runtime.Scheme
-	Config                *viper.Viper
+	BaseReconciler
 	MasterAuth            *rdsauth.MasterAuth
 	DbIdentifierPrefix    string
 	Mode                  ModeEnum
 	Input                 *input
-	Class                 string
 	MetricsDepYamlPath    string
 	MetricsConfigYamlPath string
+}
+
+func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logr := r.Log.WithValues("databaseclaim", req.NamespacedName)
+
+	var dbClaim persistancev1.DatabaseClaim
+	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			logr.Error(err, "unable to fetch DatabaseClaim")
+			return ctrl.Result{}, err
+		} else {
+			logr.Info("DatabaseClaim not found. Ignoring since object might have been deleted")
+			return ctrl.Result{}, nil
+		}
+	}
+
+	logr.Info("object information", "uid", dbClaim.ObjectMeta.UID)
+
+	if dbClaim.Spec.Class == nil {
+		dbClaim.Spec.Class = ptr.To("default")
+	}
+
+	if permitted := IsClassPermitted(r.Class, *dbClaim.Spec.Class); !permitted {
+		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
+		return ctrl.Result{}, nil
+	}
+
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
+		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
+	if dbClaim.Status.NewDB.ConnectionInfo == nil {
+		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
+	}
+
+	if err := r.setReqInfo(&dbClaim); err != nil {
+		return r.manageError(ctx, &dbClaim, err)
+	}
+
+	// name of our custom finalizer
+	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
+
+	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			// check if the claim is in the middle of rds migration, if so, wait for it to complete
+			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
+				logr.Info("migration is in progress. object cannot be deleted")
+				dbClaim.Status.Error = "dbc cannot be deleted while migration is in progress"
+				err := r.Client.Status().Update(ctx, &dbClaim)
+				if err != nil {
+					logr.Error(err, "unable to update status. ignoring this error")
+				}
+				//ignore delete request, continue to process rds migration
+				return r.executeDbClaimRequest(ctx, &dbClaim)
+			}
+			// our finalizer is present, so lets handle any external dependency
+			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried
+				return ctrl.Result{}, err
+			}
+
+			// remove our finalizer from the list and update it.
+			controllerutil.RemoveFinalizer(&dbClaim, dbFinalizerName)
+			if err := r.Update(ctx, &dbClaim); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		// Stop reconciliation as the item is being deleted
+		return ctrl.Result{}, nil
+	}
+	// The object is not being deleted, so if it does not have our finalizer,
+	// then lets add the finalizer and update the object. This is equivalent
+	// registering our finalizer.
+	if !controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+		controllerutil.AddFinalizer(&dbClaim, dbFinalizerName)
+		if err := r.Update(ctx, &dbClaim); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// FIXME: turn on metrics deployments later when testing on box-2 is available
+	if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
+		return ctrl.Result{}, err
+	}
+	return r.executeDbClaimRequest(ctx, &dbClaim)
 }
 
 // Get the type (nature) of the operation. If it's a new DB, sharedDB, useexisting, etc...
@@ -323,104 +403,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *persistancev1.DatabaseClai
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logr := r.Log.WithValues("databaseclaim", req.NamespacedName)
-
-	var dbClaim persistancev1.DatabaseClaim
-	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logr.Error(err, "unable to fetch DatabaseClaim")
-			return ctrl.Result{}, err
-		} else {
-			logr.Info("DatabaseClaim not found. Ignoring since object might have been deleted")
-			return ctrl.Result{}, nil
-		}
-	}
-
-	logr.Info("object information", "uid", dbClaim.ObjectMeta.UID)
-
-	if dbClaim.Spec.Class == nil {
-		dbClaim.Spec.Class = ptr.To("default")
-	}
-
-	if permitted := IsClassPermitted(r.Class, *dbClaim.Spec.Class); !permitted {
-		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Class)
-		return ctrl.Result{}, nil
-	}
-
-	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
-		dbClaim.Status.ActiveDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
-	}
-	if dbClaim.Status.NewDB.ConnectionInfo == nil {
-		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
-	}
-
-	if err := r.setReqInfo(&dbClaim); err != nil {
-		return r.manageError(ctx, &dbClaim, err)
-	}
-
-	// name of our custom finalizer
-	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
-
-	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is being deleted
-		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
-			// check if the claim is in the middle of rds migration, if so, wait for it to complete
-			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-				logr.Info("migration is in progress. object cannot be deleted")
-				dbClaim.Status.Error = "dbc cannot be deleted while migration is in progress"
-				err := r.Client.Status().Update(ctx, &dbClaim)
-				if err != nil {
-					logr.Error(err, "unable to update status. ignoring this error")
-				}
-				//ignore delete request, continue to process rds migration
-				return r.executeDbClaimRequest(ctx, &dbClaim)
-			}
-			// our finalizer is present, so lets handle any external dependency
-			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
-				// if fail to delete the external dependency here, return with error
-				// so that it can be retried
-				return ctrl.Result{}, err
-			}
-
-			// remove our finalizer from the list and update it.
-			controllerutil.RemoveFinalizer(&dbClaim, dbFinalizerName)
-			if err := r.Update(ctx, &dbClaim); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		// Stop reconciliation as the item is being deleted
-		return ctrl.Result{}, nil
-	}
-	// The object is not being deleted, so if it does not have our finalizer,
-	// then lets add the finalizer and update the object. This is equivalent
-	// registering our finalizer.
-	if !controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
-		controllerutil.AddFinalizer(&dbClaim, dbFinalizerName)
-		if err := r.Update(ctx, &dbClaim); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	// FIXME: turn on metrics deployments later when testing on box-2 is available
-	if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
-		return ctrl.Result{}, err
-	}
-	return r.executeDbClaimRequest(ctx, &dbClaim)
-}
-
-func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, dbClaim persistancev1.DatabaseClaim) error {
-	cfg := exporter.NewConfig()
-	cfg.Name = dbClaim.ObjectMeta.Name
-	cfg.Namespace = dbClaim.ObjectMeta.Namespace
-	cfg.DBClaimOwnerRef = string(dbClaim.ObjectMeta.UID)
-	cfg.DepYamlPath = r.MetricsDepYamlPath
-	cfg.ConfigYamlPath = r.MetricsConfigYamlPath
-	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
-	cfg.DatasourceFileName = dbClaim.Spec.DSNName
-	return exporter.Apply(ctx, r.Client, cfg)
-}
-
 // Create, migrate or upgrade database
 func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {
 	logr := r.Log.WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
@@ -474,7 +456,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 			}
 
 			if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
-				logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
+				logr.Error(err, "Could not delete crossplane DBInstance/DBCluster")
 			}
 			if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
 				logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
@@ -688,7 +670,6 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
-		// password := "postgres"
 		r.Input.MasterConnInfo.Password = password
 	}
 
@@ -992,7 +973,6 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx c
 			}
 		}
 	}
-
 }
 
 func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Context, logr logr.Logger, dbHostName string) {
@@ -1025,7 +1005,6 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Con
 			}
 		}
 	}
-
 }
 
 func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Context, logr logr.Logger, dbHostName string) (bool, error) {
@@ -1115,7 +1094,6 @@ func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, 
 			return isVerfied, nil
 		}
 	}
-
 }
 
 func (r *DatabaseClaimReconciler) getClientConn(dbClaim *persistancev1.DatabaseClaim) persistancev1.DatabaseClaimConnectionInfo {
@@ -1219,18 +1197,6 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 	}
 
 	return nil
-}
-
-func generateMasterPassword() (string, error) {
-	var pass string
-	var err error
-	minPasswordLength := 30
-
-	pass, err = gopassword.Generate(minPasswordLength, 3, 0, false, true)
-	if err != nil {
-		return "", err
-	}
-	return pass, nil
 }
 
 var (
@@ -1514,13 +1480,13 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(dbClient dbclient.Clie
 	dbu := dbuser.NewDBUser(baseUsername)
 	rotationTime := r.getPasswordRotationTime()
 
-	// create role
+	// create role - username is used as rolename
 	roleCreated, err := dbClient.CreateRole(dbName, baseUsername, "")
 	if err != nil {
 		return err
 	}
 	if roleCreated {
-		// take care of special extensions related to the user
+		// take care of special extensions related to the user - username is used as rolename
 		err = dbClient.CreateSpecialExtensions(dbName, baseUsername)
 		if err != nil {
 			return err
@@ -1533,7 +1499,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(dbClient dbclient.Clie
 
 	userName := status.ConnectionInfo.Username
 
-	if dbu.IsUserChanged(userName) {
+	if dbu.IsUserChanged(userName) { //first time it's always false
 		oldUsername := dbuser.TrimUserSuffix(userName)
 		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
 			return err
@@ -1622,10 +1588,11 @@ func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tag
 	}
 	return tags
 }
+
 func (r *DatabaseClaimReconciler) manageMasterPassword(ctx context.Context, secret *xpv1.SecretKeySelector) error {
 	logr := r.Log.WithValues("func", "manageMasterPassword")
 	masterSecret := &corev1.Secret{}
-	password, err := generateMasterPassword()
+	password, err := GenerateMasterPassword()
 	if err != nil {
 		return err
 	}
@@ -2953,4 +2920,16 @@ func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *pe
 
 func getTempSecretName(dbClaim *persistancev1.DatabaseClaim) string {
 	return "temp-" + dbClaim.Spec.SecretName
+}
+
+func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, dbClaim persistancev1.DatabaseClaim) error {
+	cfg := exporter.NewConfig()
+	cfg.Name = dbClaim.ObjectMeta.Name
+	cfg.Namespace = dbClaim.ObjectMeta.Namespace
+	cfg.DBClaimOwnerRef = string(dbClaim.ObjectMeta.UID)
+	cfg.DepYamlPath = r.MetricsDepYamlPath
+	cfg.ConfigYamlPath = r.MetricsConfigYamlPath
+	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
+	cfg.DatasourceFileName = dbClaim.Spec.DSNName
+	return exporter.Apply(ctx, r.Client, cfg)
 }

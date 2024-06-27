@@ -45,8 +45,8 @@ const (
 )
 
 type DbRoleClaimReconciler struct {
-	Class string
 	client.Client
+	Class    string
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }

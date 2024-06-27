@@ -7,7 +7,7 @@ type Client interface {
 	//Creates a user in the the database
 	CreateUser(username, role, userPassword string) (bool, error)
 	//Creates a role in the specified DB and SCHEMA - with access to this specific SCHEMA only
-	CreateRole(dbName, username, schema string) (bool, error)
+	CreateRole(dbName, rolename, schema string) (bool, error)
 	CreateDefaultExtensions(dbName string) error
 	CreateSpecialExtensions(dbName string, role string) error
 	RenameUser(oldUsername string, newUsername string) error

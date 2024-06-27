@@ -59,10 +59,12 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &SchemaUserClaimReconciler{
-				Config: tt.rec.Config,
 				Client: tt.rec.Client,
-				Log:    tt.rec.Log,
-				Scheme: tt.rec.Scheme,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.rec.Log,
+					Scheme: tt.rec.Scheme,
+					Config: tt.rec.Config,
+				},
 			}
 			result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
 			if (err != nil) != tt.wantErr {

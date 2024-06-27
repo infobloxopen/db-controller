@@ -150,15 +150,18 @@ func main() {
 	}
 
 	if err = (&controllers.DatabaseClaimReconciler{
-		Class:                 class,
+
 		Client:                mgr.GetClient(),
-		Config:                ctlConfig,
 		DbIdentifierPrefix:    dbIdentifierPrefix,
-		Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
 		MasterAuth:            rdsauth.NewMasterAuth(),
 		MetricsDepYamlPath:    metricsDepYamlPath,
 		MetricsConfigYamlPath: metricsConfigYamlPath,
-		Scheme:                mgr.GetScheme(),
+		BaseReconciler: controllers.BaseReconciler{
+			Class:  class,
+			Config: ctlConfig,
+			Log:    ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
+			Scheme: mgr.GetScheme(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)

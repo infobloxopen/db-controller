@@ -18,14 +18,17 @@ package controllers
 
 import (
 	"context"
-	"fmt"
+	"slices"
 	"strings"
+	"time"
 
-	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/spf13/viper"
+	"github.com/infobloxopen/db-controller/pkg/dbuser"
+	"github.com/infobloxopen/db-controller/pkg/metrics"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,10 +36,7 @@ import (
 
 type SchemaUserClaimReconciler struct {
 	client.Client
-	Class    string
-	Config   *viper.Viper
-	Log      logr.Logger
-	Scheme   *runtime.Scheme
+	BaseReconciler
 	Recorder record.EventRecorder
 }
 
@@ -68,14 +68,24 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	//parse connstring to database
-	existingDBConnInfo, err := persistancev1.ParseUri(schemaUserClaim.Spec.Database.DSN)
-	if err != nil {
-		return ctrl.Result{}, err
+	// get dbclaim
+	var dbClaim persistancev1.DatabaseClaim
+
+	if err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: schemaUserClaim.Spec.DBClaimName}, &dbClaim); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch DatabaseClaim")
+			return ctrl.Result{}, err
+		} else {
+			log.Info("DatabaseClaim not found. Ignoring since object might have been deleted")
+			return ctrl.Result{}, nil
+		}
 	}
 
+	//get db conn details
+	existingDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo
+
 	//retrieve dB master password
-	masterPassword, err := r.getMasterPasswordForExistingDB(ctx, &schemaUserClaim)
+	masterPassword, err := r.getMasterPasswordForExistingDB(ctx, &dbClaim)
 	if err != nil {
 		log.Error(err, "get master password for existing db error.")
 		return ctrl.Result{}, err
@@ -89,6 +99,10 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 	defer dbClient.Close()
+
+	if schemaUserClaim.Status.Schemas == nil {
+		schemaUserClaim.Status.Schemas = []persistancev1.SchemaStatus{}
+	}
 
 	for _, schema := range schemaUserClaim.Spec.Schemas {
 		schema.Name = strings.ToLower(schema.Name)
@@ -105,65 +119,148 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				log.Error(err, "creating schema ["+schema.Name+"] error.")
 				return ctrl.Result{}, err
 			}
-
-		}
-		//check if role exists, if not: create it
-		roleExists, err := dbClient.RoleExists(schema.Name)
-		if err != nil {
-			log.Error(err, "checking if role ["+schema.Name+"] exists error.")
-			return ctrl.Result{}, err
-		}
-		if !roleExists {
-			_, err := dbClient.CreateRole(existingDBConnInfo.DatabaseName, schema.Name, schema.Name)
-			if err != nil {
-				log.Error(err, "creating schema ["+schema.Name+"] error.")
-				return ctrl.Result{}, err
-			}
-
 		}
 		//create user and assign role
 		for _, user := range schema.Users {
-			userPassword, err := GeneratePassword(r.Config)
+			//check if role exists, if not: create it
+			roleExists, err := dbClient.RoleExists(user.UserName)
 			if err != nil {
+				log.Error(err, "checking if role ["+user.UserName+"] exists error.")
 				return ctrl.Result{}, err
 			}
+			if !roleExists {
+				_, err := dbClient.CreateRole(strings.ToLower(existingDBConnInfo.DatabaseName), strings.ToLower(user.UserName), strings.ToLower(schema.Name))
+				if err != nil {
+					log.Error(err, "creating role ["+user.UserName+"] error.")
+					return ctrl.Result{}, err
+				}
 
-			fmt.Printf("User: %s Password: %s", strings.ToLower(user.UserName), userPassword)
-
-			_, err = dbClient.CreateUser(strings.ToLower(user.UserName), strings.ToLower(schema.Name), userPassword) //second param is the ROLE name
-
-			if err != nil {
-				log.Error(err, "creating user ["+user.UserName+"].")
-				return ctrl.Result{}, err
 			}
+
+			dbu := dbuser.NewDBUser(user.UserName)
+			rotationTime := r.getPasswordRotationTime()
+
+			//add schema to the status section
+			currentSchemaStatus := getOrCreateSchemaStatus(schemaUserClaim, schema.Name)
+
+			//add user to the status section
+			currentUserStatus := getOrCreateUserStatus(*currentSchemaStatus, user.UserName)
+
+			//rotate user password if it's older than 'rotationTime'
+			if currentUserStatus.UserUpdatedAt == nil || time.Since(currentUserStatus.UserUpdatedAt.Time) > rotationTime {
+				log.Info("rotating users")
+
+				userPassword, err := GeneratePassword(r.Config)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+
+				nextUser := dbu.NextUser(currentUserStatus.UserName)
+				created, err := dbClient.CreateUser(nextUser, user.UserName, userPassword)
+				if err != nil {
+					metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
+					return ctrl.Result{}, err
+				}
+
+				if !created {
+					if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+
+				currentUserStatus.UserStatus = "password rotated"
+				timeNow := metav1.Now()
+				currentUserStatus.UserUpdatedAt = &timeNow
+			}
+		}
+
+		//update obj in k8s
+		if err = r.updateClientStatus(ctx, &schemaUserClaim); err != nil {
+			return ctrl.Result{}, err
 		}
 	}
 
 	return ctrl.Result{}, nil
 }
 
-// TODO: check if it can be transfered to a UTILS class
-func (r *SchemaUserClaimReconciler) getMasterPasswordForExistingDB(ctx context.Context, suClaim *persistancev1.SchemaUserClaim) (string, error) {
+func getOrCreateSchemaStatus(schemaUserClaim persistancev1.SchemaUserClaim, schemaName string) *persistancev1.SchemaStatus {
+	schemaIdx := slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c persistancev1.SchemaStatus) bool {
+		return c.Name == schemaName
+	})
+	if schemaIdx == -1 {
+		aux := &persistancev1.SchemaStatus{
+			Name:        schemaName,
+			Status:      "created",
+			UsersStatus: []persistancev1.UserStatusType{},
+		}
+		schemaUserClaim.Status.Schemas = append(schemaUserClaim.Status.Schemas, *aux)
+		schemaIdx = slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c persistancev1.SchemaStatus) bool {
+			return c.Name == schemaName
+		})
+	}
+	return &schemaUserClaim.Status.Schemas[schemaIdx]
+}
+
+func getOrCreateUserStatus(currentSchemaStatus persistancev1.SchemaStatus, userName string) *persistancev1.UserStatusType {
+	userIdx := slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c persistancev1.UserStatusType) bool {
+		return c.UserName == userName
+	})
+	if userIdx == -1 {
+		aux := &persistancev1.UserStatusType{
+			UserName:   userName,
+			UserStatus: "created",
+		}
+		currentSchemaStatus.UsersStatus = append(currentSchemaStatus.UsersStatus, *aux)
+		userIdx = slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c persistancev1.UserStatusType) bool {
+			return c.UserName == userName
+		})
+	}
+	return &currentSchemaStatus.UsersStatus[userIdx]
+}
+
+func (r *SchemaUserClaimReconciler) getMasterPasswordForExistingDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 	secretKey := "password"
 	gs := &corev1.Secret{}
 
-	ns := suClaim.Spec.Database.SecretRef.Namespace
+	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
 	if ns == "" {
-		ns = suClaim.Namespace
+		ns = dbClaim.Namespace
 	}
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: ns,
-		Name:      suClaim.Spec.Database.SecretRef.Name,
+		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
 	}, gs)
-
-	if err != nil {
+	if err == nil {
+		return string(gs.Data[secretKey]), nil
+	}
+	//err!=nil
+	if !errors.IsNotFound(err) {
 		return "", err
 	}
 
-	password := string(gs.Data[secretKey])
+	return "", nil
+}
 
-	if password == "" {
-		return "", fmt.Errorf("invalid credentials (password)")
+func (r *SchemaUserClaimReconciler) getPasswordRotationTime() time.Duration {
+	prt := time.Duration(r.Config.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
+
+	if prt < minRotationTime || prt > maxRotationTime {
+		r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
+		return minRotationTime
 	}
-	return password, nil
+
+	return prt
+}
+
+func (r *SchemaUserClaimReconciler) updateClientStatus(ctx context.Context, dbClaim *persistancev1.SchemaUserClaim) error {
+
+	err := r.Client.Status().Update(ctx, dbClaim)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

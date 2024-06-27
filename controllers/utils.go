@@ -102,3 +102,15 @@ func isPasswordComplexity(config *viper.Viper) bool {
 func GetMinPasswordLength(config *viper.Viper) int {
 	return config.GetInt("passwordconfig::minPasswordLength")
 }
+
+func GenerateMasterPassword() (string, error) {
+	var pass string
+	var err error
+	minPasswordLength := 30
+
+	pass, err = gopassword.Generate(minPasswordLength, 3, 0, false, true)
+	if err != nil {
+		return "", err
+	}
+	return pass, nil
+}

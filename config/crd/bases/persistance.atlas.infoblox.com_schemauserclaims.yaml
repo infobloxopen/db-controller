@@ -55,30 +55,9 @@ spec:
                 default: default
                 description: Class is used to run multiple instances of dbcontroller.
                 type: string
-              database:
-                description: Database defines the connection information to an existing
-                  db
-                properties:
-                  dsn:
-                    description: |-
-                      DSN is the connection string used to reach the postgres database
-                      must have protocol specifier at beginning (example: mysql://  postgres:// )
-                    type: string
-                  secretRef:
-                    description: |-
-                      SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
-                      TODO: document/validate the secret format required
-                    properties:
-                      name:
-                        type: string
-                      namespace:
-                        type: string
-                    required:
-                    - name
-                    type: object
-                required:
-                - dsn
-                type: object
+              dbclaimname:
+                description: Name of the related DBClaim - to extract conn info
+                type: string
               schemas:
                 description: Schemas holds the schemas to be created and the user
                   names to be created and granted access to this schema.
@@ -107,22 +86,30 @@ spec:
                 description: Any errors related to provisioning this claim.
                 type: string
               schemas:
-                properties:
-                  name:
-                    type: string
-                  status:
-                    type: string
-                  usersstatus:
-                    properties:
-                      username:
-                        type: string
-                      userstatus:
-                        type: string
-                    required:
-                    - username
-                    - userstatus
-                    type: object
-                type: object
+                items:
+                  properties:
+                    name:
+                      type: string
+                    status:
+                      type: string
+                    usersstatus:
+                      items:
+                        properties:
+                          userUpdatedAt:
+                            description: Time the user/password was updated/created
+                            format: date-time
+                            type: string
+                          username:
+                            type: string
+                          userstatus:
+                            type: string
+                        required:
+                        - username
+                        - userstatus
+                        type: object
+                      type: array
+                  type: object
+                type: array
             type: object
         type: object
     served: true

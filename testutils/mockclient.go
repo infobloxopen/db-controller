@@ -36,10 +36,11 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		sec.Spec.Class = ptr.String("default")
 		sec.Name = "schema1"
-		sec.Spec.Database = &persistancev1.Database{
-			DSN:       "public://postgres:password@127.0.0.1:" + m.Port + "/postgres?sslmode=disable",
-			SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
-		}
+		sec.Spec.DBClaimName = "TestClaim"
+		// sec.Spec.Database = &persistancev1.Database{
+		// 	DSN:       "public://postgres:password@127.0.0.1:" + m.Port + "/postgres?sslmode=disable",
+		// 	SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
+		// }
 		sec.Spec.Schemas = []persistancev1.SchemaUserType{
 			{
 				Name: "schema0",

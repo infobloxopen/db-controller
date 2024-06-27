@@ -40,26 +40,28 @@ type SchemaUserClaimSpec struct {
 	// Schemas holds the schemas to be created and the user names to be created and granted access to this schema.
 	Schemas []SchemaUserType `json:"schemas"`
 
-	// Database defines the connection information to an existing db
-	Database *Database `json:"database,omitempty"`
+	// Name of the related DBClaim - to extract conn info
+	DBClaimName string `json:"dbclaimname,omitempty"`
 }
 
 // SchemaUserClaimStatus defines the observed state of SchemaUserClaim
 type SchemaUserClaimStatus struct {
 	// Any errors related to provisioning this claim.
-	Error   string       `json:"error,omitempty"`
-	Schemas SchemaStatus `json:"schemas,omitempty"`
+	Error   string         `json:"error,omitempty"`
+	Schemas []SchemaStatus `json:"schemas,omitempty"`
 }
 
 type SchemaStatus struct {
-	Name        string         `json:"name,omitempty"`
-	Status      string         `json:"status,omitempty"`
-	UsersStatus UserStatusType `json:"usersstatus,omitempty"`
+	Name        string           `json:"name,omitempty"`
+	Status      string           `json:"status,omitempty"`
+	UsersStatus []UserStatusType `json:"usersstatus,omitempty"`
 }
 
 type UserStatusType struct {
 	UserName   string `json:"username"`
 	UserStatus string `json:"userstatus"`
+	// Time the user/password was updated/created
+	UserUpdatedAt *metav1.Time `json:"userUpdatedAt,omitempty"`
 }
 
 // +kubebuilder:object:root=true

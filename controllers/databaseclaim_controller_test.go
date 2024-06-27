@@ -105,7 +105,9 @@ func TestDatabaseClaimReconcilerGeneratePassword(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Config: tt.rec.Config,
+				BaseReconciler: BaseReconciler{
+					Config: tt.rec.Config,
+				},
 			}
 			got, err := GeneratePassword(r.Config)
 			if (err != nil) != tt.wantErr {
@@ -221,10 +223,12 @@ func TestDatabaseClaimReconcilerReadMasterPassword(t *testing.T) {
 		t.Setenv("SERVICE_NAMESPACE", tt.args.namespace)
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Client:             tt.reconciler.Client,
-				Log:                tt.reconciler.Log,
-				Scheme:             tt.reconciler.Scheme,
-				Config:             tt.reconciler.Config,
+				Client: tt.reconciler.Client,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 				DbIdentifierPrefix: tt.reconciler.DbIdentifierPrefix,
 				Input:              &input{FragmentKey: tt.args.fragmentKey},
 			}
@@ -317,9 +321,11 @@ func TestGetReclaimPolicy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 			}
 			got := r.getReclaimPolicy(tt.args.fragmentKey)
 			if got != tt.want {
@@ -366,9 +372,11 @@ func TestDatabaseClaimReconcilerGetSecretRef(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 			}
 			if got := r.getSecretRef(tt.args.fragmentKey); got != tt.want {
 				t.Errorf("getSecretRef() = %v, want %v", got, tt.want)
@@ -489,10 +497,12 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
-				Input:  &input{FragmentKey: tt.args[0].fragmentKey},
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
+				Input: &input{FragmentKey: tt.args[0].fragmentKey},
 			}
 			t.Log("getMasterHost() Host from testConfig")
 			if got := r.getMasterHost(tt.args[0].dbClaim); got != tt.want[0] {
@@ -525,10 +535,12 @@ func TestDatabaseClaimReconcilerGetConnectionParams(t *testing.T) {
 
 			r = &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
-				Input:  &input{FragmentKey: tt.args[5].fragmentKey},
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
+				Input: &input{FragmentKey: tt.args[5].fragmentKey},
 			}
 
 			if got := r.getMasterUser(); got != tt.want[5] {
@@ -628,10 +640,12 @@ func TestDatabaseClaimReconcilerGetSSLMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
-				Input:  &input{FragmentKey: tt.args.fragmentKey},
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
+				Input: &input{FragmentKey: tt.args.fragmentKey},
 			}
 			if got := r.getSSLMode(); got != tt.want {
 				t.Errorf("getSSLMode() = %v, want %v", got, tt.want)
@@ -775,9 +789,11 @@ func TestDatabaseClaimReconcilerMatchInstanceLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 			}
 			got, err := r.matchInstanceLabel(tt.args.dbClaim)
 			if (err != nil) != tt.wantErr {
@@ -819,7 +835,9 @@ func TestDatabaseClaimReconcilerGetMinPasswordLength(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Config: tt.reconciler.Config,
+				},
 			}
 			if got := GetMinPasswordLength(r.Config); got != tt.want {
 				t.Errorf("getMinPasswordLength() = %v, want %v", got, tt.want)
@@ -884,9 +902,11 @@ func TestDatabaseClaimReconcilerGetPasswordRotationTime(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 			}
 			if got := r.getPasswordRotationTime(); got != tt.want {
 				t.Errorf("getPasswordRotationTime() = %v, want %v", got, tt.want)
@@ -1168,7 +1188,9 @@ func TestDatabaseClaimReconciler_isClassPermitted(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Class: tt.reconciler.Class,
+				BaseReconciler: BaseReconciler{
+					Class: tt.reconciler.Class,
+				},
 			}
 			got := IsClassPermitted(r.Class, tt.args.claimClass)
 			if got != tt.want {
@@ -1248,10 +1270,12 @@ func TestDatabaseClaimReconciler_getDynamicHostName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Client:             tt.fields.Client,
-				Log:                tt.fields.Log,
-				Scheme:             tt.fields.Scheme,
-				Config:             tt.fields.Config,
+				Client: tt.fields.Client,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.fields.Log,
+					Scheme: tt.fields.Scheme,
+					Config: tt.fields.Config,
+				},
 				MasterAuth:         tt.fields.MasterAuth,
 				DbIdentifierPrefix: tt.fields.DbIdentifierPrefix,
 				Mode:               tt.fields.Mode,
@@ -1517,10 +1541,12 @@ func TestDatabaseClaimReconciler_setReqInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Client:             tt.fields.Client,
-				Log:                tt.fields.Log,
-				Scheme:             tt.fields.Scheme,
-				Config:             tt.fields.Config,
+				Client: tt.fields.Client,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.fields.Log,
+					Scheme: tt.fields.Scheme,
+					Config: tt.fields.Config,
+				},
 				MasterAuth:         tt.fields.MasterAuth,
 				DbIdentifierPrefix: tt.fields.DbIdentifierPrefix,
 				Mode:               tt.fields.Mode,
@@ -2172,15 +2198,17 @@ func TestDatabaseClaimReconciler_getMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
-				Client:             tt.fields.Client,
-				Log:                tt.fields.Log,
-				Scheme:             tt.fields.Scheme,
-				Config:             tt.fields.Config,
+				Client: tt.fields.Client,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.fields.Log,
+					Scheme: tt.fields.Scheme,
+					Config: tt.fields.Config,
+					Class:  tt.fields.Class,
+				},
 				MasterAuth:         tt.fields.MasterAuth,
 				DbIdentifierPrefix: tt.fields.DbIdentifierPrefix,
 				Mode:               tt.fields.Mode,
 				Input:              tt.fields.Input,
-				Class:              tt.fields.Class,
 			}
 			if got := r.getMode(tt.args.dbClaim); got != tt.want {
 				t.Errorf("DatabaseClaimReconciler.getMode() = %v, want %v", got, tt.want)
@@ -2238,9 +2266,11 @@ func TestDatabaseClaimReconciler_BackupPolicy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 			}
 			got := r.configureBackupPolicy(tt.args.dbClaim.Spec.BackupPolicy, tt.args.dbClaim.Spec.Tags)
 
@@ -2342,7 +2372,7 @@ func Test_generateMasterPassword(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := generateMasterPassword()
+			got, err := GenerateMasterPassword()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("generateMasterPassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -2409,9 +2439,11 @@ func TestManageMasterPassword(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DatabaseClaimReconciler{
 				Client: tt.reconciler.Client,
-				Log:    tt.reconciler.Log,
-				Scheme: tt.reconciler.Scheme,
-				Config: tt.reconciler.Config,
+				BaseReconciler: BaseReconciler{
+					Log:    tt.reconciler.Log,
+					Scheme: tt.reconciler.Scheme,
+					Config: tt.reconciler.Config,
+				},
 			}
 			got := r.manageMasterPassword(context.Background(), tt.args.secret)
 			assert.NoError(t, got)
