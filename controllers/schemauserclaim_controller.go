@@ -114,9 +114,8 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 		if !roleExists {
-			roleCreated, err := dbClient.CreateRole(existingDBConnInfo.DatabaseName, schema.Name, schema.Name)
-			//TODO: "|| !roleCreated" might be a problem if the role exists already
-			if err != nil || !roleCreated {
+			_, err := dbClient.CreateRole(existingDBConnInfo.DatabaseName, schema.Name, schema.Name)
+			if err != nil {
 				log.Error(err, "creating schema ["+schema.Name+"] error.")
 				return ctrl.Result{}, err
 			}
@@ -131,10 +130,9 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 			fmt.Printf("User: %s Password: %s", strings.ToLower(user.UserName), userPassword)
 
-			userCreated, err := dbClient.CreateUser(strings.ToLower(user.UserName), strings.ToLower(schema.Name), userPassword) //second param is the ROLE name
+			_, err = dbClient.CreateUser(strings.ToLower(user.UserName), strings.ToLower(schema.Name), userPassword) //second param is the ROLE name
 
-			//TODO: "|| !userCreated" might be a problem if the user exists already
-			if err != nil || !userCreated {
+			if err != nil {
 				log.Error(err, "creating user ["+user.UserName+"].")
 				return ctrl.Result{}, err
 			}
