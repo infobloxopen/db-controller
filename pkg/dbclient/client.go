@@ -432,6 +432,17 @@ func (pc *client) assignRoleToUser(username, rolename string) error {
 	return nil
 }
 
+func (pc *client) UserExists(userName string) (bool, error) {
+	var exists bool
+
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", userName).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for user name")
+		return false, err
+	}
+	return exists, nil
+}
+
 func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, error) {
 	start := time.Now()
 	var exists bool

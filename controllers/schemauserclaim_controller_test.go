@@ -2,9 +2,12 @@ package controllers
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/go-logr/logr"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	. "github.com/infobloxopen/db-controller/pkg/dbclient"
 	. "github.com/infobloxopen/db-controller/testutils"
 	_ "github.com/lib/pq"
 	. "github.com/onsi/ginkgo/v2"
@@ -20,6 +23,10 @@ import (
 
 func TestSchemaUserClaimReconcile(t *testing.T) {
 	RegisterFailHandler(Fail)
+
+	testDB := SetupSqlDB(t, "postgres", "masterpassword")
+	defer testDB.Close()
+
 	type reconciler struct {
 		Client             client.Client
 		Log                logr.Logger
@@ -38,7 +45,7 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 		{
 			"Get UserSchema claim 1",
 			reconciler{
-				Client: &MockClient{},
+				Client: &MockClient{Port: strconv.Itoa(testDB.Port)},
 				Config: NewConfig(complexityEnabled),
 				Request: controllerruntime.Request{
 					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-1"},
@@ -48,19 +55,6 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			15,
 			false,
 		},
-		// {
-		// 	"Get UserSchema claim 2",
-		// 	reconciler{
-		// 		Client: &MockClient{},
-		// 		Config: NewConfig(complexityDisabled),
-		// 		Request: controllerruntime.Request{
-		// 			NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-2"},
-		// 		},
-		// 		Log: zap.New(zap.UseDevMode(true)),
-		// 	},
-		// 	defaultPassLen,
-		// 	false,
-		// },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -70,12 +64,57 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 				Log:    tt.rec.Log,
 				Scheme: tt.rec.Scheme,
 			}
-			schemas, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
+			result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			Expect(schemas.Requeue).Should(BeFalse())
+			Expect(result.Requeue).Should(BeFalse())
+
+			existingDBConnInfo, err := persistancev1.ParseUri(testDB.URL())
+			if err != nil {
+				t.Errorf("error = %v", err)
+				return
+			}
+
+			dbClient, err := GetClientForExistingDB(existingDBConnInfo, &r.Log)
+			if err != nil {
+				t.Errorf("error = %v", err)
+				return
+			}
+			exists, err := dbClient.SchemaExists("schema0")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.SchemaExists("schema1")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user1")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+
+			exists, err = dbClient.SchemaExists("schema2")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user2_1")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user2_2")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+
+			exists, err = dbClient.SchemaExists("schema3")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user3_1")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user3_2")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user3_3")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+
 		})
 	}
 }

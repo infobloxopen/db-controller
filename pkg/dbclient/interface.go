@@ -19,6 +19,8 @@ type Client interface {
 	ManageSystemFunctions(dbName string, functions map[string]string) error
 	//Checks if a schema exists in the database
 	SchemaExists(schemaName string) (bool, error)
+	//Checks if a usedr exists in the database
+	UserExists(userName string) (bool, error)
 	//Checks if a role exists in the database
 	RoleExists(roleName string) (bool, error)
 	CreateSchema(schemaName string) (bool, error)

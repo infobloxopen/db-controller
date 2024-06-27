@@ -14,6 +14,7 @@ import (
 
 type MockClient struct {
 	client.Client
+	Port string
 }
 
 func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -36,15 +37,15 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		sec.Spec.Class = ptr.String("default")
 		sec.Name = "schema1"
 		sec.Spec.Database = &persistancev1.Database{
-			DSN:       "public://postgres:password@127.0.0.1:5432/postgres?sslmode=disable",
+			DSN:       "public://postgres:password@127.0.0.1:" + m.Port + "/postgres?sslmode=disable",
 			SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
 		}
 		sec.Spec.Schemas = []persistancev1.SchemaUserType{
 			{
-				Name: "Schema0",
+				Name: "schema0",
 			},
 			{
-				Name: "Schema1",
+				Name: "schema1",
 				Users: []persistancev1.UserType{
 					{
 						UserName: "user1",
@@ -52,7 +53,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 				},
 			},
 			{
-				Name: "Schema2",
+				Name: "schema2",
 				Users: []persistancev1.UserType{
 					{
 						UserName: "user2_1",
@@ -63,7 +64,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 				},
 			},
 			{
-				Name: "Schema3",
+				Name: "schema3",
 				Users: []persistancev1.UserType{
 					{
 						UserName: "user3_1",
