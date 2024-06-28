@@ -24,7 +24,7 @@ import (
 func TestSchemaUserClaimReconcile(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	testDB := SetupSqlDB(t, "postgres", "masterpassword")
+	testDB := SetupSqlDB(t, "user_a", "masterpassword")
 	defer testDB.Close()
 
 	type reconciler struct {
@@ -84,36 +84,69 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 				t.Errorf("error = %v", err)
 				return
 			}
+			//-----------------
 			exists, err := dbClient.SchemaExists("schema0")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
+			//-----------------
 			exists, err = dbClient.SchemaExists("schema1")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user1")
+
+			exists, err = dbClient.RoleExists("user1_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-
+			exists, err = dbClient.UserExists("user1_a")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			//-----------------
 			exists, err = dbClient.SchemaExists("schema2")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user2_1")
+
+			exists, err = dbClient.RoleExists("user2_1_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user2_2")
+			exists, err = dbClient.UserExists("user2_1_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
+			exists, err = dbClient.RoleExists("user2_2_admin")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user2_2_a")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			//-----------------
 			exists, err = dbClient.SchemaExists("schema3")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user3_1")
+
+			exists, err = dbClient.RoleExists("user3_1_readonly")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user3_2")
+			exists, err = dbClient.UserExists("user3_1_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user3_3")
+
+			exists, err = dbClient.RoleExists("user3_2_regular")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user3_2_a")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+
+			exists, err = dbClient.RoleExists("user3_3_admin")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user3_3_a")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			//----------PUBLIC-------
+			exists, err = dbClient.RoleExists("user4_admin")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+			exists, err = dbClient.UserExists("user4_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 

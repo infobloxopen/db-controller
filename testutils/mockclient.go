@@ -19,7 +19,7 @@ type MockClient struct {
 
 func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	_ = ctx
-	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest") &&
+	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest" || key.Namespace == "schema-user-test") &&
 		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
@@ -30,54 +30,89 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		return nil
 	} else if key.Namespace == "schema-user-test" {
-		sec, ok := obj.(*persistancev1.SchemaUserClaim)
-		if !ok {
-			return fmt.Errorf("can't assert type")
-		}
-		sec.Spec.Class = ptr.String("default")
-		sec.Name = "schema1"
-		sec.Spec.DBClaimName = "TestClaim"
-		// sec.Spec.Database = &persistancev1.Database{
-		// 	DSN:       "public://postgres:password@127.0.0.1:" + m.Port + "/postgres?sslmode=disable",
-		// 	SecretRef: &persistancev1.SecretRef{Namespace: "unitest", Name: "test"},
-		// }
-		sec.Spec.Schemas = []persistancev1.SchemaUserType{
-			{
-				Name: "schema0",
-			},
-			{
-				Name: "schema1",
-				Users: []persistancev1.UserType{
-					{
-						UserName: "user1",
+		if key.Name == "TestClaim" { //DBClaim
+
+			sec, ok := obj.(*persistancev1.DatabaseClaim)
+			if !ok {
+				return fmt.Errorf("can't assert type")
+			}
+			sec.Spec.Class = ptr.String("default")
+			sec.Spec.SecretName = "sample-master-secret"
+			sec.Name = "TestClaim"
+			sec.Namespace = "schema-user-test"
+			sec.Status = persistancev1.DatabaseClaimStatus{
+				ActiveDB: persistancev1.Status{
+					ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
+						DatabaseName: "postgres",
+						Host:         "localhost",
+						Port:         m.Port,
+						Username:     "user_a",
+						SSLMode:      "disable",
 					},
 				},
-			},
-			{
-				Name: "schema2",
-				Users: []persistancev1.UserType{
-					{
-						UserName: "user2_1",
-					},
-					{
-						UserName: "user2_2",
+			}
+
+		} else { //SchemaUserClaim
+			sec, ok := obj.(*persistancev1.SchemaUserClaim)
+			if !ok {
+				return fmt.Errorf("can't assert type")
+			}
+			sec.Spec.Class = ptr.String("default")
+			sec.Name = "schema1"
+			sec.Spec.DBClaimName = "TestClaim"
+			sec.Spec.Schemas = []persistancev1.SchemaUserType{
+				{
+					Name: "schema0",
+				},
+				{
+					Name: "schema1",
+					Users: []persistancev1.UserType{
+						{
+							UserName:   "user1",
+							Permission: persistancev1.Regular,
+						},
 					},
 				},
-			},
-			{
-				Name: "schema3",
-				Users: []persistancev1.UserType{
-					{
-						UserName: "user3_1",
-					},
-					{
-						UserName: "user3_2",
-					},
-					{
-						UserName: "user3_3",
+				{
+					Name: "schema2",
+					Users: []persistancev1.UserType{
+						{
+							UserName:   "user2_1",
+							Permission: persistancev1.Regular,
+						},
+						{
+							UserName:   "user2_2",
+							Permission: persistancev1.Admin,
+						},
 					},
 				},
-			},
+				{
+					Name: "schema3",
+					Users: []persistancev1.UserType{
+						{
+							UserName:   "user3_1",
+							Permission: persistancev1.ReadOnly,
+						},
+						{
+							UserName:   "user3_2",
+							Permission: persistancev1.Regular,
+						},
+						{
+							UserName:   "user3_3",
+							Permission: persistancev1.Admin,
+						},
+					},
+				},
+				{
+					Name: "public", //existing one
+					Users: []persistancev1.UserType{
+						{
+							UserName:   "user4",
+							Permission: persistancev1.Admin,
+						},
+					},
+				},
+			}
 		}
 
 		return nil

@@ -22,7 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
 	corev1 "k8s.io/api/core/v1"
@@ -82,10 +84,10 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	//get db conn details
-	existingDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo
+	existingDBConnInfo := dbClaim.Status.ActiveDB.ConnectionInfo
 
 	//retrieve dB master password
-	masterPassword, err := r.getMasterPasswordForExistingDB(ctx, &dbClaim)
+	masterPassword, err := r.getMasterPassword(ctx, &dbClaim)
 	if err != nil {
 		log.Error(err, "get master password for existing db error.")
 		return ctrl.Result{}, err
@@ -122,19 +124,11 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		//create user and assign role
 		for _, user := range schema.Users {
-			//check if role exists, if not: create it
-			roleExists, err := dbClient.RoleExists(user.UserName)
+			roleName := strings.ToLower(user.UserName + "_" + string(user.Permission))
+			// check if role exists, if not: create it
+			err := createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schema.Name)
 			if err != nil {
-				log.Error(err, "checking if role ["+user.UserName+"] exists error.")
 				return ctrl.Result{}, err
-			}
-			if !roleExists {
-				_, err := dbClient.CreateRole(strings.ToLower(existingDBConnInfo.DatabaseName), strings.ToLower(user.UserName), strings.ToLower(schema.Name))
-				if err != nil {
-					log.Error(err, "creating role ["+user.UserName+"] error.")
-					return ctrl.Result{}, err
-				}
-
 			}
 
 			dbu := dbuser.NewDBUser(user.UserName)
@@ -148,7 +142,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 			//rotate user password if it's older than 'rotationTime'
 			if currentUserStatus.UserUpdatedAt == nil || time.Since(currentUserStatus.UserUpdatedAt.Time) > rotationTime {
-				log.Info("rotating users")
+				log.Info("rotating user " + currentUserStatus.UserName)
 
 				userPassword, err := GeneratePassword(r.Config)
 				if err != nil {
@@ -156,7 +150,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				}
 
 				nextUser := dbu.NextUser(currentUserStatus.UserName)
-				created, err := dbClient.CreateUser(nextUser, user.UserName, userPassword)
+				created, err := dbClient.CreateUser(nextUser, roleName, userPassword)
 				if err != nil {
 					metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 					return ctrl.Result{}, err
@@ -175,12 +169,30 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		//update obj in k8s
-		if err = r.updateClientStatus(ctx, &schemaUserClaim); err != nil {
-			return ctrl.Result{}, err
-		}
+		//TODO: uncomment before check in
+		// if err = r.updateClientStatus(ctx, &schemaUserClaim); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, databaseName string, schemaName string) error {
+	roleExists, err := dbClient.RoleExists(roleName)
+	if err != nil {
+		log.Error(err, "checking if role ["+roleName+"] exists error.")
+		return err
+	}
+	if !roleExists {
+		_, err := dbClient.CreateRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
+		if err != nil {
+			log.Error(err, "creating role ["+roleName+"] error.")
+			return err
+		}
+
+	}
+	return nil
 }
 
 func getOrCreateSchemaStatus(schemaUserClaim persistancev1.SchemaUserClaim, schemaName string) *persistancev1.SchemaStatus {
@@ -218,22 +230,18 @@ func getOrCreateUserStatus(currentSchemaStatus persistancev1.SchemaStatus, userN
 	return &currentSchemaStatus.UsersStatus[userIdx]
 }
 
-func (r *SchemaUserClaimReconciler) getMasterPasswordForExistingDB(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+func (r *SchemaUserClaimReconciler) getMasterPassword(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
 	secretKey := "password"
 	gs := &corev1.Secret{}
 
-	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
-	if ns == "" {
-		ns = dbClaim.Namespace
-	}
+	ns := dbClaim.Namespace
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: ns,
-		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
+		Name:      dbClaim.Spec.SecretName,
 	}, gs)
 	if err == nil {
 		return string(gs.Data[secretKey]), nil
 	}
-	//err!=nil
 	if !errors.IsNotFound(err) {
 		return "", err
 	}
