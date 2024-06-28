@@ -185,7 +185,17 @@ func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, dat
 		return err
 	}
 	if !roleExists {
-		_, err := dbClient.CreateRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
+		var err error = nil
+		if strings.HasSuffix(roleName, strings.ToLower(string(persistancev1.Admin))) {
+			_, err = dbClient.CreateAdminRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
+
+		} else if strings.HasSuffix(roleName, strings.ToLower(string(persistancev1.Regular))) {
+			_, err = dbClient.CreateRegularRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
+
+		} else if strings.HasSuffix(roleName, strings.ToLower(string(persistancev1.ReadOnly))) {
+			_, err = dbClient.CreateReadOnlyRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
+		}
+
 		if err != nil {
 			log.Error(err, "creating role ["+roleName+"] error.")
 			return err

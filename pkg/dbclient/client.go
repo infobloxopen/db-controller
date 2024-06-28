@@ -423,6 +423,119 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 	return created, nil
 }
 
+func (pc *client) CreateAdminRole(dbName, rolename, schema string) (bool, error) {
+	created, err := pc.CreateRole(dbName, rolename, schema)
+
+	if err != nil {
+		return created, err
+	}
+
+	if created {
+		grantSchemaPrivileges := `
+			GRANT ALL ON SCHEMA %s TO %s;
+		`
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename)))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+	}
+
+	return created, nil
+}
+
+func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, error) {
+	created, err := pc.CreateRole(dbName, rolename, schema)
+
+	if err != nil {
+		return created, err
+	}
+
+	if created {
+		grantSchemaPrivileges := `
+			GRANT USAGE ON SCHEMA %s TO %s;
+			GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %s TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON SEQUENCES TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON SEQUENCES TO %s;
+		`
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(
+			fmt.Sprintf(grantSchemaPrivileges,
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+			))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+	}
+
+	return created, nil
+}
+
+func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, error) {
+	created, err := pc.CreateRole(dbName, rolename, schema)
+
+	if err != nil {
+		return created, err
+	}
+
+	if created {
+		grantSchemaPrivileges := `
+			GRANT USAGE ON SCHEMA %s TO %s;
+			GRANT SELECT ON ALL TABLES IN SCHEMA %s TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT SELECT ON TABLES TO %s;
+		`
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(
+			fmt.Sprintf(grantSchemaPrivileges,
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+			))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+	}
+
+	return created, nil
+}
+
 func (pc *client) assignRoleToUser(username, rolename string) error {
 	db := pc.DB
 	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {

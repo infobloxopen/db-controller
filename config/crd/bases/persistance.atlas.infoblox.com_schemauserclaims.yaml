@@ -68,9 +68,12 @@ spec:
                     users:
                       items:
                         properties:
+                          permission:
+                            type: string
                           username:
                             type: string
                         required:
+                        - permission
                         - username
                         type: object
                       type: array
