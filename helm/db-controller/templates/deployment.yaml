@@ -29,19 +29,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: kube-rbac-proxy
-          args:
-            - --secure-listen-address=0.0.0.0:8443
-            - --upstream=http://127.0.0.1:8080/
-            - --logtostderr=true
-            - --v=10
-          image: gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-          {{- toYaml .Values.securityContext | nindent 12 }}
-          resources:
-        {{- toYaml .Values.resources | nindent 12 }}
-        - name: {{ .Chart.Name }}-manager
+        - name: manager
           ports:
           - containerPort: 8443
             name: https
@@ -57,11 +45,9 @@ spec:
             - name: DSNEXEC_IMAGE
               value: "{{ .Values.dsnexec.image.repository }}:{{ .Values.dsnexec.image.tag | default .Chart.AppVersion }}"
           args:
-            - --metrics-addr={{ .Values.metrics.address }}
-            - --metrics-port={{ .Values.metrics.port }}
-            - --health-probe-address={{ .Values.healthProbe.address }}
-            - --health-probe-port={{ .Values.healthProbe.port }}
-            - --enable-leader-election
+            - --metrics-bind-address=:{{ .Values.metrics.port }}
+            - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
+            - --leader-elect
             - --enable-db-proxy={{ .Values.dbproxy.enabled }}
             - --enable-dsnexec={{ .Values.dsnexec.enabled }}
             - --config-file=/etc/config/config.yaml
@@ -97,7 +83,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: pg-temp-volume 
+            - name: pg-temp-volume
               mountPath: /pg-temp
             - name: config-volume
               mountPath: /etc/config
@@ -106,6 +92,18 @@ spec:
               mountPath: /certs
               readOnly: true
             {{- end }}
+        - name: kube-rbac-proxy
+          args:
+            - --secure-listen-address=0.0.0.0:8443
+            - --upstream=http://127.0.0.1:8080/
+            - --logtostderr=true
+            - --v=10
+          image: gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+        {{- toYaml .Values.resources | nindent 12 }}
       volumes:
       - name: pg-temp-volume
         emptyDir: {}

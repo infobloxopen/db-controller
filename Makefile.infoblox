@@ -18,11 +18,11 @@ DSNEXEC_IMG ?= ghcr.io/infobloxopen/db-controller/dsnexec:${GIT_COMMIT}
 
 docker-build-%: target=$(@:docker-build-%=%)
 docker-build-%: .id
-	cd $(target) && $(CONTAINER_TOOL) build -t ghcr.io/infobloxopen/db-controller/$(target):$(GIT_COMMIT) .
+	cd $(target) && $(CONTAINER_TOOL) build -t ghcr.io/infobloxopen/$(target):$(GIT_COMMIT) .
 
 docker-push-%: target=$(@:docker-push-%=%)
 docker-push-%: .id
-	$(CONTAINER_TOOL) push ghcr.io/infobloxopen/db-controller/$(target):$(GIT_COMMIT)
+	$(CONTAINER_TOOL) push ghcr.io/infobloxopen/$(target):$(GIT_COMMIT)
 
 # FIXME: use the actual chart names
 build-properties: build.properties crd.build.properties
@@ -71,3 +71,18 @@ push-chart-%: helms3
 .PHONY: list-of-images
 list-of-images:
 	@echo -n ${IMG} ${DBPROXY_IMG} ${DSNEXEC_IMG}
+
+# FIXME: remove for a single image
+build-images: docker-build docker-build-dbproxy docker-build-dsnexec
+
+# FIXME: remove for a single image
+push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
+
+deploy: .id build-images push-images package-chart-db-controller
+	helm upgrade --install `cat .id` \
+		db-controller-${CHART_VERSION}.tgz \
+		--debug --wait --namespace "`cat .id`" \
+		--create-namespace \
+		-f helm/db-controller/minikube.yaml \
+		--set dbController.class=`cat .id` \
+		${HELM_SETFLAGS}
