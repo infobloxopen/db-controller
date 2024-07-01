@@ -3,11 +3,13 @@ package testutils
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/smithy-go/ptr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -66,6 +68,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			sec.Spec.Class = ptr.String("default")
 			sec.Name = "schema1"
 			sec.Spec.DBClaimName = "TestClaim"
+			var time8DaysAgo = metav1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
 			sec.Spec.Schemas = []persistancev1.SchemaUserType{
 				{
 					Name: "schema0",
@@ -123,6 +126,28 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 						{
 							UserName:   "user4",
 							Permission: persistancev1.Admin,
+						},
+					},
+				},
+				{
+					Name: "schema4",
+					Users: []persistancev1.UserType{
+						{
+							UserName:   "userAlreadyCreated",
+							Permission: persistancev1.Admin,
+						},
+					},
+				},
+			}
+			sec.Status.Schemas = []persistancev1.SchemaStatus{
+				{
+					Name:   "schema4",
+					Status: "created",
+					UsersStatus: []persistancev1.UserStatusType{
+						{
+							UserName:      "userAlreadyCreated_a",
+							UserStatus:    "blablabla",
+							UserUpdatedAt: &time8DaysAgo,
 						},
 					},
 				},

@@ -142,6 +142,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				}
 
 				nextUser := dbu.NextUser(currentUserStatus.UserName)
+				currentUserStatus.UserName = nextUser
 				created, err := dbClient.CreateUser(nextUser, roleName, userPassword)
 				if err != nil {
 					metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
@@ -152,9 +153,11 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 					if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
 						return ctrl.Result{}, err
 					}
+					currentUserStatus.UserStatus = "password rotated"
+				} else {
+					currentUserStatus.UserStatus = "created"
 				}
 
-				currentUserStatus.UserStatus = "password rotated"
 				timeNow := metav1.Now()
 				currentUserStatus.UserUpdatedAt = &timeNow
 			}
@@ -232,7 +235,7 @@ func getOrCreateSchemaStatus(schemaUserClaim *persistancev1.SchemaUserClaim, sch
 
 func getOrCreateUserStatus(currentSchemaStatus *persistancev1.SchemaStatus, userName string) *persistancev1.UserStatusType {
 	userIdx := slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c persistancev1.UserStatusType) bool {
-		return c.UserName == userName
+		return c.UserName == userName+dbuser.SuffixA || c.UserName == userName+dbuser.SuffixB
 	})
 	if userIdx == -1 {
 		aux := &persistancev1.UserStatusType{

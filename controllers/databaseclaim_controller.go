@@ -1499,7 +1499,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(dbClient dbclient.Clie
 
 	userName := status.ConnectionInfo.Username
 
-	if dbu.IsUserChanged(userName) { //first time it's always false
+	if dbu.IsUserChanged(userName) {
 		oldUsername := dbuser.TrimUserSuffix(userName)
 		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
 			return err
