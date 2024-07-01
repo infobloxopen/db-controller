@@ -110,35 +110,27 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		schema.Name = strings.ToLower(schema.Name)
 
 		//if schema doesn't exist, create it
-		schemaExists, err := dbClient.SchemaExists(schema.Name)
+		err := createSchema(dbClient, schema.Name, log)
 		if err != nil {
-			log.Error(err, "checking if schema ["+schema.Name+"] exists error.")
 			return ctrl.Result{}, err
 		}
-		if !schemaExists {
-			createSchema, err := dbClient.CreateSchema(schema.Name)
-			if err != nil || !createSchema {
-				log.Error(err, "creating schema ["+schema.Name+"] error.")
-				return ctrl.Result{}, err
-			}
-		}
+
+		//add schema to the status section
+		currentSchemaStatus := getOrCreateSchemaStatus(&schemaUserClaim, schema.Name)
+
 		//create user and assign role
 		for _, user := range schema.Users {
-			roleName := strings.ToLower(user.UserName + "_" + string(user.Permission))
+			roleName := strings.ToLower(schema.Name + "_" + string(user.Permission))
 			// check if role exists, if not: create it
-			err := createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schema.Name)
-			if err != nil {
+			if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schema.Name); err != nil {
 				return ctrl.Result{}, err
 			}
 
 			dbu := dbuser.NewDBUser(user.UserName)
 			rotationTime := r.getPasswordRotationTime()
 
-			//add schema to the status section
-			currentSchemaStatus := getOrCreateSchemaStatus(schemaUserClaim, schema.Name)
-
 			//add user to the status section
-			currentUserStatus := getOrCreateUserStatus(*currentSchemaStatus, user.UserName)
+			currentUserStatus := getOrCreateUserStatus(currentSchemaStatus, user.UserName)
 
 			//rotate user password if it's older than 'rotationTime'
 			if currentUserStatus.UserUpdatedAt == nil || time.Since(currentUserStatus.UserUpdatedAt.Time) > rotationTime {
@@ -169,13 +161,28 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		//update obj in k8s
-		//TODO: uncomment before check in
-		// if err = r.updateClientStatus(ctx, &schemaUserClaim); err != nil {
-		// 	return ctrl.Result{}, err
-		// }
+		if err = r.updateClientStatus(ctx, &schemaUserClaim); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func createSchema(dbClient dbclient.Client, schemaName string, log logr.Logger) error {
+	schemaExists, err := dbClient.SchemaExists(schemaName)
+	if err != nil {
+		log.Error(err, "checking if schema ["+schemaName+"] exists error.")
+		return err
+	}
+	if !schemaExists {
+		createSchema, err := dbClient.CreateSchema(schemaName)
+		if err != nil || !createSchema {
+			log.Error(err, "creating schema ["+schemaName+"] error.")
+			return err
+		}
+	}
+	return nil
 }
 
 func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, databaseName string, schemaName string) error {
@@ -205,7 +212,7 @@ func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, dat
 	return nil
 }
 
-func getOrCreateSchemaStatus(schemaUserClaim persistancev1.SchemaUserClaim, schemaName string) *persistancev1.SchemaStatus {
+func getOrCreateSchemaStatus(schemaUserClaim *persistancev1.SchemaUserClaim, schemaName string) *persistancev1.SchemaStatus {
 	schemaIdx := slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c persistancev1.SchemaStatus) bool {
 		return c.Name == schemaName
 	})
@@ -223,7 +230,7 @@ func getOrCreateSchemaStatus(schemaUserClaim persistancev1.SchemaUserClaim, sche
 	return &schemaUserClaim.Status.Schemas[schemaIdx]
 }
 
-func getOrCreateUserStatus(currentSchemaStatus persistancev1.SchemaStatus, userName string) *persistancev1.UserStatusType {
+func getOrCreateUserStatus(currentSchemaStatus *persistancev1.SchemaStatus, userName string) *persistancev1.UserStatusType {
 	userIdx := slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c persistancev1.UserStatusType) bool {
 		return c.UserName == userName
 	})
@@ -270,9 +277,9 @@ func (r *SchemaUserClaimReconciler) getPasswordRotationTime() time.Duration {
 	return prt
 }
 
-func (r *SchemaUserClaimReconciler) updateClientStatus(ctx context.Context, dbClaim *persistancev1.SchemaUserClaim) error {
+func (r *SchemaUserClaimReconciler) updateClientStatus(ctx context.Context, schemaUserClaim *persistancev1.SchemaUserClaim) error {
 
-	err := r.Client.Status().Update(ctx, dbClaim)
+	err := r.Client.Status().Update(ctx, schemaUserClaim)
 	if err != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if errors.IsConflict(err) {

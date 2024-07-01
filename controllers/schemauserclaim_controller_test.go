@@ -84,6 +84,43 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 				t.Errorf("error = %v", err)
 				return
 			}
+
+			var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
+			Expect(responseUpdate).Should(Not(BeNil()))
+			var schemaUserClaimStatus = responseUpdate.(*persistancev1.SchemaUserClaim).Status
+			Expect(schemaUserClaimStatus).Should(Not(BeNil()))
+			Expect(schemaUserClaimStatus.Error).Should(BeEmpty())
+			Expect(schemaUserClaimStatus.Schemas).Should(HaveLen(5))
+			Expect(schemaUserClaimStatus.Schemas[0].Name).Should(Equal("schema0"))
+			Expect(schemaUserClaimStatus.Schemas[0].Status).Should(Equal("created"))
+			Expect(schemaUserClaimStatus.Schemas[0].UsersStatus).Should(BeEmpty())
+
+			Expect(schemaUserClaimStatus.Schemas[1].Name).Should(Equal("schema1"))
+			Expect(schemaUserClaimStatus.Schemas[1].Status).Should(Equal("created"))
+			Expect(schemaUserClaimStatus.Schemas[1].UsersStatus).Should(HaveLen(1))
+			Expect(schemaUserClaimStatus.Schemas[1].UsersStatus[0].UserName).Should(Equal("user1"))
+			Expect(schemaUserClaimStatus.Schemas[1].UsersStatus[0].UserStatus).Should(Equal("password rotated"))
+
+			Expect(schemaUserClaimStatus.Schemas[2].Name).Should(Equal("schema2"))
+			Expect(schemaUserClaimStatus.Schemas[2].Status).Should(Equal("created"))
+			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus).Should(HaveLen(2))
+			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[0].UserName).Should(Equal("user2_1"))
+			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[0].UserStatus).Should(Equal("password rotated"))
+			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[1].UserName).Should(Equal("user2_2"))
+
+			Expect(schemaUserClaimStatus.Schemas[3].Name).Should(Equal("schema3"))
+			Expect(schemaUserClaimStatus.Schemas[3].Status).Should(Equal("created"))
+			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus).Should(HaveLen(5))
+			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[0].UserName).Should(Equal("user3_1"))
+			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[0].UserStatus).Should(Equal("password rotated"))
+			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[1].UserName).Should(Equal("user3_2"))
+
+			Expect(schemaUserClaimStatus.Schemas[4].Name).Should(Equal("public"))
+			Expect(schemaUserClaimStatus.Schemas[4].Status).Should(Equal("created"))
+			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus).Should(HaveLen(1))
+			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[0].UserName).Should(Equal("user4"))
+			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[0].UserStatus).Should(Equal("password rotated"))
+
 			//-----------------
 			exists, err := dbClient.SchemaExists("schema0")
 			Expect(exists).Should(BeTrue())
@@ -93,7 +130,7 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
-			exists, err = dbClient.RoleExists("user1_regular")
+			exists, err = dbClient.RoleExists("schema1_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user1_a")
@@ -104,14 +141,14 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
-			exists, err = dbClient.RoleExists("user2_1_regular")
+			exists, err = dbClient.RoleExists("schema2_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user2_1_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
-			exists, err = dbClient.RoleExists("user2_2_admin")
+			exists, err = dbClient.RoleExists("schema2_admin")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user2_2_a")
@@ -122,28 +159,36 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
-			exists, err = dbClient.RoleExists("user3_1_readonly")
+			exists, err = dbClient.RoleExists("schema3_readonly")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user3_1_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
-			exists, err = dbClient.RoleExists("user3_2_regular")
+			exists, err = dbClient.RoleExists("schema3_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user3_2_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 
-			exists, err = dbClient.RoleExists("user3_3_admin")
+			exists, err = dbClient.RoleExists("schema3_admin")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user3_3_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
+
+			exists, err = dbClient.UserExists("user3_4_a")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
+
+			exists, err = dbClient.UserExists("user3_5_a")
+			Expect(exists).Should(BeTrue())
+			Expect(err).Should(BeNil())
 			//----------PUBLIC-------
-			exists, err = dbClient.RoleExists("user4_admin")
+			exists, err = dbClient.RoleExists("public_admin")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			exists, err = dbClient.UserExists("user4_a")

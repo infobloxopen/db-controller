@@ -17,6 +17,12 @@ type MockClient struct {
 	Port string
 }
 
+var responseUpdate interface{}
+
+func (m MockClient) GetResponseUpdate() interface{} {
+	return responseUpdate
+}
+
 func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	_ = ctx
 	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest" || key.Namespace == "schema-user-test") &&
@@ -101,6 +107,14 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 							UserName:   "user3_3",
 							Permission: persistancev1.Admin,
 						},
+						{
+							UserName:   "user3_4",
+							Permission: persistancev1.Admin,
+						},
+						{
+							UserName:   "user3_5",
+							Permission: persistancev1.Admin,
+						},
 					},
 				},
 				{
@@ -139,11 +153,12 @@ type MockStatusWriter struct {
 	client.StatusWriter
 }
 
-// func (m MockClient) Status() client.StatusWriter {
-// 	return &MockStatusWriter{}
-// }
+func (m MockClient) Status() client.StatusWriter {
+	return &MockStatusWriter{}
+}
 
-func (m MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (m MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	responseUpdate = obj
 	return nil
 }
 
