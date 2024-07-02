@@ -71,7 +71,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// get dbclaim
 	var dbClaim v1.DatabaseClaim
 
-	if err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: schemaUserClaim.Spec.DBClaimName}, &dbClaim); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: schemaUserClaim.Spec.SourceDatabaseClaim.Namespace, Name: schemaUserClaim.Spec.SourceDatabaseClaim.Name}, &dbClaim); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "unable to fetch DatabaseClaim")
 			return ctrl.Result{}, err
@@ -104,23 +104,23 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		schemaUserClaim.Status.Schemas = []v1.SchemaStatus{}
 	}
 
-	for _, schema := range schemaUserClaim.Spec.Schemas {
-		schema.Name = strings.ToLower(schema.Name)
+	for schemaName, schema := range schemaUserClaim.Spec.Schemas {
+		schemaName = strings.ToLower(schemaName)
 
 		//if schema doesn't exist, create it
-		err := createSchema(dbClient, schema.Name, log)
+		err := createSchema(dbClient, schemaName, log)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		//add schema to the status section
-		currentSchemaStatus := getOrCreateSchemaStatus(&schemaUserClaim, schema.Name)
+		currentSchemaStatus := getOrCreateSchemaStatus(&schemaUserClaim, schemaName)
 
 		//create user and assign role
-		for _, user := range schema.Users {
-			roleName := strings.ToLower(schema.Name + "_" + string(user.Permission))
+		for _, user := range schema {
+			roleName := strings.ToLower(schemaName + "_" + string(user.Permission))
 			// check if role exists, if not: create it
-			if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schema.Name); err != nil {
+			if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
 				return ctrl.Result{}, err
 			}
 

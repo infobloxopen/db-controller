@@ -55,32 +55,39 @@ spec:
                 default: default
                 description: Class is used to run multiple instances of dbcontroller.
                 type: string
-              dbclaimname:
-                description: Name of the related DBClaim - to extract conn info
-                type: string
               schemas:
+                additionalProperties:
+                  items:
+                    properties:
+                      permission:
+                        type: string
+                      username:
+                        type: string
+                    required:
+                    - permission
+                    - username
+                    type: object
+                  type: array
                 description: Schemas holds the schemas to be created and the user
                   names to be created and granted access to this schema.
-                items:
-                  properties:
-                    name:
-                      type: string
-                    users:
-                      items:
-                        properties:
-                          permission:
-                            type: string
-                          username:
-                            type: string
-                        required:
-                        - permission
-                        - username
-                        type: object
-                      type: array
-                  type: object
-                type: array
+                type: object
+              sourceDatabaseClaim:
+                description: Name of the related DBClaim - to extract conn info
+                properties:
+                  name:
+                    description: Name  of the source databaseclaim
+                    type: string
+                  namespace:
+                    default: default
+                    description: Namespace of the source databaseclaim
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
             required:
             - schemas
+            - sourceDatabaseClaim
             type: object
           status:
             description: SchemaUserClaimStatus defines the observed state of SchemaUserClaim

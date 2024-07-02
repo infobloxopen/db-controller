@@ -67,76 +67,59 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			}
 			sec.Spec.Class = ptr.String("default")
 			sec.Name = "schema1"
-			sec.Spec.DBClaimName = "TestClaim"
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
 			var time8DaysAgo = metav1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
-			sec.Spec.Schemas = []persistancev1.SchemaUserType{
+			sec.Spec.Schemas = make(map[string][]persistancev1.UserType, 6)
+
+			sec.Spec.Schemas["schema0"] = nil
+			sec.Spec.Schemas["schema1"] = []persistancev1.UserType{
 				{
-					Name: "schema0",
+					UserName:   "user1",
+					Permission: persistancev1.Regular,
+				},
+			}
+			sec.Spec.Schemas["schema2"] = []persistancev1.UserType{
+				{
+					UserName:   "user2_1",
+					Permission: persistancev1.Regular,
 				},
 				{
-					Name: "schema1",
-					Users: []persistancev1.UserType{
-						{
-							UserName:   "user1",
-							Permission: persistancev1.Regular,
-						},
-					},
+					UserName:   "user2_2",
+					Permission: persistancev1.Admin,
+				},
+			}
+			sec.Spec.Schemas["schema3"] = []persistancev1.UserType{
+				{
+					UserName:   "user3_1",
+					Permission: persistancev1.ReadOnly,
 				},
 				{
-					Name: "schema2",
-					Users: []persistancev1.UserType{
-						{
-							UserName:   "user2_1",
-							Permission: persistancev1.Regular,
-						},
-						{
-							UserName:   "user2_2",
-							Permission: persistancev1.Admin,
-						},
-					},
+					UserName:   "user3_2",
+					Permission: persistancev1.Regular,
 				},
 				{
-					Name: "schema3",
-					Users: []persistancev1.UserType{
-						{
-							UserName:   "user3_1",
-							Permission: persistancev1.ReadOnly,
-						},
-						{
-							UserName:   "user3_2",
-							Permission: persistancev1.Regular,
-						},
-						{
-							UserName:   "user3_3",
-							Permission: persistancev1.Admin,
-						},
-						{
-							UserName:   "user3_4",
-							Permission: persistancev1.Admin,
-						},
-						{
-							UserName:   "user3_5",
-							Permission: persistancev1.Admin,
-						},
-					},
+					UserName:   "user3_3",
+					Permission: persistancev1.Admin,
 				},
 				{
-					Name: "public", //existing one
-					Users: []persistancev1.UserType{
-						{
-							UserName:   "user4",
-							Permission: persistancev1.Admin,
-						},
-					},
+					UserName:   "user3_4",
+					Permission: persistancev1.Admin,
 				},
 				{
-					Name: "schema4",
-					Users: []persistancev1.UserType{
-						{
-							UserName:   "userAlreadyCreated",
-							Permission: persistancev1.Admin,
-						},
-					},
+					UserName:   "user3_5",
+					Permission: persistancev1.Admin,
+				},
+			}
+			sec.Spec.Schemas["public"] = []persistancev1.UserType{
+				{
+					UserName:   "user4",
+					Permission: persistancev1.Admin,
+				},
+			}
+			sec.Spec.Schemas["schema4"] = []persistancev1.UserType{
+				{
+					UserName:   "userAlreadyCreated",
+					Permission: persistancev1.Admin,
 				},
 			}
 			sec.Status.Schemas = []persistancev1.SchemaStatus{

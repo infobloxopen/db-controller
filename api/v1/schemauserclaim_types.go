@@ -34,11 +34,6 @@ type UserType struct {
 	Permission UserPermissionType `json:"permission"`
 }
 
-type SchemaUserType struct {
-	Name  string     `json:"name,omitempty"`
-	Users []UserType `json:"users,omitempty"`
-}
-
 type SchemaUserClaimSpec struct {
 
 	// Class is used to run multiple instances of dbcontroller.
@@ -47,10 +42,10 @@ type SchemaUserClaimSpec struct {
 	Class *string `json:"class"`
 
 	// Schemas holds the schemas to be created and the user names to be created and granted access to this schema.
-	Schemas []SchemaUserType `json:"schemas"`
+	Schemas map[string][]UserType `json:"schemas"`
 
 	// Name of the related DBClaim - to extract conn info
-	DBClaimName string `json:"dbclaimname,omitempty"`
+	SourceDatabaseClaim *SourceDatabaseClaim `json:"sourceDatabaseClaim"`
 }
 
 // SchemaUserClaimStatus defines the observed state of SchemaUserClaim

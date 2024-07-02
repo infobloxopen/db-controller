@@ -103,41 +103,64 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			Expect(schemaUserClaimStatus.Error).Should(BeEmpty())
 			Expect(schemaUserClaimStatus.Schemas).Should(HaveLen(6))
 
-			Expect(schemaUserClaimStatus.Schemas[0].Name).Should(Equal("schema4"))
-			Expect(schemaUserClaimStatus.Schemas[0].Status).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[0].UsersStatus).Should(HaveLen(1))
-			Expect(schemaUserClaimStatus.Schemas[0].UsersStatus[0].UserName).Should(Equal("userAlreadyCreated_b"))
-			Expect(schemaUserClaimStatus.Schemas[0].UsersStatus[0].UserStatus).Should(Equal("created"))
-
-			Expect(schemaUserClaimStatus.Schemas[1].Name).Should(Equal("schema0"))
-			Expect(schemaUserClaimStatus.Schemas[1].Status).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[1].UsersStatus).Should(BeEmpty())
-
-			Expect(schemaUserClaimStatus.Schemas[2].Name).Should(Equal("schema1"))
-			Expect(schemaUserClaimStatus.Schemas[2].Status).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus).Should(HaveLen(1))
-			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[0].UserName).Should(Equal("user1_a"))
-			Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[0].UserStatus).Should(Equal("created"))
-
-			Expect(schemaUserClaimStatus.Schemas[3].Name).Should(Equal("schema2"))
-			Expect(schemaUserClaimStatus.Schemas[3].Status).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus).Should(HaveLen(2))
-			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[0].UserName).Should(Equal("user2_1_a"))
-			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[0].UserStatus).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[1].UserName).Should(Equal("user2_2_a"))
-
-			Expect(schemaUserClaimStatus.Schemas[4].Name).Should(Equal("schema3"))
-			Expect(schemaUserClaimStatus.Schemas[4].Status).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus).Should(HaveLen(5))
-			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[0].UserName).Should(Equal("user3_1_a"))
-			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[0].UserStatus).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[1].UserName).Should(Equal("user3_2_a"))
-
-			Expect(schemaUserClaimStatus.Schemas[5].Name).Should(Equal("public"))
-			Expect(schemaUserClaimStatus.Schemas[5].Status).Should(Equal("created"))
-			Expect(schemaUserClaimStatus.Schemas[5].UsersStatus).Should(HaveLen(1))
-			Expect(schemaUserClaimStatus.Schemas[5].UsersStatus[0].UserName).Should(Equal("user4_a"))
-			Expect(schemaUserClaimStatus.Schemas[5].UsersStatus[0].UserStatus).Should(Equal("created"))
+			for _, schema := range schemaUserClaimStatus.Schemas {
+				switch schema.Name {
+				case "schema4":
+					{
+						Expect(schema.Name).Should(Equal("schema4"))
+						Expect(schema.Status).Should(Equal("created"))
+						Expect(schema.UsersStatus).Should(HaveLen(1))
+						Expect(schema.UsersStatus[0].UserName).Should(Equal("userAlreadyCreated_b"))
+						Expect(schema.UsersStatus[0].UserStatus).Should(Equal("created"))
+						break
+					}
+				case "schema0":
+					{
+						Expect(schemaUserClaimStatus.Schemas[1].Name).Should(Equal("schema0"))
+						Expect(schemaUserClaimStatus.Schemas[1].Status).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[1].UsersStatus).Should(BeEmpty())
+						break
+					}
+				case "schema1":
+					{
+						Expect(schemaUserClaimStatus.Schemas[2].Name).Should(Equal("schema1"))
+						Expect(schemaUserClaimStatus.Schemas[2].Status).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[2].UsersStatus).Should(HaveLen(1))
+						Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[0].UserName).Should(Equal("user1_a"))
+						Expect(schemaUserClaimStatus.Schemas[2].UsersStatus[0].UserStatus).Should(Equal("created"))
+						break
+					}
+				case "schema2":
+					{
+						Expect(schemaUserClaimStatus.Schemas[3].Name).Should(Equal("schema2"))
+						Expect(schemaUserClaimStatus.Schemas[3].Status).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[3].UsersStatus).Should(HaveLen(2))
+						Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[0].UserName).Should(Equal("user2_1_a"))
+						Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[0].UserStatus).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[3].UsersStatus[1].UserName).Should(Equal("user2_2_a"))
+						break
+					}
+				case "schema3":
+					{
+						Expect(schemaUserClaimStatus.Schemas[4].Name).Should(Equal("schema3"))
+						Expect(schemaUserClaimStatus.Schemas[4].Status).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[4].UsersStatus).Should(HaveLen(5))
+						Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[0].UserName).Should(Equal("user3_1_a"))
+						Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[0].UserStatus).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[4].UsersStatus[1].UserName).Should(Equal("user3_2_a"))
+						break
+					}
+				case "public":
+					{
+						Expect(schemaUserClaimStatus.Schemas[5].Name).Should(Equal("public"))
+						Expect(schemaUserClaimStatus.Schemas[5].Status).Should(Equal("created"))
+						Expect(schemaUserClaimStatus.Schemas[5].UsersStatus).Should(HaveLen(1))
+						Expect(schemaUserClaimStatus.Schemas[5].UsersStatus[0].UserName).Should(Equal("user4_a"))
+						Expect(schemaUserClaimStatus.Schemas[5].UsersStatus[0].UserStatus).Should(Equal("created"))
+						break
+					}
+				}
+			}
 
 			//-----------------
 			exists, err := dbClient.SchemaExists("schema0")
