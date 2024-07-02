@@ -1,10 +1,8 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.9.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.15.0
   name: databaseclaims.persistance.atlas.infoblox.com
 spec:
   group: persistance.atlas.infoblox.com
@@ -14,7 +12,6 @@ spec:
     plural: databaseclaims
     shortNames:
     - dbc
-    - dbclaim
     singular: databaseclaim
   scope: Namespaced
   versions:
@@ -38,14 +35,19 @@ spec:
         description: DatabaseClaim is the Schema for the databaseclaims API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -80,12 +82,10 @@ spec:
                 description: The version of the database.
                 type: string
               deletionPolicy:
-                description: Specifies the type of deletion policy to use when the
-                  resource is deleted. It makes a lot of sense to not set it for most
-                  cases - this will default it to Orphan based on defaultDeletionPolicy
-                  in controllerConfig If you are setting it to Delete, you should
-                  be aware that the database will be deleted when the resource is
-                  deleted. Hope you know what you are doing.
+                description: |-
+                  Specifies the type of deletion policy to use when the resource is deleted.
+                  It makes a lot of sense to not set it for most cases - this will default it to Orphan based on defaultDeletionPolicy in controllerConfig
+                  If you are setting it to Delete, you should be aware that the database will be deleted when the resource is deleted. Hope you know what you are doing.
                 enum:
                 - Delete
                 - delete
@@ -97,28 +97,29 @@ spec:
                 type: string
               enableReplicationRole:
                 default: false
-                description: EnableReplicationRole will grant rds replication role
-                  to Username This value is ignored if EnableSuperUser is set to true
+                description: |-
+                  EnableReplicationRole will grant rds replication role to Username
+                  This value is ignored if EnableSuperUser is set to true
                 type: boolean
               enableSuperUser:
                 default: false
-                description: EnableSuperUser will grant rds_superuser and createrole
-                  role to Username This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation
-                  }} is set to false
+                description: |-
+                  EnableSuperUser will grant rds_superuser and createrole role to Username
+                  This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false
                 type: boolean
               host:
-                description: The optional host name where the database instance is
-                  located. If the value is omitted, then the host value from the matching
-                  InstanceLabel will be used.
+                description: |-
+                  The optional host name where the database instance is located.
+                  If the value is omitted, then the host value from the matching InstanceLabel will be used.
                 type: string
               instanceLabel:
                 description: The matching fragment key name of the database instance
                   that will host the database.
                 type: string
               maxStorageGB:
-                description: If provided, marks auto storage scalling to true for
-                  postgres DBinstance. The value represents the maximum allowed storage
-                  to scale upto. For auroraDB instance, this value is ignored.
+                description: |-
+                  If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+                  For auroraDB instance, this value is ignored.
                 format: int64
                 type: integer
               minStorageGB:
@@ -126,9 +127,9 @@ spec:
                   database host storage capacity in GBytes
                 type: integer
               port:
-                description: The optional port to use for connecting to the host.
-                  If the value is omitted, then the host value from the matching InstanceLabel
-                  will be used.
+                description: |-
+                  The optional port to use for connecting to the host.
+                  If the value is omitted, then the host value from the matching InstanceLabel will be used.
                 type: string
               restoreFrom:
                 description: RestoreFrom indicates the snapshot to restore the Database
@@ -143,23 +144,23 @@ spec:
                   instance selection
                 type: string
               sourceDataFrom:
-                description: SourceDataFrom specifies an existing database or backup
-                  to use when initially provisioning the database. if the dbclaim
-                  has already provisioned a database, this field is ignored
+                description: |-
+                  SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+                  if the dbclaim has already provisioned a database, this field is ignored
                 properties:
                   database:
                     description: Database defines the connection information to an
                       existing db
                     properties:
                       dsn:
-                        description: 'DSN is the connection string used to reach the
-                          postgres database must have protocol specifier at beginning
-                          (example: mysql://  postgres:// )'
+                        description: |-
+                          DSN is the connection string used to reach the postgres database
+                          must have protocol specifier at beginning (example: mysql://  postgres:// )
                         type: string
                       secretRef:
-                        description: 'SecretRef specifies a secret to use for connecting
-                          to the postgresdb (should be master/root) TODO: document/validate
-                          the secret format required'
+                        description: |-
+                          SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
+                          TODO: document/validate the secret format required
                         properties:
                           name:
                             type: string
@@ -183,9 +184,9 @@ spec:
                       region:
                         type: string
                       secretRef:
-                        description: 'SecretRef specifies a secret to use for connecting
-                          to the s3 bucket via AWS client TODO: document/validate
-                          the secret format required'
+                        description: |-
+                          SecretRef specifies a secret to use for connecting to the s3 bucket via AWS client
+                          TODO: document/validate the secret format required
                         properties:
                           name:
                             type: string
@@ -199,8 +200,9 @@ spec:
                           backup.
                         type: string
                       sourceEngineVersion:
-                        description: 'SourceEngineVersion is the version of the engine
-                          used to create the backup. Example: "5.7.30"'
+                        description: |-
+                          SourceEngineVersion is the version of the engine used to create the backup.
+                          Example: "5.7.30"
                         type: string
                     required:
                     - bucket
@@ -235,12 +237,11 @@ spec:
                 type: string
               useExistingSource:
                 default: false
-                description: UseExistingSource instructs the controller to perform
-                  user management on the database currently defined in the SourceDataFrom
-                  field. If sourceDataFrom is empty, this is ignored If this is set,
-                  .sourceDataFrom.Type and .type must match to use an existing source
-                  (since they must be the same) If this field was set and becomes
-                  unset, migration of data will commence
+                description: |-
+                  UseExistingSource instructs the controller to perform user management on the database currently defined in the SourceDataFrom field.
+                  If sourceDataFrom is empty, this is ignored
+                  If this is set, .sourceDataFrom.Type and .type must match to use an existing source (since they must be the same)
+                  If this field was set and becomes unset, migration of data will commence
                 type: boolean
               userName:
                 description: The username that the application will use for accessing
@@ -293,10 +294,9 @@ spec:
                       against the fragment key names in the db-controller configMap
                     type: string
                   maxStorageGB:
-                    description: If provided, marks auto storage scalling to true
-                      for postgres DBinstance. The value represents the maximum allowed
-                      storage to scale upto. For auroraDB instance, this value is
-                      ignored.
+                    description: |-
+                      If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+                      For auroraDB instance, this value is ignored.
                     format: int64
                     type: integer
                   minStorageGB:
@@ -308,25 +308,24 @@ spec:
                       drive instance selection
                     type: string
                   sourceDataFrom:
-                    description: SourceDataFrom specifies an existing database or
-                      backup to use when initially provisioning the database. if the
-                      dbclaim has already provisioned a database, this field is ignored
-                      This field used when claim is use-existing-db and attempting
-                      to migrate to newdb
+                    description: |-
+                      SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+                      if the dbclaim has already provisioned a database, this field is ignored
+                      This field used when claim is use-existing-db and attempting to migrate to newdb
                     properties:
                       database:
                         description: Database defines the connection information to
                           an existing db
                         properties:
                           dsn:
-                            description: 'DSN is the connection string used to reach
-                              the postgres database must have protocol specifier at
-                              beginning (example: mysql://  postgres:// )'
+                            description: |-
+                              DSN is the connection string used to reach the postgres database
+                              must have protocol specifier at beginning (example: mysql://  postgres:// )
                             type: string
                           secretRef:
-                            description: 'SecretRef specifies a secret to use for
-                              connecting to the postgresdb (should be master/root)
-                              TODO: document/validate the secret format required'
+                            description: |-
+                              SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
+                              TODO: document/validate the secret format required
                             properties:
                               name:
                                 type: string
@@ -351,9 +350,9 @@ spec:
                           region:
                             type: string
                           secretRef:
-                            description: 'SecretRef specifies a secret to use for
-                              connecting to the s3 bucket via AWS client TODO: document/validate
-                              the secret format required'
+                            description: |-
+                              SecretRef specifies a secret to use for connecting to the s3 bucket via AWS client
+                              TODO: document/validate the secret format required
                             properties:
                               name:
                                 type: string
@@ -367,8 +366,9 @@ spec:
                               the backup.
                             type: string
                           sourceEngineVersion:
-                            description: 'SourceEngineVersion is the version of the
-                              engine used to create the backup. Example: "5.7.30"'
+                            description: |-
+                              SourceEngineVersion is the version of the engine used to create the backup.
+                              Example: "5.7.30"
                             type: string
                         required:
                         - bucket
@@ -397,7 +397,8 @@ spec:
                 description: Any errors related to provisioning this claim.
                 type: string
               migrationState:
-                description: tracks status of DB migration. if empty, not started.
+                description: |-
+                  tracks status of DB migration. if empty, not started.
                   non empty denotes migration in progress, unless it is S_Completed
                 type: string
               newDB:
@@ -437,10 +438,9 @@ spec:
                       against the fragment key names in the db-controller configMap
                     type: string
                   maxStorageGB:
-                    description: If provided, marks auto storage scalling to true
-                      for postgres DBinstance. The value represents the maximum allowed
-                      storage to scale upto. For auroraDB instance, this value is
-                      ignored.
+                    description: |-
+                      If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+                      For auroraDB instance, this value is ignored.
                     format: int64
                     type: integer
                   minStorageGB:
@@ -452,25 +452,24 @@ spec:
                       drive instance selection
                     type: string
                   sourceDataFrom:
-                    description: SourceDataFrom specifies an existing database or
-                      backup to use when initially provisioning the database. if the
-                      dbclaim has already provisioned a database, this field is ignored
-                      This field used when claim is use-existing-db and attempting
-                      to migrate to newdb
+                    description: |-
+                      SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+                      if the dbclaim has already provisioned a database, this field is ignored
+                      This field used when claim is use-existing-db and attempting to migrate to newdb
                     properties:
                       database:
                         description: Database defines the connection information to
                           an existing db
                         properties:
                           dsn:
-                            description: 'DSN is the connection string used to reach
-                              the postgres database must have protocol specifier at
-                              beginning (example: mysql://  postgres:// )'
+                            description: |-
+                              DSN is the connection string used to reach the postgres database
+                              must have protocol specifier at beginning (example: mysql://  postgres:// )
                             type: string
                           secretRef:
-                            description: 'SecretRef specifies a secret to use for
-                              connecting to the postgresdb (should be master/root)
-                              TODO: document/validate the secret format required'
+                            description: |-
+                              SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
+                              TODO: document/validate the secret format required
                             properties:
                               name:
                                 type: string
@@ -495,9 +494,9 @@ spec:
                           region:
                             type: string
                           secretRef:
-                            description: 'SecretRef specifies a secret to use for
-                              connecting to the s3 bucket via AWS client TODO: document/validate
-                              the secret format required'
+                            description: |-
+                              SecretRef specifies a secret to use for connecting to the s3 bucket via AWS client
+                              TODO: document/validate the secret format required
                             properties:
                               name:
                                 type: string
@@ -511,8 +510,9 @@ spec:
                               the backup.
                             type: string
                           sourceEngineVersion:
-                            description: 'SourceEngineVersion is the version of the
-                              engine used to create the backup. Example: "5.7.30"'
+                            description: |-
+                              SourceEngineVersion is the version of the engine used to create the backup.
+                              Example: "5.7.30"
                             type: string
                         required:
                         - bucket

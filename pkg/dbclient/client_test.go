@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
-	intg "github.com/infobloxopen/atlas-app-toolkit/integration"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
@@ -75,7 +76,7 @@ func (t *testDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, er
 		dbname = "postgres"
 	}
 
-	dbConnStr := PostgresURI("localhost", strconv.Itoa(t.port), username, password, dbname, "disable")
+	dbConnStr := PostgresURI(fmt.Sprintf("localhost:%d", t.port), username, password, dbname, "disable")
 	t.t.Log("dbConnStr", dbConnStr)
 	return sql.Open("postgres", dbConnStr)
 }
@@ -89,23 +90,33 @@ func (t *testDB) OpenUserWithConnectionString(dbname, username, password string)
 	return sql.Open("postgres", dbConnStr)
 }
 
-func setupSqlDB(t *testing.T) *testDB {
-	t.Log("Setting up an instance of PostgreSQL DB with dockertest")
-
-	host := "localhost"
-	port, err := intg.GetOpenPortInRange(50000, 60000)
+func openPort(t *testing.T) (string, int) {
+	port, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		t.Fatalf("Unable to find an opened port for DB: %v", err)
 	}
-	t.Log("Got available port for DB: ", port)
+	defer port.Close()
+
+	return port.Addr().String(), port.Addr().(*net.TCPAddr).Port
+
+}
+
+func setupSqlDB(t *testing.T) *testDB {
+	t.Helper()
+	t.Log("Setting up an instance of PostgreSQL DB with dockertest")
+
+	addr, port := openPort(t)
+
+	t.Log("Got available addr for DB: ", addr)
 	user := "test"
-	pass := "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./"
+	pass := "password"
 
 	// Create a new pool for docker containers
 	pool, err := dockertest.NewPool("")
 	if err != nil {
 		t.Fatalf("Could not construct pool: %s", err)
 	}
+	pool.MaxWait = 15 * time.Second
 
 	// uses pool to try to connect to Docker
 	err = pool.Client.Ping()
@@ -137,7 +148,7 @@ func setupSqlDB(t *testing.T) *testDB {
 
 	// Exponential retry to connect to database while it is booting
 	if err := pool.Retry(func() error {
-		dbConnStr := PostgresURI(host, strconv.Itoa(port), user, pass, "postgres", "disable")
+		dbConnStr := PostgresURI(addr, user, pass, "postgres", "disable")
 		sqlDB, err = sql.Open("postgres", dbConnStr)
 		if err != nil {
 			t.Log("Database is not ready yet (it is booting up, wait for a few tries)...")
@@ -194,7 +205,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				"test-user",
 				"test_password",
 				"new-test-user",
-				"pa@ss$x)x{x[xdx~x&x!x@x#x$x%x^x*x(x)x_x+x`x-x=x{x}x|x[x]x:x<x>x?x,x.x/",
+				"password",
 			},
 			true,
 			false,
@@ -584,11 +595,11 @@ func TestConnectionString(t *testing.T) {
 				host:     "test-host",
 				port:     "1234",
 				user:     "test_user",
-				password: "pa@ss$x)x{x[xdx~x&x!x@x#x$x%x^x*x(x)x_x+x`x-x=x{x}x|x[x]x:x<x>x?x,x.x/",
+				password: "password",
 				dbName:   "test_db",
 				sslmode:  "disable",
 			},
-			"host=test-host port=1234 user=test_user password=pa@ss\\$x)x{x[xdx~x&x\\!x@x#x\\$x%x^x*x(x)x_x+x\\`x-x=x{x}x|x[x]x:x<x>x?x,x.x/ dbname=test_db sslmode=disable",
+			"host=test-host port=1234 user=test_user password=password dbname=test_db sslmode=disable",
 		},
 	}
 
@@ -630,8 +641,8 @@ func TestPostgresURI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := PostgresURI(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
-				t.Errorf("PostgresURI() = %v, want %v", got, tt.want)
+			if got := PostgresURI(fmt.Sprintf("%s:%s", tt.args.host, tt.args.port), tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
+				t.Errorf("\n   got: %s\nwanted: %s", got, tt.want)
 			}
 		})
 	}

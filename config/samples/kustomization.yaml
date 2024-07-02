@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- persistance_v1_databaseclaim.yaml
+- persistance_v1_dbroleclaim.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

@@ -1,5 +1,5 @@
 /*
-Copyright 2022.
+Copyright 2024.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,7 +47,8 @@ const (
 type DbRoleClaimReconciler struct {
 	Class string
 	client.Client
-	Scheme   *runtime.Scheme
+	Scheme *runtime.Scheme
+	// TODO: should this be removed?
 	Recorder record.EventRecorder
 }
 
@@ -57,8 +58,18 @@ type DbRoleClaimReconciler struct {
 //+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims/finalizers,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// TODO(user): Modify the Reconcile function to compare the state specified by
+// the DbRoleClaim object against the actual cluster state, and then
+// perform operations to make the cluster state reflect the state specified by
+// the user.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.2/pkg/reconcile
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName).V(InfoLevel)
+	// FIXME: dont shadow log package
+	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName)
 	var dbRoleClaim persistancev1.DbRoleClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbRoleClaim); err != nil {
 		log.Error(err, "unable to fetch DatabaseClaim")
@@ -106,7 +117,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		dbRoleClaim.Status.SourceSecret = ""
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s source secret not found", foundDbClaim.Spec.SecretName))
 	}
-	log.V(DebugLevel).Info("dbclaim_secret", "secret_name", foundDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
+	log.V(1).Info("dbclaim_secret", "secret_name", foundDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
 
 	dbRoleClaim.Status.SourceSecret = foundSecret.Namespace + "/" + foundSecret.Name
 	r.Recorder.Event(&dbRoleClaim, "Normal", "Found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, foundDbClaim.Spec.SecretName))
@@ -214,12 +225,16 @@ func (r *DbRoleClaimReconciler) isClassPermitted(claimClass string) bool {
 
 func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *persistancev1.DbRoleClaim, inErr error) (ctrl.Result, error) {
 
+	if dbRoleClaim == nil {
+		return ctrl.Result{}, fmt.Errorf("dbroleclaim_is_nil: %w", inErr)
+	}
+
 	dbRoleClaim.Status.Error = inErr.Error()
 
 	err := r.Client.Status().Update(ctx, dbRoleClaim)
 	if err != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
+		if apierrors.IsConflict(err) {
 			err = nil
 		}
 		return ctrl.Result{}, err
@@ -228,12 +243,17 @@ func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *pe
 }
 
 func (r *DbRoleClaimReconciler) manageSuccess(ctx context.Context, dbRoleClaim *persistancev1.DbRoleClaim) (ctrl.Result, error) {
+
+	if dbRoleClaim == nil {
+		return ctrl.Result{}, fmt.Errorf("dbroleclaim_is_nil")
+	}
+
 	dbRoleClaim.Status.Error = ""
 
 	err := r.Client.Status().Update(ctx, dbRoleClaim)
 	if err != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
+		if apierrors.IsConflict(err) {
 			err = nil
 		}
 		return ctrl.Result{}, err
@@ -242,8 +262,7 @@ func (r *DbRoleClaimReconciler) manageSuccess(ctx context.Context, dbRoleClaim *
 	return ctrl.Result{}, nil
 }
 
-func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecret *corev1.Secret,
-	dbRoleClaim *persistancev1.DbRoleClaim) error {
+func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecret *corev1.Secret, dbRoleClaim *persistancev1.DbRoleClaim) error {
 	log := log.FromContext(ctx).WithValues("databaserole", "copySourceSecret")
 
 	secretName := dbRoleClaim.Spec.SecretName
@@ -255,7 +274,7 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 		Name:      secretName,
 	}, role_secret)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if client.IgnoreNotFound(err) != nil {
 			return err
 		}
 		role_secret = &corev1.Secret{

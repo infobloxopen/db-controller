@@ -1,8 +1,7 @@
-package controllers
+package e2e
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"testing"
 
@@ -17,7 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/controller"
+	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 )
+
+var hasOperationalTag = databaseclaim.HasOperationalTag
 
 var _ = Describe("db-controller", func() {
 
@@ -52,7 +55,7 @@ var _ = Describe("db-controller", func() {
 					UseExistingSource:     ptr.To(false),
 				},
 			}
-			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
+			Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 		})
 	})
 })
@@ -92,7 +95,7 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, dbCluster)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dbCluster)).Should(Succeed())
 		ctx = context.Background()
 		dbClusterParam = &crossplanerds.DBClusterParameterGroup{
 			TypeMeta: metav1.TypeMeta{
@@ -109,7 +112,7 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, dbClusterParam)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dbClusterParam)).Should(Succeed())
 
 		dbParam = &crossplanerds.DBParameterGroup{
 			TypeMeta: metav1.TypeMeta{
@@ -126,7 +129,7 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, dbParam)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dbParam)).Should(Succeed())
 
 		ctx = context.Background()
 		dnInstance1 = &crossplanerds.DBInstance{
@@ -145,7 +148,7 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, dnInstance1)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dnInstance1)).Should(Succeed())
 
 		ctx = context.Background()
 		dnInstance2 = &crossplanerds.DBInstance{
@@ -164,7 +167,7 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, dnInstance2)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dnInstance2)).Should(Succeed())
 
 		ctx = context.Background()
 		dnInstance3 = &crossplanerds.DBInstance{
@@ -183,35 +186,35 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			},
 		}
-		Expect(k8sClient.Create(ctx, dnInstance3)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dnInstance3)).Should(Succeed())
 	})
 
 	Context("Now, try adding tags to resources which does not exists, while multiAZ is enabled", func() {
 		It("Should not add tags to any other already existing resources", func() {
-			mockReconciler := &DatabaseClaimReconciler{}
-			mockReconciler.Client = k8sClient
-			mockReconciler.Config = viper.New()
-			mockReconciler.Config.Set("dbMultiAZEnabled", true)
+			mockReconciler := &controller.DatabaseClaimReconciler{}
+			mockReconciler.Client = e2e_k8sClient
+			mockReconciler.Config.Viper = viper.New()
+			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
 			// providing names of non-existing resources below
-			check, err := mockReconciler.manageOperationalTagging(context.Background(), ctrl.Log.WithName("controllers"), "dbb", "dbparamm")
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logr.Discard(), "dbb", "dbparamm")
 			Expect(err).Should(HaveOccurred()) // This should create error
 			Expect(check).To(BeFalse())
 
 			By("Lets get all objects again to check whether tags have not been added to any resource, as we provied wrong names above")
 
-			dbCluster = &crossplanerds.DBCluster{}
+			dbCluster := &crossplanerds.DBCluster{}
 			Expect(mockReconciler.Client.Get(context.Background(), client.ObjectKey{
 				Name: "db",
 			}, dbCluster)).ShouldNot(HaveOccurred())
 			Expect(hasOperationalTag(dbCluster.Spec.ForProvider.Tags)).To(Equal(false))
 
-			dbClusterParam = &crossplanerds.DBClusterParameterGroup{}
+			dbClusterParam := &crossplanerds.DBClusterParameterGroup{}
 			Expect(mockReconciler.Client.Get(context.Background(), client.ObjectKey{
 				Name: "dbparam",
 			}, dbClusterParam)).ShouldNot(HaveOccurred())
 			Expect(hasOperationalTag(dbClusterParam.Spec.ForProvider.Tags)).To(Equal(false))
 
-			dbParam = &crossplanerds.DBParameterGroup{}
+			dbParam := &crossplanerds.DBParameterGroup{}
 			Expect(mockReconciler.Client.Get(context.Background(), client.ObjectKey{
 				Name: "dbparam",
 			}, dbParam)).ShouldNot(HaveOccurred())
@@ -239,11 +242,11 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 
 	Context("Now, try Adding tags to resources, with multiAZ  disabled", func() {
 		It("Should add tags to all valid resources. Should skip instance-2 as multiAZ is disabled", func() {
-			mockReconciler := &DatabaseClaimReconciler{}
-			mockReconciler.Client = k8sClient
-			mockReconciler.Config = viper.New()
-			mockReconciler.Config.Set("dbMultiAZEnabled", false)
-			check, err := mockReconciler.manageOperationalTagging(context.Background(), logr.Logger{}, "db", "dbparam")
+			mockReconciler := &controller.DatabaseClaimReconciler{}
+			mockReconciler.Client = e2e_k8sClient
+			mockReconciler.Config.Viper = viper.New()
+			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", false)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logr.Logger{}, "db", "dbparam")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeFalse())
 
@@ -291,11 +294,11 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 
 	Context("Adding tags to resources, while multiAZ is enabled", func() {
 		It("Should add tags to all valid resources if exists. Should NOT skip instance-2 as multiAZ is enabled", func() {
-			mockReconciler := &DatabaseClaimReconciler{}
-			mockReconciler.Client = k8sClient
-			mockReconciler.Config = viper.New()
-			mockReconciler.Config.Set("dbMultiAZEnabled", true)
-			check, err := mockReconciler.manageOperationalTagging(context.Background(), ctrl.Log.WithName("controllers"), "db", "dbparam")
+			mockReconciler := &controller.DatabaseClaimReconciler{}
+			mockReconciler.Client = e2e_k8sClient
+			mockReconciler.Config.Viper = viper.New()
+			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), ctrl.Log.WithName("controllers"), "db", "dbparam")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeFalse())
 
@@ -325,15 +328,15 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 
 	Context("When tags get successfully updated, They are reflected at .status.AtProvider for DBInstance", func() {
 		It("manageOperationalTagging() Should return true without any error", func() {
-			mockReconciler := &DatabaseClaimReconciler{}
-			mockReconciler.Client = k8sClient
-			mockReconciler.Config = viper.New()
-			mockReconciler.Config.Set("dbMultiAZEnabled", true)
+			mockReconciler := &controller.DatabaseClaimReconciler{}
+			mockReconciler.Client = e2e_k8sClient
+			mockReconciler.Config.Viper = viper.New()
+			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
 
 			By("adding tags beforehand to .status.AtProvier.TagList. As in reality, if tags gets successfully added. It will reflect at the said path")
 
-			operationalStatusTagKeyPtr := operationalStatusTagKey
-			operationalStatusInactiveValuePtr := operationalStatusInactiveValue
+			operationalStatusTagKeyPtr := databaseclaim.OperationalStatusTagKey
+			operationalStatusInactiveValuePtr := databaseclaim.OperationalStatusInactiveValue
 			ctx := context.Background()
 
 			dnInstance1.Status.AtProvider.TagList = []*crossplanerds.Tag{
@@ -349,10 +352,10 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 				},
 			}
 
-			Expect(k8sClient.Status().Update(ctx, dnInstance1)).Should(Succeed())
-			Expect(k8sClient.Status().Update(ctx, dnInstance2)).Should(Succeed())
+			Expect(e2e_k8sClient.Status().Update(ctx, dnInstance1)).Should(Succeed())
+			Expect(e2e_k8sClient.Status().Update(ctx, dnInstance2)).Should(Succeed())
 
-			check, err := mockReconciler.manageOperationalTagging(context.Background(), ctrl.Log.WithName("controllers"), "db", "dbparam")
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), ctrl.Log.WithName("controllers"), "db", "dbparam")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeTrue())
 
@@ -373,20 +376,6 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 	})
 
 })
-
-func hasOperationalTag(tags []*crossplanerds.Tag) bool {
-
-	for _, tag := range tags {
-		fmt.Println("==")
-
-		fmt.Println(tag)
-		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
-			return true
-		}
-	}
-	return false
-
-}
 
 var _ = Describe("canTagResources", Ordered, func() {
 
@@ -413,7 +402,7 @@ var _ = Describe("canTagResources", Ordered, func() {
 				Username:      "sample_user",
 			},
 		}
-		Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 		ctx2 := context.Background()
 		dbClaim2 := &persistancev1.DatabaseClaim{
 			TypeMeta: metav1.TypeMeta{
@@ -432,7 +421,7 @@ var _ = Describe("canTagResources", Ordered, func() {
 				Username:      "sample_user",
 			},
 		}
-		Expect(k8sClient.Create(ctx2, dbClaim2)).Should(Succeed())
+		Expect(e2e_k8sClient.Create(ctx2, dbClaim2)).Should(Succeed())
 	})
 
 	Context("Adding tags to DBClaim with empty InstanceLabel", func() {
@@ -455,9 +444,9 @@ var _ = Describe("canTagResources", Ordered, func() {
 					Username:      "sample_user",
 				},
 			}
-			mockReconciler := &DatabaseClaimReconciler{}
-			mockReconciler.Client = k8sClient
-			check, err2 := mockReconciler.canTagResources(ctx2, dbClaim2)
+			mockReconciler := &controller.DatabaseClaimReconciler{}
+			mockReconciler.Client = e2e_k8sClient
+			check, err2 := databaseclaim.CanTagResources(ctx2, e2e_k8sClient, dbClaim2)
 			Expect(err2).ShouldNot(HaveOccurred())
 			Expect(check).To(BeTrue())
 		})
@@ -483,9 +472,9 @@ var _ = Describe("canTagResources", Ordered, func() {
 					Username:      "sample_user",
 				},
 			}
-			mockReconciler := &DatabaseClaimReconciler{}
-			mockReconciler.Client = k8sClient
-			check, err2 := mockReconciler.canTagResources(ctx2, dbClaim2)
+			mockReconciler := &controller.DatabaseClaimReconciler{}
+			mockReconciler.Client = e2e_k8sClient
+			check, err2 := databaseclaim.CanTagResources(ctx2, e2e_k8sClient, dbClaim2)
 			Expect(err2).Should(HaveOccurred())
 			Expect(check).To(BeFalse())
 		})

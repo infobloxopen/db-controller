@@ -4,8 +4,8 @@
 # More info: https://book.kubebuilder.io/reference/project-config.html
 domain: atlas.infoblox.com
 layout:
-- go.kubebuilder.io/v3
-projectName: db-controller
+- go.kubebuilder.io/v4
+projectName: migration
 repo: github.com/infobloxopen/db-controller
 resources:
 - api:

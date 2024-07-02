@@ -1,6 +1,6 @@
 {{- if .Values.crd.install }}
-  {{- range $path, $bytes := .Files.Glob "crd/*.yaml" }}
-  {{ $.Files.Get $path }}
+{{- range $path, $bytes := .Files.Glob "crd/*.yaml" }}
+{{ $.Files.Get $path }}
 ---
 {{- end }}
-  {{- end }}
+{{- end }}

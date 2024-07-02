@@ -1,88 +1,9 @@
-# Docker hub repo
-REGISTRY ?= ghcr.io/infobloxopen
-# image name
-IMAGE_NAME ?= db-controller
-DBPROXY_IMAGE_NAME ?= dbproxy
-DSNEXEC_IMAGE_NAME ?= dsnexec
-# commit tag info from git repo
-GIT_COMMIT	   := $(shell git describe --always --long --tags || echo pre-commit)
-# image tag
-TAG ?= ${GIT_COMMIT}
-# Image Path to use all building/pushing image targets
-IMG_PATH ?= ${REGISTRY}/${IMAGE_NAME}
-DBPROXY_IMG_PATH ?= ${REGISTRY}/${DBPROXY_IMAGE_NAME}
-DSNEXEC_IMG_PATH ?= ${REGISTRY}/${DSNEXEC_IMAGE_NAME}
-GOBIN := ~/go/bin
-K8S_VERSION := 1.24
-# ACK_GINKGO_DEPRECATIONS := 1.16.5
+include Makefile.infoblox
 
-
-SHELL := $(shell which bash)
-
-CMD := "cmd/manager"
-
-#configuration for helm
-CWD=$(shell pwd)
-KUBECONFIG ?= ${HOME}/.kube/config
-HELM_IMAGE := infoblox/helm:3.2.4-5b243a2
-CHART_VERSION ?= $(TAG)
-APP_VERSION ?= ${TAG}
-DB_CONTROLLER_CHART := helm/${IMAGE_NAME}
-DB_CONTROLLER_CHART_YAML := ${DB_CONTROLLER_CHART}/Chart.yaml
-DB_CONTROLLER_CHART_IN := ${DB_CONTROLLER_CHART}/Chart.in
-CRDS_CHART := helm/${IMAGE_NAME}-crds
-CHART_FILE := $(IMAGE_NAME)-$(CHART_VERSION).tgz
-CHART_FILE_CRD := $(IMAGE_NAME)-crds-$(CHART_VERSION).tgz
-
-ifeq ($(AWS_ACCESS_KEY_ID),)
-export AWS_ACCESS_KEY_ID	 := $(shell aws configure get aws_access_key_id)
-endif
-ifeq ($(AWS_SECRET_ACCESS_KEY),)
-export AWS_SECRET_ACCESS_KEY := $(shell aws configure get aws_secret_access_key)
-endif
-ifeq ($(AWS_REGION),)
-export AWS_REGION			 := $(shell aws configure get region)
-endif
-ifeq ($(AWS_SESSION_TOKEN),)
-export AWS_SESSION_TOKEN	 := $(shell aws configure get aws_session_token)
-endif
-
-HELM ?= docker run \
-	--rm \
-	--net host \
-	-w /pkg \
-	-v ${CWD}:/pkg \
-	-v ~/.aws:/root/.aws \
-	-v ${KUBECONFIG}:/root/.kube/config \
-	-e AWS_PROFILE \
-	-e AWS_REGION \
-	-e AWS_ACCESS_KEY_ID \
-	-e AWS_SECRET_ACCESS_KEY \
-	-e AWS_SESSION_TOKEN \
-	 ${HELM_IMAGE}
-
-HELM_ENTRYPOINT ?= docker run \
-	--rm \
-	--entrypoint "" \
-	--net host \
-	-w /pkg \
-	-v ${CWD}:/pkg \
-	-v ~/.aws:/root/.aws \
-	-v ${KUBECONFIG}:/root/.kube/config \
-	-e AWS_PROFILE \
-	-e AWS_REGION \
-	-e AWS_ACCESS_KEY_ID \
-	-e AWS_SECRET_ACCESS_KEY \
-	-e AWS_SESSION_TOKEN \
-	 ${HELM_IMAGE} sh -c
-
-
-.id:
-	git config user.email | awk -F@ '{print $$1}' > .id
-
-
+# Image URL to use all building/pushing image targets
+IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.24
+ENVTEST_K8S_VERSION = 1.30.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -91,8 +12,13 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# CONTAINER_TOOL defines the container tool to be used for building images.
+# Be aware that the target commands are only tested with Docker which is
+# scaffolded by default. However, you might want to replace it to use other
+# tools. (i.e. podman)
+CONTAINER_TOOL ?= docker
+
 # Setting SHELL to bash allows bash commands to be executed by recipes.
-# This is a requirement for 'setup-envtest.sh' in the test target.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
@@ -104,7 +30,7 @@ all: build
 
 # The help target prints out all targets with their descriptions organized
 # beneath their categories. The categories are represented by '##@' and the
-# target descriptions by '##'. The awk commands is responsible for reading the
+# target descriptions by '##'. The awk command is responsible for reading the
 # entire set of makefiles included in this invocation, looking for lines of the
 # file as xyz: ## something, and then pretty-format the target and help. Then,
 # if there's a line with ##@ something, that gets pretty-printed as a category.
@@ -115,12 +41,12 @@ all: build
 
 .PHONY: help
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "	\033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Development
 
 .PHONY: manifests
-manifests: .id controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
@@ -137,60 +63,64 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... --short -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-.PHONY: integration-test
-integration-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -v ./controllers -timeout 0 -run ^TestIntegrations$  -coverprofile cover.out
+# Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
+.PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
+test-e2e:
+	go test ./test/e2e/ -v -ginkgo.v
+
+.PHONY: lint
+lint: golangci-lint ## Run golangci-lint linter
+	$(GOLANGCI_LINT) run
+
+.PHONY: lint-fix
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+	$(GOLANGCI_LINT) run --fix
+
 ##@ Build
 
 .PHONY: build
-build: generate fmt vet ## Build manager binary.
-	cd cmd/manager && go build -o ../../bin/manager main.go
-	cd dbproxy && go build -o ../bin/dbproxy
-	cd dsnexec && go build -o ../bin/dsnexec
-
+build: manifests generate fmt vet ## Build manager binary.
+	go build -o bin/manager cmd/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/manager/main.go
+	go run ./cmd/main.go
 
-#TODO
-.PHONY: docker-buildx
-docker-buildx: generate fmt vet manifests ## Build and optionally push a multi-arch db-controller container image to the Docker registry
-	@docker buildx build --push \
-		--build-arg api_version=$(API_VERSION) \
-		--build-arg srv_version=$(SRV_VERSION) \
-		-f $(SERVER_DOCKERFILE) \
-		-t $(SERVER_IMAGE):$(IMAGE_VERSION) .
-
-docker-build-dbproxy:
-	cd dbproxy && docker build -t ${DBPROXY_IMG_PATH}:${TAG} .
-
-docker-build-dsnexec:
-	cd dsnexec && docker build -t ${DSNEXEC_IMG_PATH}:${TAG} .
-
-
+# If you wish to build the manager image targeting other platforms you can use the --platform flag.
+# (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
+# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: .image-${TAG} #test ## Build docker image with the manager.
-
-
-.image-${TAG}:
-	docker build -t ${IMG_PATH}:${TAG} .
-	@touch $@
-
-docker-push-dbproxy: docker-build-dbproxy
-	docker push ${DBPROXY_IMG_PATH}:${TAG}
-
-docker-push-dsnexec: docker-build-dsnexec
-	docker push ${DSNEXEC_IMG_PATH}:${TAG}
-
-.push-${TAG}: docker-build
-	docker push ${IMG_PATH}:${TAG}
-	@touch $@
+docker-build: ## Build docker image with the manager.
+	$(CONTAINER_TOOL) build -t ${IMG} .
 
 .PHONY: docker-push
-docker-push: .push-${TAG}
+docker-push: ## Push docker image with the manager.
+	$(CONTAINER_TOOL) push ${IMG}
+
+# PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
+# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
+# - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
+# - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
+# To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
+PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+.PHONY: docker-buildx
+docker-buildx: ## Build and push docker image for the manager for cross-platform support
+	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+	- $(CONTAINER_TOOL) buildx create --name migration-builder
+	$(CONTAINER_TOOL) buildx use migration-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm migration-builder
+	rm Dockerfile.cross
+
+.PHONY: build-installer
+build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+	mkdir -p dist
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 ##@ Deployment
 
@@ -200,173 +130,71 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl apply --namespace `cat .id` -f -
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/crd | kubectl delete --namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
-deploy-kustomize: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_PATH}:${TAG}
-	$(KUSTOMIZE) build config/default | kubectl apply --namespace `cat .id` -f -
+# deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+# 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+# 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
-undeploy-kustomize: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | kubectl delete	--namespace `cat .id` --ignore-not-found=$(ignore-not-found) -f -
+undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
+##@ Dependencies
 
-export CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+KUBECTL ?= kubectl
+KUSTOMIZE ?= $(LOCALBIN)/kustomize-$(KUSTOMIZE_VERSION)
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
+ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
+GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+
+## Tool Versions
+KUSTOMIZE_VERSION ?= v5.4.1
+CONTROLLER_TOOLS_VERSION ?= v0.15.0
+ENVTEST_VERSION ?= release-0.18
+GOLANGCI_LINT_VERSION ?= v1.57.2
+
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+$(KUSTOMIZE): $(LOCALBIN)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0)
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
-KUSTOMIZE = $(shell pwd)/bin/kustomize
-.PHONY: kustomize
-kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@latest)
-
-ENVTEST = $(shell pwd)/bin/setup-envtest
 .PHONY: envtest
-envtest: ## Download envtest-setup locally if necessary.
-#commenting out the latest setup-envttest to use elease-0.16- because of https://github.com/kubernetes-sigs/controller-runtime/issues/2720
-	#$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
-#TODO- reuse the above command after fix from controller-runtime or after we go to go 1.22
-	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.16)
+envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,${GOLANGCI_LINT_VERSION})
 
-# go-get-tool will 'go get' any package $2 and install it to $1.
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-define go-get-tool
+# go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+# $1 - target path with name of binary (ideally with version)
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
 @[ -f $(1) ] || { \
-set -e ;\
-TMP_DIR=$$(mktemp -d) ;\
-cd $$TMP_DIR ;\
-go mod init tmp ;\
-echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
-rm -rf $$TMP_DIR ;\
+set -e; \
+package=$(2)@$(3) ;\
+echo "Downloading $${package}" ;\
+GOBIN=$(LOCALBIN) go install $${package} ;\
+mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
 }
 endef
-
-# Updates helm chart db-controller-crds to be in sync
-update_crds: manifests
-	cp ./config/crd/bases/persistance.atlas.infoblox.com_databaseclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_databaseclaims.yaml
-	cp ./config/crd/bases/persistance.atlas.infoblox.com_dbroleclaims.yaml ./helm/db-controller-crds/crd/persistance.atlas.infoblox.com_dbroleclaims.yaml
-
-# find or download controller-gen
-# download controller-gen if necessary
-.PHONY: controller-gen
-controller-gen:
-ifeq (, $(shell which controller-gen))
-	{ \
-	set -e ;\
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$CONTROLLER_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.0 ;\
-	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
-	}
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
-
-KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin
-export KUBEBUILDER_ASSETS
-
-# find or download kubebuilder
-# download kubebuilder if necessary
-kubebuilder:
-ifeq (, $(shell which kubebuilder))
-	@{ \
-	set -e ;\
-	os=$(shell go env GOOS) ;\
-	arch=$(shell go env GOARCH) ;\
-	sudo mkdir -p /usr/local/kubebuilder/bin/ ; \
-	sudo curl -k -Lo /usr/local/kubebuilder/bin/kubebuilder https://github.com/kubernetes-sigs/kubebuilder/releases/download/v3.2.0/kubebuilder_$${os}_$${arch} ; \
-	curl -k -sSLo /tmp/envtest-bins.tar.gz "https://go.kubebuilder.io/test-tools/${K8S_VERSION}/$${os}/$${arch}" ; \
-	sudo tar -C /usr/local/kubebuilder --strip-components=1 -zvxf /tmp/envtest-bins.tar.gz ; \
-	export PATH=$$PATH:/usr/local/kubebuilder/bin ;\
-	}
-endif
-	mkdir -p .build
-	${KUBEBUILDER_ASSETS}/kube-apiserver --version
-	${KUBEBUILDER_ASSETS}/kubectl version || true
-
-create-namespace:
-	kubectl create namespace `cat .id`
-
-delete-namespace:
-	kubectl delete namespace `cat .id`
-
-install-crds: .id
-	helm template db-controller-crd helm/db-controller-crds/ --namespace=`cat .id` |kubectl apply -f -
-
-uninstall-crds: .id
-	helm template db-controller-crd helm/db-controller-crds/ --namespace=`cat .id` |kubectl delete -f -
-
-deploy-controller: .id
-	helm template db-controller ./helm/db-controller/ --namespace=`cat .id` -f helm/db-controller/minikube.yaml | kubectl apply --namespace `cat .id` -f -
-
-uninstall-controller: .id
-	helm template db-controller ./helm/db-controller/ --namespace=`cat .id` -f helm/db-controller/minikube.yaml | kubectl delete --namespace `cat .id` -f -
-
-deploy-samples: .id
-	helm template dbclaim-sample helm/dbclaim-sample --namespace=`cat .id` | kubectl apply -f -
-
-uninstall-samples:
-	helm template dbclaim-sample helm/dbclaim-sample --namespace=`cat .id` | kubectl delete -f -
-
-deploy-all: create-namespace install-crds deploy-controller
-
-uninstall-all: uninstall-controller uninstall-crds delete-namespace
-
-build-properties:
-	@sed 's/{CHART_FILE}/$(CHART_FILE)/g' build.properties.in > build.properties
-
-build-properties-crd:
-	@sed 's/{CHART_FILE}/$(CHART_FILE_CRD)/g' build.properties.in > crd.build.properties
-
-${DB_CONTROLLER_CHART}-${CHART_VERSION}.tgz:
-	${HELM_ENTRYPOINT} "helm package ${DB_CONTROLLER_CHART} --version ${CHART_VERSION} --app-version ${APP_VERSION}"
-
-build-chart: ${DB_CONTROLLER_CHART}-${CHART_VERSION}.tgz
-
-build-chart-crd: manifests
-	${HELM_ENTRYPOINT} "helm package ${CRDS_CHART} --version ${CHART_VERSION}"
-
-
-# Emit local aws credentials to environment
-push-chart:
-	${HELM} \
-		s3 push ${CHART_FILE} infobloxcto
-
-push-chart-crd:
-	${HELM} \
-		s3 push ${CHART_FILE_CRD} infobloxcto
-
-clean:
-	rm -f *build.properties || true
-	rm -f *.tgz || true
-	rm .push* .image* || true
-
-deploy-crds: .id build-chart-crd
-	${HELM} upgrade --install --namespace $(cat .id) ${CRDS_CHART} --version $(CHART_VERSION)
-
-deploy: .id docker-push build-chart
-	helm upgrade --install `cat .id`-db-ctrl ${IMAGE_NAME}-${CHART_VERSION}.tgz \
-		--debug --wait --namespace "`cat .id`" \
-		--create-namespace \
-		-f helm/db-controller/minikube.yaml \
-		--set dbController.class=`cat .id` \
-		--set image.tag="${TAG}"  ${HELM_SETFLAGS}
-
-undeploy: .id
-	helm delete --namespace `cat .id` `cat .id`-db-ctrl
-
-.PHONY: list-of-images
-list-of-images:
-    # @echo -n ${REGISTRY}/${DBPROXY_IMG_PATH}:${TAG} ${REGISTRY}/${DSNEXEC_IMG_PATH}:${TAG} ${REGISTRY}/${IMAGE_NAME}:${TAG}
-	@echo -n ${DBPROXY_IMG_PATH}:${TAG} ${DSNEXEC_IMG_PATH}:${TAG} ${IMG_PATH}:${TAG}
