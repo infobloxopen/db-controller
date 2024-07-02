@@ -1,0 +1,1672 @@
+
+<!DOCTYPE html>
+
+<html class="no-js" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta content="Soheil Eizadi" name="author"/>
+<link href="https://infobloxopen.github.io/db-controller/" rel="canonical"/>
+<link href="assets/images/favicon.png" rel="icon"/>
+<meta content="mkdocs-1.6.0, mkdocs-material-9.5.28" name="generator"/>
+<title>db-controller</title>
+<link href="assets/stylesheets/main.6543a935.min.css" rel="stylesheet"/>
+<link href="assets/stylesheets/palette.06af60db.min.css" rel="stylesheet"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Sans:300,300i,400,400i,700,700i%7CIBM+Plex+Mono:400,400i,700,700i&amp;display=fallback" rel="stylesheet"/>
+<style>:root{--md-text-font:"IBM Plex Sans";--md-code-font:"IBM Plex Mono"}</style>
+<script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+</head>
+<body data-md-color-accent="blue" data-md-color-primary="blue" data-md-color-scheme="default" dir="ltr">
+<input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox"/>
+<input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox"/>
+<label class="md-overlay" for="__drawer"></label>
+<div data-md-component="skip">
+<a class="md-skip" href="#database-controller-docs">
+          Skip to content
+        </a>
+</div>
+<div data-md-component="announce">
+</div>
+<header class="md-header md-header--shadow" data-md-component="header">
+<nav aria-label="Header" class="md-header__inner md-grid">
+<a aria-label="db-controller" class="md-header__button md-logo" data-md-component="logo" href="." title="db-controller">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"></path></svg>
+</a>
+<label class="md-header__button md-icon" for="__drawer">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"></path></svg>
+</label>
+<div class="md-header__title" data-md-component="header-title">
+<div class="md-header__ellipsis">
+<div class="md-header__topic">
+<span class="md-ellipsis">
+            db-controller
+          </span>
+</div>
+<div class="md-header__topic" data-md-component="header-topic">
+<span class="md-ellipsis">
+            
+              Home
+            
+          </span>
+</div>
+</div>
+</div>
+<label class="md-header__button md-icon" for="__search">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"></path></svg>
+</label>
+<div class="md-search" data-md-component="search" role="dialog">
+<label class="md-search__overlay" for="__search"></label>
+<div class="md-search__inner" role="search">
+<form class="md-search__form" name="search">
+<input aria-label="Search" autocapitalize="off" autocomplete="off" autocorrect="off" class="md-search__input" data-md-component="search-query" name="query" placeholder="Search" required="" spellcheck="false" type="text"/>
+<label class="md-search__icon md-icon" for="__search">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"></path></svg>
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"></path></svg>
+</label>
+<nav aria-label="Search" class="md-search__options">
+<button aria-label="Clear" class="md-search__icon md-icon" tabindex="-1" title="Clear" type="reset">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"></path></svg>
+</button>
+</nav>
+</form>
+<div class="md-search__output">
+<div class="md-search__scrollwrap" data-md-scrollfix="" tabindex="0">
+<div class="md-search-result" data-md-component="search-result">
+<div class="md-search-result__meta">
+            Initializing search
+          </div>
+<ol class="md-search-result__list" role="presentation"></ol>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="md-header__source">
+<a class="md-source" data-md-component="source" href="https://github.com/infobloxopen/db-controller" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"></path></svg>
+</div>
+<div class="md-source__repository">
+    db-controller
+  </div>
+</a>
+</div>
+</nav>
+</header>
+<div class="md-container" data-md-component="container">
+<main class="md-main" data-md-component="main">
+<div class="md-main__inner md-grid">
+<div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Navigation" class="md-nav md-nav--primary" data-md-level="0">
+<label class="md-nav__title" for="__drawer">
+<a aria-label="db-controller" class="md-nav__button md-logo" data-md-component="logo" href="." title="db-controller">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"></path></svg>
+</a>
+    db-controller
+  </label>
+<div class="md-nav__source">
+<a class="md-source" data-md-component="source" href="https://github.com/infobloxopen/db-controller" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"></path></svg>
+</div>
+<div class="md-source__repository">
+    db-controller
+  </div>
+</a>
+</div>
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item md-nav__item--active">
+<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox"/>
+<label class="md-nav__link md-nav__link--active" for="__toc">
+<span class="md-ellipsis">
+    Home
+  </span>
+<span class="md-nav__icon md-icon"></span>
+</label>
+<a class="md-nav__link md-nav__link--active" href=".">
+<span class="md-ellipsis">
+    Home
+  </span>
+</a>
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#introduction">
+<span class="md-ellipsis">
+      Introduction
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#assumptions">
+<span class="md-ellipsis">
+      Assumptions
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#operation">
+<span class="md-ellipsis">
+      Operation
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#requirements">
+<span class="md-ellipsis">
+      Requirements
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#demo">
+<span class="md-ellipsis">
+      Demo
+    </span>
+</a>
+<nav aria-label="Demo" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#configuration">
+<span class="md-ellipsis">
+      Configuration
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#policy-demo">
+<span class="md-ellipsis">
+      Policy Demo
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#service-architecture">
+<span class="md-ellipsis">
+      Service Architecture
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-model">
+<span class="md-ellipsis">
+      Data Model
+    </span>
+</a>
+<nav aria-label="Data Model" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#configmap">
+<span class="md-ellipsis">
+      ConfigMap
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#databaseclaim-custom-resource">
+<span class="md-ellipsis">
+      DatabaseClaim Custom Resource
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#secrets">
+<span class="md-ellipsis">
+      Secrets
+    </span>
+</a>
+<nav aria-label="Secrets" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#using-secrets-as-files">
+<span class="md-ellipsis">
+      Using Secrets as Files
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#example-secret-config">
+<span class="md-ellipsis">
+      Example Secret Config
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#api">
+<span class="md-ellipsis">
+      API
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#implementation">
+<span class="md-ellipsis">
+      Implementation
+    </span>
+</a>
+<nav aria-label="Implementation" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#lifecycle">
+<span class="md-ellipsis">
+      Lifecycle
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#deployment">
+<span class="md-ellipsis">
+      Deployment
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#authentication">
+<span class="md-ellipsis">
+      Authentication
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#authorization">
+<span class="md-ellipsis">
+      Authorization
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#ingress">
+<span class="md-ellipsis">
+      Ingress
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#audit">
+<span class="md-ellipsis">
+      Audit
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#logging">
+<span class="md-ellipsis">
+      Logging
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#alerting">
+<span class="md-ellipsis">
+      Alerting
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#performance">
+<span class="md-ellipsis">
+      Performance
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#security">
+<span class="md-ellipsis">
+      Security
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#third-party-software">
+<span class="md-ellipsis">
+      Third-Party Software
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#metricstelemetry">
+<span class="md-ellipsis">
+      Metrics/Telemetry
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#rate-limits">
+<span class="md-ellipsis">
+      Rate Limits
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#uxui">
+<span class="md-ellipsis">
+      UX/UI
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#high-availabilityresiliency">
+<span class="md-ellipsis">
+      High Availability/Resiliency
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#scalability">
+<span class="md-ellipsis">
+      Scalability
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#backup">
+<span class="md-ellipsis">
+      Backup
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#disaster-recovery">
+<span class="md-ellipsis">
+      Disaster Recovery
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-retention">
+<span class="md-ellipsis">
+      Data Retention
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#testing">
+<span class="md-ellipsis">
+      Testing
+    </span>
+</a>
+<nav aria-label="Testing" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#test-plan">
+<span class="md-ellipsis">
+      Test Plan
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#test-matrix">
+<span class="md-ellipsis">
+      Test Matrix
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#migration">
+<span class="md-ellipsis">
+      Migration
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#deployment-architecture">
+<span class="md-ellipsis">
+      Deployment Architecture
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#upgrades">
+<span class="md-ellipsis">
+      Upgrades
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#service-dependencies">
+<span class="md-ellipsis">
+      Service Dependencies
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#service-killers">
+<span class="md-ellipsis">
+      Service Killers
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-analytics">
+<span class="md-ellipsis">
+      Data Analytics
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#references">
+<span class="md-ellipsis">
+      References
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#introduction">
+<span class="md-ellipsis">
+      Introduction
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#assumptions">
+<span class="md-ellipsis">
+      Assumptions
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#operation">
+<span class="md-ellipsis">
+      Operation
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#requirements">
+<span class="md-ellipsis">
+      Requirements
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#demo">
+<span class="md-ellipsis">
+      Demo
+    </span>
+</a>
+<nav aria-label="Demo" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#configuration">
+<span class="md-ellipsis">
+      Configuration
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#policy-demo">
+<span class="md-ellipsis">
+      Policy Demo
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#service-architecture">
+<span class="md-ellipsis">
+      Service Architecture
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-model">
+<span class="md-ellipsis">
+      Data Model
+    </span>
+</a>
+<nav aria-label="Data Model" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#configmap">
+<span class="md-ellipsis">
+      ConfigMap
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#databaseclaim-custom-resource">
+<span class="md-ellipsis">
+      DatabaseClaim Custom Resource
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#secrets">
+<span class="md-ellipsis">
+      Secrets
+    </span>
+</a>
+<nav aria-label="Secrets" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#using-secrets-as-files">
+<span class="md-ellipsis">
+      Using Secrets as Files
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#example-secret-config">
+<span class="md-ellipsis">
+      Example Secret Config
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#api">
+<span class="md-ellipsis">
+      API
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#implementation">
+<span class="md-ellipsis">
+      Implementation
+    </span>
+</a>
+<nav aria-label="Implementation" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#lifecycle">
+<span class="md-ellipsis">
+      Lifecycle
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#deployment">
+<span class="md-ellipsis">
+      Deployment
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#authentication">
+<span class="md-ellipsis">
+      Authentication
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#authorization">
+<span class="md-ellipsis">
+      Authorization
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#ingress">
+<span class="md-ellipsis">
+      Ingress
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#audit">
+<span class="md-ellipsis">
+      Audit
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#logging">
+<span class="md-ellipsis">
+      Logging
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#alerting">
+<span class="md-ellipsis">
+      Alerting
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#performance">
+<span class="md-ellipsis">
+      Performance
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#security">
+<span class="md-ellipsis">
+      Security
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#third-party-software">
+<span class="md-ellipsis">
+      Third-Party Software
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#metricstelemetry">
+<span class="md-ellipsis">
+      Metrics/Telemetry
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#rate-limits">
+<span class="md-ellipsis">
+      Rate Limits
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#uxui">
+<span class="md-ellipsis">
+      UX/UI
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#high-availabilityresiliency">
+<span class="md-ellipsis">
+      High Availability/Resiliency
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#scalability">
+<span class="md-ellipsis">
+      Scalability
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#backup">
+<span class="md-ellipsis">
+      Backup
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#disaster-recovery">
+<span class="md-ellipsis">
+      Disaster Recovery
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-retention">
+<span class="md-ellipsis">
+      Data Retention
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#testing">
+<span class="md-ellipsis">
+      Testing
+    </span>
+</a>
+<nav aria-label="Testing" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#test-plan">
+<span class="md-ellipsis">
+      Test Plan
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#test-matrix">
+<span class="md-ellipsis">
+      Test Matrix
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#migration">
+<span class="md-ellipsis">
+      Migration
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#deployment-architecture">
+<span class="md-ellipsis">
+      Deployment Architecture
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#upgrades">
+<span class="md-ellipsis">
+      Upgrades
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#service-dependencies">
+<span class="md-ellipsis">
+      Service Dependencies
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#service-killers">
+<span class="md-ellipsis">
+      Service Killers
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#data-analytics">
+<span class="md-ellipsis">
+      Data Analytics
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#references">
+<span class="md-ellipsis">
+      References
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-content" data-md-component="content">
+<article class="md-content__inner md-typeset">
+<h1 id="database-controller-docs">Database Controller Docs<a class="headerlink" href="#database-controller-docs" title="Permanent link">¶</a></h1>
+<h2 id="introduction">Introduction<a class="headerlink" href="#introduction" title="Permanent link">¶</a></h2>
+<p>The motiviation for this project was to support dynamic creation of database resource
+and minimal downtime of services during password rotation or DB instance migration.</p>
+<p>This project implements a database controller. It introduces a CRD that allows
+clients to create a database claim. That database claim will create a database in
+an existing postgres server, or it could create a cloud claim that will attach a
+database on demand. Additionally it will create user/password to the database and rotate them.
+The database controller will also be used as a proxy driver for connecting to databases.</p>
+<h2 id="assumptions">Assumptions<a class="headerlink" href="#assumptions" title="Permanent link">¶</a></h2>
+<p><strong><em>TBD</em></strong></p>
+<h2 id="operation">Operation<a class="headerlink" href="#operation" title="Permanent link">¶</a></h2>
+<p>The Dynamic Database Connection Reconfiguration (DDCR) will consist of three 
+components that will comprise the database claim pattern implemented by this project.<br/>
+The first will be a db-controller that is responsible for managing the connection 
+information and associated database.  An application will create its intention 
+to have a database by adding a  DatabaseClaim Custom Resource (DBClaim).
+The second is a change to the service deployment that defines a Database Claim. 
+This claim will provision a k8s secret that replaces the static credentials
+created by deployment or dynamically retrieved from secret stores by
+operators like <a href="https://github.com/seizadi/space-controller">SpaceController</a>. <br/>
+The third is a database driver that will be able to read the database connection
+information from the secrets files in the pod volume and construct the 
+connection string required for connecting through the real database driver.
+The driver will also be able to detect when the connection information 
+has changed and gracefully close any open database connections.<br/>
+The closing of the connections will effectively drain the connection 
+pool as well as trigger a reconnect with the new connection string
+information by the client service.</p>
+<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Requirements</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DDCR</td>
+<td>Establish a pattern (and possible code) for apps to reload connection information from a file</td>
+</tr>
+<tr>
+<td>DDCR</td>
+<td>Establish a pattern for mounting a secret that contains connection information in a secret</td>
+</tr>
+<tr>
+<td>DDCR</td>
+<td>Support dynamically changing the connection information</td>
+</tr>
+<tr>
+<td>DDCR</td>
+<td>Support labels for sharing of dynamically created databases</td>
+</tr>
+<tr>
+<td>DDCR</td>
+<td>Modify at least one Atlas app to show as an example of implementing this pattern</td>
+</tr>
+<tr>
+<td>Cloud Provider Tagging</td>
+<td>Cloud Resource must be tagged so that then can following organization guidelines.</td>
+</tr>
+<tr>
+<td>DB Instance Migration</td>
+<td>CR Change create new database instance and migrate data and delete infrastructure CR</td>
+</tr>
+<tr>
+<td>DB Instance Migration</td>
+<td>Migration should with Canary pattern once tests pass all traffic to the new database</td>
+</tr>
+</tbody>
+</table>
+<h2 id="demo">Demo<a class="headerlink" href="#demo" title="Permanent link">¶</a></h2>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">¶</a></h3>
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+
+flowchart TB
+subgraph shared
+app1--&gt;claim1
+app2--&gt;claim2
+end
+subgraph dedicated
+app3--&gt;claim3
+end
+
+claim1 --&gt; rdsinstance1[(RDS Instance 1)]
+claim2 --&gt; rdsinstance1
+claim3 --&gt; rdsinstance2[(RDS Instance 2)]
+</div>
+<h3 id="policy-demo">Policy Demo<a class="headerlink" href="#policy-demo" title="Permanent link">¶</a></h3>
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+
+flowchart TB
+subgraph shared policy
+reclaim1[shared ReclaimPolicy] --&gt; shared[delete]
+end
+subgraph default policy
+reclaim2[default ReclaimPolicy] --&gt; dedicated[retain]
+end
+
+reclaim1 --&gt; rdsinstance1[(RDS Instance 1)]
+reclaim2 --&gt; rdsinstance2[(RDS Instance 2)]
+</div>
+<h2 id="service-architecture">Service Architecture<a class="headerlink" href="#service-architecture" title="Permanent link">¶</a></h2>
+<p>The first component is a db-controller service that will be responsible 
+for reading DBClaims and then provisioning the database and user(s) 
+for that database. The service will also publish this information 
+into kubernetes secrets, so they can propagate to the other components.<br/>
+The db-controller is also responsible for rotating the user password 
+based on the password related config values, and updating the user 
+password in the associated database and kubernetes secrets store.</p>
+<p>The db-controller will support config values and master 
+DB instance connection information, defined in a configMap, 
+as well as the references to the kubernetes basic auth secrets 
+that contain the root password for each database instance.
+At startup of the db-controller, the db-controller will scan 
+any existing DBClaims in its datastore and use the ConnectionInfoUpdatedAt 
+timestamp as the starting point for the passwordRotation timers.</p>
+<p>The second component is to modify the pod definition of the application 
+service to support secrets in files.  In this model, each key within 
+the secret will be mapped into a separate file in the mountPath of the volume</p>
+<p>The third component is a database proxy package for the application service. This proxy 
+will be used in place of the existing database driver. It is configured to register 
+the real driver for the database type,so that it can forward all the calls to this 
+driver. The proxy driver will also be configured with a strategy for where it 
+can find and monitor the secrets associated with the connection string. When the 
+proxy detects that any of the connection string information has changed 
+it can close any open connections that the application has with the real database 
+driver. When the proxy closes the connections, it will trigger the connection 
+pool to flush any bad connections, and allow the client application to reconnect. The 
+new database connections for the application will then transparently use the 
+new connection string information provided by the proxy.</p>
+<div class="mermaid">  sequenceDiagram
+    autonumber
+    CD -&gt;&gt; K8S: apply manifest
+    K8S -&gt;&gt; CD: ok
+    rect rgb(0, 255, 0, .3)
+        loop
+            K8S-&gt;&gt;db-controller: new DBClaim
+            rect rgba(0, 0, 255, .2)
+                Note over db-controller: Check for Dynamic Database Creation 
+                db-controller-&gt;&gt;db-controller: Instance exists?
+                db-controller-&gt;&gt;infra-operator: No -&gt; CloudDatabaseClaim
+                loop Wait for Database Instance
+                    infra-operator-&gt;&gt;infra-operator: provision instance
+                end
+                loop Wait for Database Connection Secret
+                    db-controller-&gt;&gt;db-controller: Connection Secret exists?
+                end
+            end
+            db-controller-&gt;&gt;RDS: DB exists?
+            RDS-&gt;&gt;db-controller: no
+            db-controller-&gt;&gt;RDS: create DB
+            RDS-&gt;&gt;db-controller: ok
+            db-controller-&gt;&gt;RDS: create user &amp;<br/> set permissions
+            RDS-&gt;&gt;db-controller: ok
+            db-controller-&gt;&gt;K8S: create secret with<br/> connection string
+            K8S-&gt;&gt;db-controller: ok
+        end
+    end
+    rect rgb(0, 255, 0, .3)
+        loop
+            Kubelet-&gt;&gt;K8S: get secrets
+            K8S-&gt;&gt;Kubelet: secrets
+            Kubelet-&gt;&gt;tempfs: store
+            tempfs-&gt;&gt;Kubelet: ok
+        end
+    end
+    rect rgb(0, 255, 0, .3)
+        loop
+            App-&gt;&gt;tempfs: read
+            tempfs-&gt;&gt;App: ok
+        end
+    end
+</div>
+<h2 id="data-model">Data Model<a class="headerlink" href="#data-model" title="Permanent link">¶</a></h2>
+<p>The database proxy will include a DatabaseClaim Custom Resource. In the first
+version of the application the DatabaseClaim contained information related 
+to a specific instance of a database. In the next major release the DatabaseClaim
+has information to help an infrastructure operator select a database for the
+client application. This pattern will allow us to make the database selection be
+pre-provisioned or dynamic on demand. It will also allow the database selction to
+be multi-cloud e.g. AWS or Azure.</p>
+<p>DatabaseClaim will 
+include properties such as the name, appID, Type, etc. During startup, 
+the db-controller will read the set of CR’s describing the DatabaseClaim and store 
+them in-memory. In the case of dynamic database provisioning
+a CR is created to request infrastructure operator to create the database instance.
+db-controller will check the CR satus and to make sure that the database is provisioned
+and information about it is available in a secret refrenced by the CR.</p>
+<p>The db-controller will listen for any changes to the DatabaseClaim CR’s and 
+remain in-sync with the K8 definitions. In the case of dynamic database provisioning
+a change will cause a new infrastructure CR to be created, when the new database
+instance is created we should migrate all password, data and connection to it and delete
+the old infrastructure CR. It will be infrastructure operator concern if the cloud
+database instances are deleted immediately or there is a higher level operations
+workflow to reclaim them. We can break the database migration into phases and deliver
+just new infrastructure CR on change, this might be fine for development environments
+and work on the full feature for production. There are also advanced use case like 
+canary where where an new release of the application creates the new database, tests
+the migration and once everything is working all traffic is migrated away from the
+old database and it can be reclaimed.</p>
+<p>The following shows the mapping of the DatabaseClaim to a CloudDatabase.
+The CloudDatabaseClaim could be custom or use a infrastructure provider like
+<a href="https://github.com/crossplane/crossplane/blob/master/design/design-doc-composition.md#resource-composition">crossplane resource composition</a>.
+The DatabaseClaim could also be mapped to a Cloud provider like
+<a href="https://github.com/aws-controllers-k8s/community">AWS ACK</a>, providing multi-cloud support by transforming
+DatabaseClaim to a specific cloud provider CR.
+In the case of AWS you would leverage
+<a href="https://github.com/aws-controllers-k8s/rds-controller">ACK RDS Provider</a>.</p>
+<p>The ClaimMap is meant to transform between DatabaseClaim and CloudDatabaseClaim.
+We will not use a resource for the ClaimMap, but will use a naming convention to do the
+mapping and will use the existing FragmentKey for the map to group a number of
+DatabaseClaim to share a database instance. If more complex use cases arrive we
+could implement a resource to provide the mapping.</p>
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+erDiagram
+    DatabaseClaim ||--o{ ClaimMap : ""
+    DatabaseClaim ||--|| CloudDatabaseClaim : ""
+    CloudDatabaseClaim ||--o{ ClaimMap : ""
+</div>
+<p>This the deploying with the CR scheme:
+<strong>Relationship of a DatabaseClaim to a Secret and a Pod:</strong>
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram
+  direction LR
+  Application --&gt; DatabaseClaim : Manifest
+  DatabaseClaim --&gt; CloudDatabaseClaim : Claim Map
+  CloudDatabaseClaim --&gt; rdsInstance : create instance
+</div>
+Here is an example of what the CloudDatabaseClaim would look like if we used
+Crossplane. The compositionRef maps our CloudDatabaseClaim to a cloud specific 
+database instance defintion that is managed by Crossplane:
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">database.infobloxopen.github.com/v1alpha1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CloudDatabaseClaim</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller-cloud-claim-database-some-app</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller-namespace</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">parameters</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres</span>
+<span class="w">    </span><span class="nt">minStorage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20GB</span>
+<span class="w">  </span><span class="nt">compositionRef</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cloud.database.infobloxopen.github.com</span>
+<span class="w">  </span><span class="nt">writeConnectionSecretToRef</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller-postgres-con-some-app</span>
+</code></pre></div></p>
+<p>In this example db-controller-postgres-con-some-app Secret that is written by the
+infrastructure operator has the connection string and password information for the 
+db-controller to manage the instance, similar to the pre-provisioned use case.</p>
+<h3 id="configmap">ConfigMap<a class="headerlink" href="#configmap" title="Permanent link">¶</a></h3>
+<p>The db-controller will consume a configMap that contains global config values.
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ConfigMap</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller-config</span>
+<span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller-namespace</span>
+<span class="nt">data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">config.yaml</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">    </span><span class="no">passwordConfig:</span>
+<span class="w">      </span><span class="no">passwordComplexity: enabled</span>
+<span class="w">      </span><span class="no">minPasswordLength: "15"</span>
+<span class="w">      </span><span class="no">passwordRotationPeriod: "60"</span>
+<span class="w">    </span><span class="no">atlas:</span>
+<span class="w">      </span><span class="no">username: root</span>
+<span class="w">      </span><span class="no">host: some.service</span>
+<span class="w">      </span><span class="no">port: 5432</span>
+<span class="w">      </span><span class="no">sslMode: disable</span>
+<span class="w">      </span><span class="no">passwordSecretRef: atlas-master-password</span>
+<span class="w">      </span><span class="no">passwordSecretKey: password</span>
+<span class="w">    </span><span class="no">atlas.recyclebin:</span>
+<span class="w">      </span><span class="no">username: root</span>
+<span class="w">      </span><span class="no">host: some.other.service</span>
+<span class="w">      </span><span class="no">port: 5412</span>
+<span class="w">      </span><span class="no">sslMode: disable</span>
+<span class="w">      </span><span class="no">passwordSecretRef: atlas-recyclebin-password</span>
+<span class="w">    </span><span class="no">athena:</span>
+<span class="w">      </span><span class="no">username=root</span>
+<span class="w">      </span><span class="no">host=some.service</span>
+<span class="w">      </span><span class="no">port=5432</span>
+<span class="w">      </span><span class="no">sslMode: disable</span>
+<span class="w">      </span><span class="no">passwordSecretRef=athena-master-password</span>
+<span class="w">    </span><span class="no">athena.hostapp:</span>
+<span class="w">      </span><span class="no">username=root</span>
+<span class="w">      </span><span class="no">host=some.service</span>
+<span class="w">      </span><span class="no">port=5432</span>
+<span class="w">      </span><span class="no">sslMode: require</span>
+<span class="w">      </span><span class="no">passwordSecretRef=athena-hostapp-password</span>
+</code></pre></div></p>
+<ul>
+<li>authSource: Determines how database host master password is retrieved. The possible values are "secret" and "aws". In the case of "secret" the value from the passwordSecretRef Secret is used for the password. In the case of "aws" the RDS password is retrieved using AWS APIs and db-controller should have IAM credentials to make the necessary calls.</li>
+<li>region: The region where dynamic database is allocated</li>
+<li>passwordComplexity: Determines if the password adheres to password complexity rules or not.  Values can be enabled or disable.  When enabled, would require the password to meet specific guidelines for password complexity.  The default value is enabled.  Please see the 3<sup>rd</sup> party section for a sample package that could be used for this.</li>
+<li>minPasswordLength: Ensures that the generated password is at least this length.  The value is in the range [15, 99].  The default value is 15.  Upper limit is Postgresql max password length limit.</li>
+<li>
+<p>passwordRotationPeriod: Defines the period of time (in minutes) before a password is rotated.  The value can be in the range [60, 1440] minutes.  The default value is 60 minutes.</p>
+</li>
+<li>
+<p>Fragment Keys: This is the label to use for identifying the master connection information to a DB instance</p>
+</li>
+<li>Username: The username for the master/root user of the database instance</li>
+<li>Host: The host name where the database instance is located</li>
+<li>Port: The port to use for connecting to the host</li>
+<li>sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disable"</li>
+<li>passwordSecretRef: The name of the secret that contains the password for this connection</li>
+<li>passwordSecretKey: Optional value for the key value, default value is "password"</li>
+<li>shape: The optional value of shape, see DatabaseClaim, specified here when defined by FragmentKey</li>
+<li>minStorageGB: The optional value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey</li>
+<li>engineVersion: The optional version of RDS instance, for now Postgres version, but could be other types</li>
+<li>deletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan</li>
+<li>
+<p>reclaimPolicy: Used as value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"</p>
+</li>
+<li>
+<p>defaultMasterPort: Value of MasterPort if not specified in FragmentKey</p>
+</li>
+<li>defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey</li>
+<li>defaultSslMode: Value of sslMode if not specified in FragmentKey</li>
+<li>defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim</li>
+<li>defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim </li>
+<li>defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim</li>
+<li>defaultDeletionPolicy: The DeletionPolicy for CloudDatabase, possible values: delete, orphan</li>
+<li>defaultReclaimPolicy: Used as default value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"</li>
+</ul>
+<p>The configMap and credential secrets must be mounted to volumes within the 
+pod for the db-controller.  This ensures that when the keys are updated, the 
+projected keys will also be updated in the pod volume. Below is a sample
+Pod spec with secret and volumes configured:
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Pod</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infobloxopen/db-controller-abcdefg123</span>
+<span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="s">"/main"</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">volumeMounts</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config-volume</span>
+<span class="w">        </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/etc/config</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">root-user</span>
+<span class="w">        </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="s">"/etc/credentials"</span>
+<span class="w">        </span><span class="nt">readOnly</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config-volume</span>
+<span class="w">      </span><span class="nt">configMap</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">db-controller-config</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">athena-root-user</span>
+<span class="w">      </span><span class="nt">secret</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">athena-hostapp-password</span>
+<span class="w">  </span><span class="nt">restartPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Never</span>
+</code></pre></div>
+The root user passwords will be stored in kubernetes secrets and the name 
+must match the passwordSecretRef value in the configMap. Here is sample Secret
+that match above example:
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Secret</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">athena-hostapp-password</span>
+<span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Opaque</span>
+<span class="nt">stringData</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t0p-Secr3t!@</span>
+</code></pre></div></p>
+<h3 id="databaseclaim-custom-resource">DatabaseClaim Custom Resource<a class="headerlink" href="#databaseclaim-custom-resource" title="Permanent link">¶</a></h3>
+<p>The DatabaseClaim custom resource describes the connection information for 
+a database instance.  It includes the following properties:</p>
+<p>DatabaseClaim:</p>
+<ul>
+<li>
+<p>DatabaseClaimSpec:</p>
+<ul>
+<li>Class (optional): uses to run multiple instances of dbcontroller.</li>
+<li>SourceDataFrom (optional): specifies an existing database or backup to use when initially provisioning the database. *If the dbclaim has already provisioned a database, this field is ignored.</li>
+<li>UseExistingSource (optional): instructs the controller to perform user management on the database currently defined in the SourceDataFrom field.
+      If sourceDataFrom is empty, this is ignored
+      If this is set, .sourceDataFrom.Type and .type must match to use an existing source (since they must be the same)
+      If this field was set and becomes unset, migration of data will commence.</li>
+<li>RestoreFrom (optional): Indicates the snapshot to restore the Database from. </li>
+<li>EnableReplicationRole (optional): Will grant rds replication role to Username. This value is ignored if EnableSuperUser is set to true.</li>
+<li>EnableSuperUser (optional): Will grant rds_superuser and createrole role to Username. This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false.</li>
+<li>AppID: Application ID used for the application.</li>
+<li>SecretName: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.  The SecretName is Namespace scoped.</li>
+<li>Type: The type of the database instance. E.g. Postgres</li>
+<li>InstanceLabel: The matching fragment key name of the database instance that will host the database. The fragment keys are defined in the db-controller configMap and describe the connection information for the database instance that this DBClaim is associated with. The longest match will win. For example, the database claim can have a label of athena.hostapp but the only available RDS instances have a label of athena, atlas and northstar. So the controller would match the athena instance. If however an instance label has a label of athena.hostapp, then the hostapp claim would match it exactly.</li>
+<li>Username: The username that the application will use for accessing the database.</li>
+<li>DatabaseName: The name of the database instance. </li>
+<li>DBVersion (optional): The version of the database.</li>
+<li>DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.</li>
+<li>DSNName: The key used for the client dsn connection string in the Secret</li>
+<li>Host (optional): The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.</li>
+<li>Port (optional): The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.</li>
+<li>Shape (optional): The optional Shape values are arbitrary and help drive instance selection</li>
+<li>MinStorageGB (optional): The optional MinStorageGB value requests the minimum database host storage capacity</li>
+<li>MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto. For auroraDB instance, this value is ignored.</li>
+<li>DeletePolicy (optional): The optional DeletePolicy value defines policy, default delete, possible values: delete, recycle</li>
+<li>BackupPolicy (optional): Specifies the duration at which db backups are taken.</li>
+<li>Tags (optional): Tags.</li>
+</ul>
+</li>
+<li>
+<p>DatabaseClaimStatus:</p>
+<ul>
+<li>Error: Any errors related to provisioning this claim.</li>
+<li>NewDB (type: Status): Track the status of new db in the process of being created.</li>
+<li>ActiveDB (type: Status): Track the status of the active db being used by the application.</li>
+<li>MigrationState: Tracks status of DB migration. if empty, not started. Non empty denotes migration in progress, unless it is S_Completed.</li>
+<li>
+<p>OldDB (type: StatusForOldDB): Tracks the DB which is migrated and not more operational.</p>
+</li>
+<li>
+<p>StatusForOldDB</p>
+<ul>
+<li>ConnectionInfo (type: DatabaseClaimConnectionInfo): Time the connection info was updated/created.</li>
+</ul>
+</li>
+<li>DBVersion: Version of the provisioned Database.</li>
+<li>Shape: The optional Shape values are arbitrary and help drive instance selection.</li>
+<li>Type: Specifies the type of database to provision. Only postgres is supported.</li>
+<li>PostMigrationActionStartedAt: Time at the process of post migration actions initiated.</li>
+<li>DbState: DbState of the DB. inprogress, "", ready.</li>
+<li>
+<p>MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity in GBytes.</p>
+</li>
+<li>
+<p>Status: </p>
+</li>
+<li>DbCreatedAt: Time the database was created.</li>
+<li>MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap</li>
+<li>ConnectionInfo{} (data in connection info is projected into a secret)<ul>
+<li>Username: The username that the application will use for accessing the database. </li>
+<li>Password: The password associated with the Username.</li>
+<li>Host: The host name where the database instance is located.</li>
+<li>Port: The port to use for connecting to the host.</li>
+<li>DatabaseName: The name of the database instance.</li>
+</ul>
+</li>
+<li>DBVersion: Version of the provisioned Database.</li>
+<li>Shape: The optional Shape values are arbitrary and help drive instance selection</li>
+<li>MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity in GBytes</li>
+<li>MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
+  For auroraDB instance, this value is ignored.</li>
+<li>Type: Specifies the type of database to provision. Only postgres is supported.</li>
+<li>ConnectionInfoUpdatedAt: Time the connection info was updated/created.</li>
+<li>UserUpdatedAt: Time the user/password was updated/created</li>
+<li>DbState: DbState of the DB. inprogress, "", ready</li>
+<li>SourceDataFrom: SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
+  If the dbclaim has already provisioned a database, this field is ignored.
+  This field used when claim is use-existing-db and attempting to migrate to newdb</li>
+</ul>
+</li>
+</ul>
+<h2 id="secrets">Secrets<a class="headerlink" href="#secrets" title="Permanent link">¶</a></h2>
+<p>During the processing of each DatabaseClaim, the db-controller will generate the 
+connection info and also create a secret with the relevant information. The secret 
+will have the same name as the DatabaseClaim, and contain keys that match the 
+values of the properties under the DatabaseClaim <em>status.connectionInfo</em> property.</p>
+<p>The keys in the secret are shown below:
+* dsn : postgres dsn string value specified by DatabaseClaim
+* "uri_" + dsn : url path value is "uri_" prefix added to dsn
+* "hostname" : postgres host of dsn
+* "port" : port used for connecting to the database
+* "database" : postgres database created on host
+* "username" : username to access the database
+* "password" : password to access the database
+* "sslmode" : SSL Mode value as specified by dsn spec</p>
+<h3 id="using-secrets-as-files">Using Secrets as Files<a class="headerlink" href="#using-secrets-as-files" title="Permanent link">¶</a></h3>
+<p>Modify the Pod definition, for the service that you will add the proxy package, to 
+add a volume under <em>.spec.volumes[]</em>. Name the volume anything, and have 
+a <em>.spec.volumes[].secret.secretName</em> field equal to the name of the Secret 
+object, which in this case is also the name of the DatabaseClaim.</p>
+<p>Add a <em>.spec.containers[].volumeMounts[]</em> to each container that needs 
+the secret. Specify <em>.spec.containers[].volumeMounts[].readOnly = true</em> 
+and <em>.spec.containers[].volumeMounts[].mountPath</em> to an unused directory 
+name where you would like the secrets to appear.</p>
+<p>Modify your image or command line so that the proxy package looks 
+for files in that directory. Each key in the secret data map becomes the 
+filename under mountPath.</p>
+<h3 id="example-secret-config">Example Secret Config<a class="headerlink" href="#example-secret-config" title="Permanent link">¶</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Pod</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypod</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">containers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypod</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis</span>
+<span class="w">    </span><span class="nt">volumeMounts</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">foo</span>
+<span class="w">      </span><span class="nt">mountPath</span><span class="p">:</span><span class="w"> </span><span class="s">"/etc/connection"</span>
+<span class="w">      </span><span class="nt">readOnly</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">foo</span>
+<span class="w">    </span><span class="nt">secret</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mysecret</span>
+</code></pre></div>
+<p><strong>Relationship of a DatabaseClaim to a Secret and a Pod:</strong>
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram
+  direction LR
+  Pod --&gt; Secret : references
+  Secret --&gt; DatabaseClaim : ownedBy
+</div></p>
+<h2 id="api">API<a class="headerlink" href="#api" title="Permanent link">¶</a></h2>
+<p><strong><em>N/A</em></strong></p>
+<h2 id="implementation">Implementation<a class="headerlink" href="#implementation" title="Permanent link">¶</a></h2>
+<p><strong><em>TODO</em></strong>
+<strong><em>Document full implementation for now focused on claim pattern updates</em></strong></p>
+<p>This implementation will use the 
+<a href="https://book.kubebuilder.io/introduction.html">kubebuilder</a> pattern
+for implementation of the db-controller. This implementation starts
+with building a project:
+<div class="highlight"><pre><span></span><code>kubebuilder<span class="w"> </span>init<span class="w"> </span>--domain<span class="w"> </span>atlas.infoblox.com<span class="w"> </span>--repo<span class="w"> </span>github.com/infobloxopen/db-controller
+</code></pre></div>
+This project was layed down by kubebuilder which depend on
+<em>sigs.k8s.io/controller-runtime</em> and supports an architecture
+<a href="https://book.kubebuilder.io/architecture.html">described here</a>.
+A key part of this architecture is the <em>Reconciler</em> that encapsulates
+the custom logic that runs when request are forwarded from Kubernetes
+API Server to this controller. Specifically it the DatabaseClaim
+resources that is served.</p>
+<p>There is a go method (class) defined for handling reconcile functions:
+<div class="highlight"><pre><span></span><code><span class="c1">// DatabaseClaimReconciler reconciles a DatabaseClaim object</span>
+<span class="kd">type</span><span class="w"> </span><span class="nx">DatabaseClaimReconciler</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">client</span><span class="p">.</span><span class="nx">Client</span>
+<span class="w">    </span><span class="nx">Log</span><span class="w">        </span><span class="nx">logr</span><span class="p">.</span><span class="nx">Logger</span>
+<span class="w">    </span><span class="nx">Scheme</span><span class="w">     </span><span class="o">*</span><span class="nx">runtime</span><span class="p">.</span><span class="nx">Scheme</span>
+<span class="w">    </span><span class="nx">Config</span><span class="w">     </span><span class="o">*</span><span class="nx">viper</span><span class="p">.</span><span class="nx">Viper</span>
+<span class="w">    </span><span class="nx">MasterAuth</span><span class="w"> </span><span class="o">*</span><span class="nx">rdsauth</span><span class="p">.</span><span class="nx">MasterAuth</span>
+<span class="p">}</span>
+</code></pre></div>
+Then the reconcile functions that are parts of the method class are
+defined with this signature:
+<div class="highlight"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">DatabaseClaimReconciler</span><span class="p">)</span><span class="w"> </span><span class="nx">Reconcile</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="w"> </span><span class="nx">ctrl</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">ctrl</span><span class="p">.</span><span class="nx">Result</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="o">...</span><span class="p">}</span>
+<span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">DatabaseClaimReconciler</span><span class="p">)</span><span class="w"> </span><span class="nx">updateStatus</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">dbClaim</span><span class="w"> </span><span class="o">*</span><span class="nx">persistancev1</span><span class="p">.</span><span class="nx">DatabaseClaim</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">ctrl</span><span class="p">.</span><span class="nx">Result</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="o">...</span><span class="p">}</span>
+</code></pre></div></p>
+<p>The following is the high level view of the reconcile logic:
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+graph TB
+A((Client)) --o B
+B[K8S API Server] --&gt; C[db-controller]
+C--&gt; D[Reconciler]
+D--&gt; E{claim valid?}
+E -- No --&gt; C
+E -- Yes --&gt;F{Delete?}
+F -- No --&gt; G[UpdateStatus]
+F -- Yes --&gt; H[Clean Up Resources]
+H --&gt; C
+G --&gt; C
+C --&gt;B
+B --&gt; A
+</div></p>
+<p>The DatabaseClaim
+Status is where keep the state used by the reconciler. The two parts
+of the Status that are important are:</p>
+<ul>
+<li>MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap</li>
+<li>ConnectionInfo[]: connection info about the database that is projected into a client accessible secret</li>
+</ul>
+<p>There is also a fragmentKey that is the same as the MatchedLabel,
+but not sure there are two items versus one <strong><em>TBD</em></strong>.</p>
+<p>In this part we will look at the UpdateStatus function sequence and the
+proposed changes to support dynamic database creation while leaving much of
+the working db-controller to interoperate:</p>
+<div class="mermaid">  sequenceDiagram
+    UpdateStatus-&gt;&gt;matchInstanceLabel: Spec.InstanceLabel
+    matchInstanceLabel-&gt;&gt;Status: Status.MatchedLabel
+    UpdateStatus-&gt;&gt;getClient: Status.MatchedLabel
+      rect rgba(255, 0, 255, .2) 
+        par New Dynamic Database Binding
+          getClient-&gt;&gt;getHost: dbClaim
+          getHost-&gt;&gt;getHost: Spec.Host &amp;&amp; Config::Status.MatchedLabel.Host == "" ?
+          getHost-&gt;&gt;getHost: Yes
+          Status-&gt;&gt;getHost: Status.CloudDatabase.Host == "" ?
+          getHost-&gt;&gt;getHost: Yes        
+          getHost-&gt;&gt;createCloudDatabase: dbClaim
+          createCloudDatabase-&gt;&gt;createCloudDatabase: Wait for resource ready
+          createCloudDatabase-&gt;&gt;getHost: CloudDatabase
+          getHost-&gt;&gt;Status: Status.CloudDatabase.{Name, Host, Port, User, Password}
+          getHost-&gt;&gt;getClient: {Host, Port, User, Password}
+        end
+      end
+      rect rgba(255, 255, 0, .2) 
+        par Existing Static Database Binding
+          getHost-&gt;&gt;getHost: Spec.Host &amp;&amp; Config::Status.MatchedLabel.Host == ""
+          getHost-&gt;&gt;getHost: No
+          getProvisionedHost-&gt;&gt;getHost: {Host, Port, User, Password}
+          getHost-&gt;&gt;getClient: {Host, Port, User, Password}
+        end
+    end   
+    getClient-&gt;&gt;Status: Status.ConnectionInfo.Host
+    getClient-&gt;&gt;Status: Status.ConnectionInfo.Port
+    getClient-&gt;&gt;Status: Status.ConnectionInfo.SSLMode
+    getClient-&gt;&gt;Status: Status.ConnectionInfo.ConnectionInfoUpdatedAt
+    getClient-&gt;&gt;DBClientFactory: host, port, user, password, sslmode
+    DBClientFactory-&gt;&gt;getClient: dbClient
+    getClient-&gt;&gt;UpdateStatus: dbClient
+    UpdateStatus-&gt;&gt;GetDBName: dbClaim
+    GetDBName-&gt;&gt;UpdateStatus: Spec.DatabaseName or Spec.DBNameOverride            
+</div>
+<h3 id="lifecycle">Lifecycle<a class="headerlink" href="#lifecycle" title="Permanent link">¶</a></h3>
+<p><strong><em>TODO - Document the full lifecycle not just for Dynamic Host</em></strong></p>
+<p>The dynamic host allocation will have the following lifecycle:</p>
+<p>The create and update lifecycles are fairly simple:
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram-v2
+CDH: Create Dynamic Host
+CDU: Update Dynamic Host
+
+[*] --&gt; DbClaim
+state DbClaim {
+    Create --&gt; CDH
+    --
+    Update --&gt; CDU
+}
+</div></p>
+<p>The delete lifecycle is more complex shown below:</p>
+<div class="mermaid">%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
+stateDiagram-v2
+DCD: Delete CloudDatabase
+DDC: Delete DatabaseClaim
+
+[*] --&gt; DbClaim
+state DbClaim {
+    Delete --&gt; Finalizer
+    state Finalizer {
+        state check_host &lt;<choice>&gt;
+        state check_label &lt;<choice>&gt;
+        [*] --&gt; check_host
+        check_host --&gt; check_label: if Claim.Host == ""
+        check_host --&gt; [*] : if Claim.Host != ""
+        check_label --&gt; DCD: if ReclaimPolicy == Delete &amp;&amp;<br/> DbClaims using CloudDB == 1
+        check_label --&gt; [*] : if ReclaimPolicy == Retain
+        DCD --&gt; [*]
+    }
+    Finalizer --&gt; DDC
+    DDC --&gt; [*]
+}
+</choice></choice></div>
+<p>The sharing of database by multiple applicaitons (Claims) by Crossplane
+<a href="https://github.com/crossplane/provider-gcp/issues/157">is an open issue</a>.
+The db-controller creates the CloudDatabase Claim and the associated
+connection secret is created in the db-controller namespace.
+We can allow sharing of the database using the FragmentKey structure
+by mapping to the FragmentKKey using DatabaseClaim InstanceLabel property.</p>
+<p><a href="https://github.com/crossplane/crossplane-runtime/issues/21">Crossplane</a> started 
+with the intent of using a similar
+<a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaiming">pattern used by pv and pvc</a>
+in Kubernetes. The ReclaimPolicy had a lot off issues and it
+<a href="https://github.com/crossplane/crossplane-runtime/issues/179">got backed out</a> and
+it got renamed to DeletionPolicy on just the CloudDatabase resource.</p>
+<p>DatabaseClaim resources are namespaced, but the
+CloudDatabase resources are dynamically provisioned as cluster scoped.
+A namespaced resource cannot, by design, own a cluster scoped resource.
+This could be an issue in how we manage lifecycle, see
+<a href="https://github.com/kubernetes/kubernetes/issues/65200">kubernetes</a> and
+<a href="https://github.com/crossplane/provider-gcp/issues/99">crossplane</a> references.</p>
+<p>Given the Crossplane experience we will retain the FragmentKey allocation
+CloudDatabase cluster resource so that it can be shared. The deletion of
+ClaimDatabase will remove the CloudDatabase directly allocated
+directly by its claim, similar behavior to Crossplane composite behavior </p>
+<p>We need some more research PoC to figure out if
+we can use 
+<a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/">Kubernetes Finalizers</a>
+on DatabaseClaim to honor a ReclaimPolicy with values of delete and retain.
+Then have ReclaimPolicy delete a dynamically allocated database
+that is no longer shared. The reason for the 
+<a href="https://github.com/crossplane/crossplane-runtime/issues/179#issuecomment-637462056">deprecation of ReclaimPolicy from CrossPlane</a>
+needs to be examined in the light of our requirements and why Crossplane
+does not offer a 
+<a href="https://github.com/crossplane/provider-gcp/issues/157">Shared Database Pattern</a>.
+A argument made <a href="https://github.com/crossplane/crossplane/issues/1229#issuecomment-585382715">here</a> 
+suggest that in most cases sharing infrastructure within namespace 
+boundaries with a  single claim is valid, as namespace == application 
+team boundary. Does forcing applciations to share namespace for
+database sharing cause any issues, e.g. RBAC?</p>
+<p>The initial PoC will manage ReclaimPolicy from the db-controller
+configuration using the InstanceLabels that enable sharing.
+There will be a DatabaseClaim finalizer that will run 
+and if there are no more claims against the InstanceLabel
+then the dynamic database is reclaimed. There will also
+be a global and reclaim policy per InstanceLabel/FragmentKey.
+This will not be exposed to the Applications e.g. ReclaimPolicy 
+in the DatabaseClaim. I don't think we need this complexity
+but could be added if there is a need.</p>
+<p>The Crossplane Infrastructure Operator, has a
+resource DeletionPolicy which specifies what will happen 
+to the underlying external cloud resource when this managed resource is 
+deleted - either "Delete" or "Orphan" the external resource. This will
+be managed by defaultDeletionPolicy and deletionPolicy on each FragmentKey.</p>
+<p>Another features we have is to share resources like RDS among
+different clusters that are deployed. We don't have a design yet on
+how to best support this requirement.
+Crossplane Infrastructure Operator supports multiple clusters,
+using an admin cluster and then resources like CloudDatabases
+are pushed to the managed clusters,
+<a href="https://blog.crossplane.io/crossplane-v0-7-schedule-workloads-to-any-kubernetes-cluster-including-bare-metal/">Crossplane workload reference</a>.
+Crossplane also have an <a href="https://github.com/crossplane/provider-gcp/issues/157">observerable pattern</a>
+to deal with this coupling between clusters trying to share resources.</p>
+<h3 id="deployment">Deployment<a class="headerlink" href="#deployment" title="Permanent link">¶</a></h3>
+<p>When API is updated need to update the crd definition
+and helm chart that updates it. The following make target
+is setup to do this:
+<div class="highlight"><pre><span></span><code>make<span class="w"> </span>update_crds
+</code></pre></div></p>
+<h3 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Permanent link">¶</a></h3>
+<h3 id="authorization">Authorization<a class="headerlink" href="#authorization" title="Permanent link">¶</a></h3>
+<p>This db-controller service will require access to credentials that have
+permissions to provision the database as well as access to the master
+user account to manage users for the target database.</p>
+<h3 id="ingress">Ingress<a class="headerlink" href="#ingress" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h3 id="audit">Audit<a class="headerlink" href="#audit" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h3 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">¶</a></h3>
+<p><strong><em>TBD</em></strong></p>
+<h3 id="alerting">Alerting<a class="headerlink" href="#alerting" title="Permanent link">¶</a></h3>
+<p>Prometheus alerts based on errors from the db-controller.</p>
+<h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h3 id="security">Security<a class="headerlink" href="#security" title="Permanent link">¶</a></h3>
+<p><strong><em>TBD</em></strong></p>
+<h3 id="third-party-software">Third-Party Software<a class="headerlink" href="#third-party-software" title="Permanent link">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Name/Version</th>
+<th>License</th>
+<th>Description/Reason for usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fsnotify</td>
+<td>BSD-3-Clause</td>
+<td>Golang cross platform file system notifications</td>
+</tr>
+<tr>
+<td>go-password</td>
+<td>MIT License</td>
+<td>Generation of random passwords with provided requirements as described by  AgileBits</td>
+</tr>
+</tbody>
+</table>
+<h3 id="metricstelemetry">Metrics/Telemetry<a class="headerlink" href="#metricstelemetry" title="Permanent link">¶</a></h3>
+<ul>
+<li>The following metrics should be exposed:</li>
+<li>Total database users created</li>
+<li>Time to create a new database user</li>
+<li>Total database provisioning errors</li>
+<li>Total database users created with errors</li>
+<li>Total passwords rotated</li>
+<li>Time to rotate user password</li>
+<li>Total password rotated with error</li>
+<li>Total DBClaim load errors</li>
+<li>Total DBClaims loaded</li>
+<li>Time to load a DBClaim</li>
+</ul>
+<h3 id="rate-limits">Rate Limits<a class="headerlink" href="#rate-limits" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h3 id="uxui">UX/UI<a class="headerlink" href="#uxui" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h3 id="high-availabilityresiliency">High Availability/Resiliency<a class="headerlink" href="#high-availabilityresiliency" title="Permanent link">¶</a></h3>
+<p><strong><em>TBD</em></strong></p>
+<h3 id="scalability">Scalability<a class="headerlink" href="#scalability" title="Permanent link">¶</a></h3>
+<p>The db-controller service needs to be able to scale out based on demand.</p>
+<h3 id="backup">Backup<a class="headerlink" href="#backup" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h3 id="disaster-recovery">Disaster Recovery<a class="headerlink" href="#disaster-recovery" title="Permanent link">¶</a></h3>
+<p><strong><em>TBD</em></strong></p>
+<h3 id="data-retention">Data Retention<a class="headerlink" href="#data-retention" title="Permanent link">¶</a></h3>
+<p><strong><em>N/A</em></strong></p>
+<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">¶</a></h2>
+<h3 id="test-plan">Test Plan<a class="headerlink" href="#test-plan" title="Permanent link">¶</a></h3>
+<p><strong><em>TBD</em></strong></p>
+<h3 id="test-matrix">Test Matrix<a class="headerlink" href="#test-matrix" title="Permanent link">¶</a></h3>
+<p><strong><em>TBD</em></strong></p>
+<h2 id="migration">Migration<a class="headerlink" href="#migration" title="Permanent link">¶</a></h2>
+<p><strong><em>N/A</em></strong></p>
+<h2 id="deployment-architecture">Deployment Architecture<a class="headerlink" href="#deployment-architecture" title="Permanent link">¶</a></h2>
+<p><strong><em>TBD</em></strong></p>
+<h2 id="upgrades">Upgrades<a class="headerlink" href="#upgrades" title="Permanent link">¶</a></h2>
+<p><strong><em>N/A</em></strong></p>
+<h2 id="service-dependencies">Service Dependencies<a class="headerlink" href="#service-dependencies" title="Permanent link">¶</a></h2>
+<p>This service depends on these services:
+* kube-api-server
+* <a href="https://github.com/seizadi/space-controller">SpaceController</a> or similar operator: updates the RDS root passwords that the db-controller can use</p>
+<p>These services depend on this service:
+<strong><em>N/A</em></strong></p>
+<h2 id="service-killers">Service Killers<a class="headerlink" href="#service-killers" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Service Name</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RDS</td>
+<td>Can't create new databases, can't rotate passwords. can't process new claims.</td>
+</tr>
+<tr>
+<td>kube-apiserver</td>
+<td>full down.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="data-analytics">Data Analytics<a class="headerlink" href="#data-analytics" title="Permanent link">¶</a></h2>
+<p><strong><em>N/A</em></strong></p>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">¶</a></h2>
+<p><a href="https://github.com/infobloxopen/hotload">Hotload database driver</a></p>
+</article>
+</div>
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+</div>
+</main>
+<footer class="md-footer">
+<div class="md-footer-meta md-typeset">
+<div class="md-footer-meta__inner md-grid">
+<div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" rel="noopener" target="_blank">
+      Material for MkDocs
+    </a>
+</div>
+</div>
+</div>
+</footer>
+</div>
+<div class="md-dialog" data-md-component="dialog">
+<div class="md-dialog__inner md-typeset"></div>
+</div>
+<script id="__config" type="application/json">{"base": ".", "features": ["navigation.instant", "navigation.expand"], "search": "assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+<script src="assets/javascripts/bundle.fe8b6f2b.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/9.0.1/mermaid.min.js"></script>
+<script>mermaid.initialize({});</script></body>
+</html>
