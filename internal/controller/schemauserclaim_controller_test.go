@@ -1,4 +1,4 @@
-package controllers
+package controller
 
 import (
 	"context"
@@ -7,7 +7,9 @@ import (
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	. "github.com/infobloxopen/db-controller/pkg/dbclient"
+	"github.com/infobloxopen/db-controller/pkg/schemauserclaim"
 	. "github.com/infobloxopen/db-controller/testutils"
 	_ "github.com/lib/pq"
 	. "github.com/onsi/ginkgo/v2"
@@ -18,11 +20,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestSchemaUserClaimReconcile(t *testing.T) {
 	RegisterFailHandler(Fail)
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	testDB := SetupSqlDB(t, "user_a", "masterpassword")
 	defer testDB.Close()
@@ -31,11 +35,15 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 		Client             client.Client
 		Log                logr.Logger
 		Scheme             *runtime.Scheme
-		Config             *viper.Viper
+		Config             *schemauserclaim.SchemaUserConfig
 		DbIdentifierPrefix string
 		Context            context.Context
 		Request            controllerruntime.Request
 	}
+
+	viperObj := viper.New()
+	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
+
 	tests := []struct {
 		name    string
 		rec     reconciler
@@ -46,7 +54,9 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			"Get UserSchema claim 1",
 			reconciler{
 				Client: &MockClient{Port: strconv.Itoa(testDB.Port)},
-				Config: NewConfig(complexityEnabled),
+				Config: &schemauserclaim.SchemaUserConfig{
+					Viper: viperObj,
+				},
 				Request: controllerruntime.Request{
 					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-1"},
 				},
@@ -56,17 +66,18 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 			false,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &SchemaUserClaimReconciler{
 				Client: tt.rec.Client,
-				BaseReconciler: BaseReconciler{
-					Log:    tt.rec.Log,
-					Scheme: tt.rec.Scheme,
-					Config: tt.rec.Config,
-				},
+				Log:    tt.rec.Log,
+				Scheme: tt.rec.Scheme,
+				Config: tt.rec.Config,
 			}
-			result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
+			r.SetupWithManager(nil)
+
+			result, err := r.Reconciler().Reconcile(tt.rec.Context, tt.rec.Request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -79,7 +90,7 @@ func TestSchemaUserClaimReconcile(t *testing.T) {
 				return
 			}
 
-			dbClient, err := GetClientForExistingDB(existingDBConnInfo, &r.Log)
+			dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &r.Log)
 			if err != nil {
 				t.Errorf("error = %v", err)
 				return

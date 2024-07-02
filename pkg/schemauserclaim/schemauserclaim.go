@@ -1,20 +1,4 @@
-/*
-Copyright 2022.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-package controllers
+package schemauserclaim
 
 import (
 	"context"
@@ -23,44 +7,58 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	_ "github.com/lib/pq"
+	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	v1 "github.com/infobloxopen/db-controller/api/v1"
+	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	// FIXME: upgrade kubebuilder so this package will be removed
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-type SchemaUserClaimReconciler struct {
-	client.Client
-	BaseReconciler
-	Recorder record.EventRecorder
+type SchemaUserConfig struct {
+	Viper                 *viper.Viper
+	MasterAuth            *rdsauth.MasterAuth
+	DbIdentifierPrefix    string
+	Class                 string
+	MetricsDepYamlPath    string
+	MetricsConfigYamlPath string
 }
 
-//+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=schemauserclaims,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=schemauserclaims/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=schemauserclaims/finalizers,verbs=update
-//+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims/finalizers,verbs=get;list;watch
-//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// SchemaUserReconciler reconciles a DatabaseClaim object
+type SchemaUserClaimReconciler struct {
+	client.Client
+	Config *SchemaUserConfig
+}
+
+func Reconcile(r *SchemaUserClaimReconciler, ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	return r.Reconcile(ctx, req)
+}
 
 func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("UserSchemaClaim", req.NamespacedName).V(InfoLevel)
+	log := log.FromContext(ctx).WithValues("UserSchemaClaim", req.NamespacedName)
 
 	//fetch schemauserclaim
-	var schemaUserClaim persistancev1.SchemaUserClaim
+	var schemaUserClaim v1.SchemaUserClaim
 	if err := r.Get(ctx, req.NamespacedName, &schemaUserClaim); err != nil {
 		log.Error(err, "unable to fetch SchemaUser")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	//check if class is allowed
-	if permitted := IsClassPermitted(r.Class, *schemaUserClaim.Spec.Class); !permitted {
-		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *schemaUserClaim.Spec.Class, "controllerClass", r.Class)
+	if permitted := basefun.IsClassPermitted(r.Config.Class, *schemaUserClaim.Spec.Class); !permitted {
+		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *schemaUserClaim.Spec.Class, "controllerClass", r.Config.Class)
 		return ctrl.Result{}, nil
 	}
 
@@ -71,7 +69,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// get dbclaim
-	var dbClaim persistancev1.DatabaseClaim
+	var dbClaim v1.DatabaseClaim
 
 	if err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: schemaUserClaim.Spec.DBClaimName}, &dbClaim); err != nil {
 		if client.IgnoreNotFound(err) != nil {
@@ -95,7 +93,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	existingDBConnInfo.Password = masterPassword
 
 	//get client to DB
-	dbClient, err := GetClientForExistingDB(existingDBConnInfo, &r.Log)
+	dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &log)
 	if err != nil {
 		log.Error(err, "creating database client error.")
 		return ctrl.Result{}, err
@@ -103,7 +101,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	defer dbClient.Close()
 
 	if schemaUserClaim.Status.Schemas == nil {
-		schemaUserClaim.Status.Schemas = []persistancev1.SchemaStatus{}
+		schemaUserClaim.Status.Schemas = []v1.SchemaStatus{}
 	}
 
 	for _, schema := range schemaUserClaim.Spec.Schemas {
@@ -136,7 +134,7 @@ func (r *SchemaUserClaimReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			if currentUserStatus.UserUpdatedAt == nil || time.Since(currentUserStatus.UserUpdatedAt.Time) > rotationTime {
 				log.Info("rotating user " + currentUserStatus.UserName)
 
-				userPassword, err := GeneratePassword(r.Config)
+				userPassword, err := basefun.GeneratePassword(r.Config.Viper)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -196,13 +194,13 @@ func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, dat
 	}
 	if !roleExists {
 		var err error = nil
-		if strings.HasSuffix(roleName, strings.ToLower(string(persistancev1.Admin))) {
+		if strings.HasSuffix(roleName, strings.ToLower(string(v1.Admin))) {
 			_, err = dbClient.CreateAdminRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
 
-		} else if strings.HasSuffix(roleName, strings.ToLower(string(persistancev1.Regular))) {
+		} else if strings.HasSuffix(roleName, strings.ToLower(string(v1.Regular))) {
 			_, err = dbClient.CreateRegularRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
 
-		} else if strings.HasSuffix(roleName, strings.ToLower(string(persistancev1.ReadOnly))) {
+		} else if strings.HasSuffix(roleName, strings.ToLower(string(v1.ReadOnly))) {
 			_, err = dbClient.CreateReadOnlyRole(strings.ToLower(databaseName), strings.ToLower(roleName), strings.ToLower(schemaName))
 		}
 
@@ -215,42 +213,42 @@ func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, dat
 	return nil
 }
 
-func getOrCreateSchemaStatus(schemaUserClaim *persistancev1.SchemaUserClaim, schemaName string) *persistancev1.SchemaStatus {
-	schemaIdx := slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c persistancev1.SchemaStatus) bool {
+func getOrCreateSchemaStatus(schemaUserClaim *v1.SchemaUserClaim, schemaName string) *v1.SchemaStatus {
+	schemaIdx := slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c v1.SchemaStatus) bool {
 		return c.Name == schemaName
 	})
 	if schemaIdx == -1 {
-		aux := &persistancev1.SchemaStatus{
+		aux := &v1.SchemaStatus{
 			Name:        schemaName,
 			Status:      "created",
-			UsersStatus: []persistancev1.UserStatusType{},
+			UsersStatus: []v1.UserStatusType{},
 		}
 		schemaUserClaim.Status.Schemas = append(schemaUserClaim.Status.Schemas, *aux)
-		schemaIdx = slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c persistancev1.SchemaStatus) bool {
+		schemaIdx = slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c v1.SchemaStatus) bool {
 			return c.Name == schemaName
 		})
 	}
 	return &schemaUserClaim.Status.Schemas[schemaIdx]
 }
 
-func getOrCreateUserStatus(currentSchemaStatus *persistancev1.SchemaStatus, userName string) *persistancev1.UserStatusType {
-	userIdx := slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c persistancev1.UserStatusType) bool {
+func getOrCreateUserStatus(currentSchemaStatus *v1.SchemaStatus, userName string) *v1.UserStatusType {
+	userIdx := slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c v1.UserStatusType) bool {
 		return c.UserName == userName+dbuser.SuffixA || c.UserName == userName+dbuser.SuffixB
 	})
 	if userIdx == -1 {
-		aux := &persistancev1.UserStatusType{
+		aux := &v1.UserStatusType{
 			UserName:   userName,
 			UserStatus: "created",
 		}
 		currentSchemaStatus.UsersStatus = append(currentSchemaStatus.UsersStatus, *aux)
-		userIdx = slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c persistancev1.UserStatusType) bool {
+		userIdx = slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c v1.UserStatusType) bool {
 			return c.UserName == userName
 		})
 	}
 	return &currentSchemaStatus.UsersStatus[userIdx]
 }
 
-func (r *SchemaUserClaimReconciler) getMasterPassword(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (string, error) {
+func (r *SchemaUserClaimReconciler) getMasterPassword(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
 	secretKey := "password"
 	gs := &corev1.Secret{}
 
@@ -270,17 +268,17 @@ func (r *SchemaUserClaimReconciler) getMasterPassword(ctx context.Context, dbCla
 }
 
 func (r *SchemaUserClaimReconciler) getPasswordRotationTime() time.Duration {
-	prt := time.Duration(r.Config.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
+	prt := time.Duration(r.Config.Viper.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
 
-	if prt < minRotationTime || prt > maxRotationTime {
-		r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
-		return minRotationTime
+	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
+		log.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
+		return basefun.GetMinRotationTime()
 	}
 
 	return prt
 }
 
-func (r *SchemaUserClaimReconciler) updateClientStatus(ctx context.Context, schemaUserClaim *persistancev1.SchemaUserClaim) error {
+func (r *SchemaUserClaimReconciler) updateClientStatus(ctx context.Context, schemaUserClaim *v1.SchemaUserClaim) error {
 
 	err := r.Client.Status().Update(ctx, schemaUserClaim)
 	if err != nil {

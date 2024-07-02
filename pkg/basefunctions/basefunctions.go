@@ -1,7 +1,8 @@
-package controllers
+package basefunctions
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -9,6 +10,39 @@ import (
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
 )
+
+var (
+	minRotationTime = 60 * time.Minute // rotation time in minutes
+	maxRotationTime = 1440 * time.Minute
+	maxWaitTime     = 10 * time.Minute
+	defaultPassLen  = 32
+	defaultNumDig   = 10
+	defaultNumSimb  = 10
+)
+
+func GetMinRotationTime() time.Duration {
+	return minRotationTime
+}
+
+func GetMaxRotationTime() time.Duration {
+	return maxRotationTime
+}
+
+func GetMaxWaitTime() time.Duration {
+	return maxWaitTime
+}
+
+func GetDefaultPassLen() int {
+	return defaultPassLen
+}
+
+func GetDefaultNumDig() int {
+	return defaultNumDig
+}
+
+func GetDefaultNumSimb() int {
+	return defaultNumSimb
+}
 
 func IsClassPermitted(claimClass, controllerClass string) bool {
 	if claimClass == "" {

@@ -3,9 +3,7 @@ package dbclient
 import (
 	"database/sql"
 	"flag"
-	"fmt"
 	"net"
-	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -31,62 +29,62 @@ func init() {
 	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
 }
 
-type testDB struct {
-	t        *testing.T
-	port     int
-	username string
-	password string
-	resource *dockertest.Resource
-	pool     *dockertest.Pool
-}
+// type testDB struct {
+// 	t        *testing.T
+// 	port     int
+// 	username string
+// 	password string
+// 	resource *dockertest.Resource
+// 	pool     *dockertest.Pool
+// }
 
-func (t *testDB) URL() string {
-	u := url.URL{
-		Scheme: "postgres",
-		Host:   fmt.Sprintf("localhost:%d", t.port),
-		User:   url.UserPassword(t.username, t.password),
-		Path:   "/postgres",
-	}
-	q := u.Query()
-	q.Set("sslmode", "disable")
-	u.RawQuery = q.Encode()
-	return u.String()
-}
+// func (t *testDB) URL() string {
+// 	u := url.URL{
+// 		Scheme: "postgres",
+// 		Host:   fmt.Sprintf("localhost:%d", t.port),
+// 		User:   url.UserPassword(t.username, t.password),
+// 		Path:   "/postgres",
+// 	}
+// 	q := u.Query()
+// 	q.Set("sslmode", "disable")
+// 	u.RawQuery = q.Encode()
+// 	return u.String()
+// }
 
-func (t *testDB) Close() {
-	t.t.Log("Tearing down dockertest resource of PostgreSQL DB")
-	if err := t.pool.Purge(t.resource); err != nil {
-		t.t.Errorf("Could not purge resource: %s", err)
-	}
-}
+// func (t *testDB) Close() {
+// 	t.t.Log("Tearing down dockertest resource of PostgreSQL DB")
+// 	if err := t.pool.Purge(t.resource); err != nil {
+// 		t.t.Errorf("Could not purge resource: %s", err)
+// 	}
+// }
 
-func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
-	if dbname == "" {
-		dbname = "postgres"
-	}
-	dbConnStr := fmt.Sprintf("host=localhost port=%d user=%s dbname=%s password=%s sslmode=disable",
-		t.port, username, dbname, password)
-	return sql.Open("postgres", dbConnStr)
-}
+// func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
+// 	if dbname == "" {
+// 		dbname = "postgres"
+// 	}
+// 	dbConnStr := fmt.Sprintf("host=localhost port=%d user=%s dbname=%s password=%s sslmode=disable",
+// 		t.port, username, dbname, password)
+// 	return sql.Open("postgres", dbConnStr)
+// }
 
-func (t *testDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, error) {
-	if dbname == "" {
-		dbname = "postgres"
-	}
+// func (t *testDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, error) {
+// 	if dbname == "" {
+// 		dbname = "postgres"
+// 	}
 
-	dbConnStr := PostgresURI(fmt.Sprintf("localhost:%d", t.port), username, password, dbname, "disable")
-	t.t.Log("dbConnStr", dbConnStr)
-	return sql.Open("postgres", dbConnStr)
-}
+// 	dbConnStr := PostgresURI(fmt.Sprintf("localhost:%d", t.port), username, password, dbname, "disable")
+// 	t.t.Log("dbConnStr", dbConnStr)
+// 	return sql.Open("postgres", dbConnStr)
+// }
 
-func (t *testDB) OpenUserWithConnectionString(dbname, username, password string) (*sql.DB, error) {
-	if dbname == "" {
-		dbname = "postgres"
-	}
-	dbConnStr := PostgresConnectionString("localhost", strconv.Itoa(t.port), username, password, dbname, "disable")
-	t.t.Log("dbConnStr", dbConnStr)
-	return sql.Open("postgres", dbConnStr)
-}
+// func (t *testDB) OpenUserWithConnectionString(dbname, username, password string) (*sql.DB, error) {
+// 	if dbname == "" {
+// 		dbname = "postgres"
+// 	}
+// 	dbConnStr := PostgresConnectionString("localhost", strconv.Itoa(t.port), username, password, dbname, "disable")
+// 	t.t.Log("dbConnStr", dbConnStr)
+// 	return sql.Open("postgres", dbConnStr)
+// }
 
 func openPort(t *testing.T) (string, int) {
 	port, err := net.Listen("tcp", "0.0.0.0:0")
@@ -146,7 +144,7 @@ func setupSqlDB(t *testing.T) *testDB {
 
 	// Exponential retry to connect to database while it is booting
 	if err := pool.Retry(func() error {
-		dbConnStr := PostgresURI(addr, user, pass, "postgres", "disable")
+		dbConnStr := PostgresURI(addr, strconv.Itoa(port), user, pass, "postgres", "disable")
 		sqlDB, err = sql.Open("postgres", dbConnStr)
 		if err != nil {
 			t.Log("Database is not ready yet (it is booting up, wait for a few tries)...")
@@ -161,7 +159,7 @@ func setupSqlDB(t *testing.T) *testDB {
 		t:        t,
 		username: user,
 		password: pass,
-		port:     port,
+		Port:     port,
 		resource: resource,
 		pool:     pool,
 	}
@@ -639,7 +637,7 @@ func TestPostgresURI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := PostgresURI(fmt.Sprintf("%s:%s", tt.args.host, tt.args.port), tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
+			if got := PostgresURI(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
 				t.Errorf("\n   got: %s\nwanted: %s", got, tt.want)
 			}
 		})

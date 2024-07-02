@@ -40,6 +40,7 @@ import (
 	"github.com/infobloxopen/db-controller/internal/controller"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+	"github.com/infobloxopen/db-controller/pkg/schemauserclaim"
 
 	// +kubebuilder:scaffold:imports
 
@@ -184,7 +185,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := &databaseclaim.DatabaseClaimConfig{
+	dbClaimConfig := &databaseclaim.DatabaseClaimConfig{
 		// FIXME: implement viper config
 		// Viper:              ctlConfig,
 
@@ -199,7 +200,7 @@ func main() {
 	if err = (&controller.DatabaseClaimReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Config: cfg,
+		Config: dbClaimConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
@@ -211,6 +212,26 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("dbRoleClaim-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
+		os.Exit(1)
+	}
+
+	schemaUserClaimConfig := &schemauserclaim.SchemaUserConfig{
+		// FIXME: implement viper config
+		// Viper:              ctlConfig,
+
+		Class:              class,
+		DbIdentifierPrefix: dbIdentifierPrefix,
+		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
+		MasterAuth:            rdsauth.NewMasterAuth(),
+		MetricsDepYamlPath:    metricsDepYamlPath,
+		MetricsConfigYamlPath: metricsConfigYamlPath,
+	}
+	if err = (&controller.SchemaUserClaimReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: schemaUserClaimConfig,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
