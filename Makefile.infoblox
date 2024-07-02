@@ -1,0 +1,88 @@
+GIT_COMMIT	   := $(shell git describe --always --long --tags || echo pre-commit)
+# image tag
+
+CHART_VERSION := $(GIT_COMMIT)
+
+PROJECT		?= db-controller
+
+CHART_FILE := $(PROJECT)-$(CHART_VERSION).tgz
+CHART_FILE_CRD := $(PROJECT)-crds-$(CHART_VERSION).tgz
+
+IMG ?= ghcr.io/infobloxopen/db-controller:${GIT_COMMIT}
+# FIXME: combine all images into one
+DBPROXY_IMG ?= ghcr.io/infobloxopen/db-controller/dbproxy:${GIT_COMMIT}
+DSNEXEC_IMG ?= ghcr.io/infobloxopen/db-controller/dsnexec:${GIT_COMMIT}
+
+.id:
+	git config user.email | awk -F@ '{print $$1}' > .id
+
+docker-build-%: target=$(@:docker-build-%=%)
+docker-build-%: .id
+	cd $(target) && $(CONTAINER_TOOL) build -t ghcr.io/infobloxopen/$(target):$(GIT_COMMIT) .
+
+docker-push-%: target=$(@:docker-push-%=%)
+docker-push-%: .id
+	$(CONTAINER_TOOL) push ghcr.io/infobloxopen/$(target):$(GIT_COMMIT)
+
+# FIXME: use the actual chart names
+build-properties: build.properties crd.build.properties
+
+build.properties:
+	@sed 's/{CHART_FILE}/$(CHART_FILE)/g' build.properties.in > $@
+
+crd.build.properties:
+	@sed 's/{CHART_FILE}/$(CHART_FILE_CRD)/g' build.properties.in > $@
+
+
+HELM 	?= $(LOCALBIN)/helm-$(HELM_VERSION)
+HELMS3	?= .helms3
+
+HELM_VERSION ?= v3.15.2
+
+.PHONY: helm
+helm: $(HELM) ## Download golangci-lint locally if necessary.
+$(HELM): $(LOCALBIN)
+	test -s $(LOCALBIN)/helm || { curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH=${PATH}:$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; }
+	ln -sf $(LOCALBIN)/helm-$(HELM_VERSION) $(LOCALBIN)/helm
+
+.PHONY: helms3
+helms3: helm $(HELMS3)
+$(HELMS3): $(LOCALBIN)
+	$(HELM) plugin list | grep s3 || $(HELM) plugin install https://github.com/hypnoglow/helm-s3.git
+	$(HELM) repo ls | grep infobloxcto || $(HELM) repo add infobloxcto s3://infoblox-helm-dev/charts
+	$(HELM) repo update
+	touch $@
+
+
+package-charts: package-chart-db-controller package-chart-db-controller-crds
+
+package-chart-%: target=$(@:package-chart-%=%)
+package-chart-%: helm
+	$(HELM) lint helm/$(*F)
+	$(HELM) package helm/$(*F) --version ${CHART_VERSION} --app-version ${CHART_VERSION}
+
+push-charts: .id push-chart-db-controller push-chart-db-controller-crds
+
+push-chart-%: target=$(@:push-chart-%=%)
+push-chart-%: helms3
+	$(HELM) repo update
+	PATH=$PATH:$(LOCALBIN) $(HELM) s3 push --force ${target}-${CHART_VERSION}.tgz infobloxcto
+
+.PHONY: list-of-images
+list-of-images:
+	@echo -n ${IMG} ${DBPROXY_IMG} ${DSNEXEC_IMG}
+
+# FIXME: remove for a single image
+build-images: docker-build docker-build-dbproxy docker-build-dsnexec
+
+# FIXME: remove for a single image
+push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
+
+deploy: .id build-images push-images package-chart-db-controller
+	helm upgrade --install `cat .id` \
+		db-controller-${CHART_VERSION}.tgz \
+		--debug --wait --namespace "`cat .id`" \
+		--create-namespace \
+		-f helm/db-controller/minikube.yaml \
+		--set dbController.class=`cat .id` \
+		${HELM_SETFLAGS}

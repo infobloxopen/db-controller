@@ -14,11 +14,32 @@ rules:
 - apiGroups:
   - persistance.atlas.infoblox.com
   resources:
+  - databaseclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
   - databaseclaims/finalizers
   verbs:
   - get
   - list
+  - update
   - watch
+- apiGroups:
+  - persistance.atlas.infoblox.com
+  resources:
+  - databaseclaims/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - persistance.atlas.infoblox.com
   resources:

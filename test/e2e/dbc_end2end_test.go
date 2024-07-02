@@ -12,7 +12,7 @@
 *
  */
 
-package controllers
+package e2e
 
 import (
 	"context"
@@ -32,7 +32,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -44,7 +46,12 @@ const (
 )
 
 var (
-	falseVal               = false
+	e2e_cfg       *rest.Config
+	e2e_k8sClient client.Client
+	e2e_testEnv   *envtest.Environment
+)
+
+var (
 	namespace              string
 	db1                    string
 	newdbcMasterSecretName string
@@ -84,7 +91,7 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 
 		By("bootstrapping test environment")
 		e2e_testEnv = &envtest.Environment{
-			UseExistingCluster: &trueVal,
+			UseExistingCluster: ptr.To(true),
 		}
 
 		e2e_cfg, err = e2e_testEnv.Start()
@@ -275,7 +282,7 @@ func MigrateUseExistingToNewRDS() {
 	By("Getting the existing dbclaim")
 	Expect(e2e_k8sClient.Get(ctx, key, existingDbClaim)).Should(Succeed())
 	By("Removing the useExistingFlag in dbclaim")
-	existingDbClaim.Spec.UseExistingSource = &falseVal
+	existingDbClaim.Spec.UseExistingSource = ptr.To(false)
 	existingDbClaim.Spec.SourceDataFrom = nil
 	Expect(e2e_k8sClient.Update(ctx, existingDbClaim)).Should(Succeed())
 	createdDbClaim := &persistancev1.DatabaseClaim{}
@@ -323,8 +330,8 @@ func UseExistingPostgresRDSTest() {
 			Username:              "sample_user",
 			Type:                  "postgres",
 			DSNName:               "dsn",
-			EnableReplicationRole: &falseVal,
-			UseExistingSource:     &trueVal,
+			EnableReplicationRole: ptr.To(false),
+			UseExistingSource:     ptr.To(true),
 			DBVersion:             "15.5",
 			DeletionPolicy:        "delete",
 			SourceDataFrom: &persistancev1.SourceDataFrom{
@@ -475,8 +482,8 @@ func createPostgresRDSWithEmptyDbVersionTest() {
 			Username:              "sample_user",
 			Type:                  "postgres",
 			DSNName:               "dsn",
-			EnableReplicationRole: &falseVal,
-			UseExistingSource:     &falseVal,
+			EnableReplicationRole: ptr.To(false),
+			UseExistingSource:     ptr.To(false),
 		},
 	}
 	Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
@@ -515,8 +522,8 @@ func cleanupdb(db string) {
 			Username:              "sample_user",
 			Type:                  "postgres",
 			DSNName:               "dsn",
-			EnableReplicationRole: &falseVal,
-			UseExistingSource:     &falseVal,
+			EnableReplicationRole: ptr.To(false),
+			UseExistingSource:     ptr.To(false),
 			DBVersion:             "15.5",
 			DeletionPolicy:        "delete",
 		},

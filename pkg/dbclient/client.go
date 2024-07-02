@@ -104,9 +104,9 @@ func PostgresConnectionString(host, port, user, password, dbname, sslmode string
 		port, escapeValue(user), escapeValue(password), escapeValue(dbname), sslmode)
 }
 
-func PostgresURI(host, port, user, password, dbname, sslmode string) string {
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
-		url.QueryEscape(user), url.QueryEscape(password), host, port, url.QueryEscape(dbname), sslmode)
+// PostgresURI returns a URI for a postgres connection
+func PostgresURI(addr, user, password, dbname, sslmode string) string {
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", url.QueryEscape(user), url.QueryEscape(password), addr, url.QueryEscape(dbname), sslmode)
 }
 
 // CreateDataBase implements typo func name incase anybody is using it

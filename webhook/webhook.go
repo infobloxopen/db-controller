@@ -25,7 +25,7 @@ const (
 type DBProxyInjector struct {
 	Name                 string
 	Client               client.Client
-	Decoder              *admission.Decoder
+	Decoder              admission.Decoder
 	DBProxySidecarConfig *Config
 }
 

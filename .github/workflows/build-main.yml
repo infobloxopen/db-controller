@@ -28,6 +28,7 @@ jobs:
     - name: Build Image
       env:
         REGISTRY: ghcr.io/${{ github.repository_owner }}
+        BUILDKIT_PROGRESS: plain
       run: |
         echo 'db-controller-namespace' > .id
         make docker-build
@@ -37,7 +38,9 @@ jobs:
     - name: Push to GHCR
       env:
         REGISTRY: ghcr.io/${{ github.repository_owner }}
+        BUILDKIT_PROGRESS: plain
       run: |
+        echo -n "FIXME: only do this on main branch"
         make docker-push
         make docker-push-dbproxy
         make docker-push-dsnexec
