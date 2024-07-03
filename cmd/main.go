@@ -38,6 +38,7 @@ import (
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/internal/controller"
+	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 
@@ -134,6 +135,10 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	logger := zap.New(zap.UseFlagOptions(&opts))
+	ctlConfig := config.NewConfig(logger, configFile)
+	ctrl.SetLogger(logger)
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
@@ -185,8 +190,7 @@ func main() {
 	}
 
 	cfg := &databaseclaim.DatabaseClaimConfig{
-		// FIXME: implement viper config
-		// Viper:              ctlConfig,
+		Viper: ctlConfig,
 
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
