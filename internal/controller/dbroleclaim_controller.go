@@ -94,7 +94,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Error(fmt.Errorf("sourcedatabaseclaim cannot be nil"), "invalid_spec_source_database_claim_name")
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("sourcedatabaseclaim cannot be nil"))
 	}
-
+	//find DBClaim
 	dbclaimName := dbRoleClaim.Spec.SourceDatabaseClaim.Name
 	dbclaimNamespace := dbRoleClaim.Spec.SourceDatabaseClaim.Namespace
 	foundDbClaim := &persistancev1.DatabaseClaim{}
@@ -106,9 +106,11 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbclaimName))
 	}
 	log.Info("found dbclaim", "secretName", foundDbClaim.Spec.SecretName)
+
 	dbRoleClaim.Status.MatchedSourceClaim = foundDbClaim.Namespace + "/" + foundDbClaim.Name
 	r.Recorder.Event(&dbRoleClaim, "Normal", "Found", fmt.Sprintf("DatabaseClaim %s/%s", dbclaimNamespace, dbclaimName))
 
+	//find secret linked to DBClaim
 	foundSecret := &corev1.Secret{}
 	err = r.Get(ctx, types.NamespacedName{Name: foundDbClaim.Spec.SecretName, Namespace: dbclaimNamespace}, foundSecret)
 	if err != nil {
@@ -269,6 +271,7 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	sourceSecretData := sourceSecret.Data
 	role_secret := &corev1.Secret{}
 
+	//find SECRET
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: dbRoleClaim.Namespace,
 		Name:      secretName,
