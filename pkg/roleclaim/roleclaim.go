@@ -55,6 +55,8 @@ func Reconcile(r *DbRoleClaimReconciler, ctx context.Context, req ctrl.Request) 
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// FIXME: dont shadow log package
 	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName)
+	timeNow := metav1.Now()
+
 	var dbRoleClaim v1.DbRoleClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbRoleClaim); err != nil {
 		log.Error(err, "unable to fetch DatabaseClaim")
@@ -154,61 +156,84 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			dbRoleClaim.Status.Username = dbRoleClaim.Spec.UserName
 		}
 
-		for schemaName, role := range dbRoleClaim.Spec.SchemaRoleMap {
-			schemaName = strings.ToLower(schemaName)
+		rotationTime := r.getPasswordRotationTime()
 
-			//if schema doesn't exist, create it
-			err := createSchema(dbClient, schemaName, log)
+		//create users if it's first time processing OR rotate user & password if it's older than 'rotationTime'
+		if dbRoleClaim.Status.SchemasRolesUpdatedAt == nil || time.Since(dbRoleClaim.Status.SchemasRolesUpdatedAt.Time) > rotationTime {
+			if dbRoleClaim.Status.SchemasRolesUpdatedAt == nil {
+				log.Info("creating user, schemas and roles")
+			} else {
+				log.Info("rotating user")
+			}
+
+			//create schemas and roles
+			for schemaName, role := range dbRoleClaim.Spec.SchemaRoleMap {
+				schemaName = strings.ToLower(schemaName)
+
+				//if schema doesn't exist, create it
+				err := createSchema(dbClient, schemaName, log)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				//update schema status
+				dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus[schemaName] = "valid"
+
+				//create user and assign role
+				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
+				// check if role exists, if not: create it
+				if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
+					return ctrl.Result{}, err
+				}
+				//update role status
+				dbRoleClaim.Status.SchemaRoleStatus.RoleStatus[roleName] = "valid"
+
+			}
+
+			//create user
+			dbu := dbuser.NewDBUser(dbRoleClaim.Spec.UserName)
+			userPassword, err := basefun.GeneratePassword(r.Config.Viper)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-			//update schema status
-			dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus[schemaName] = "valid"
 
-			//create user and assign role
-			roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
-			// check if role exists, if not: create it
-			if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
+			nextUser := dbu.NextUser(dbRoleClaim.Status.Username)
+			dbRoleClaim.Status.Username = nextUser
+			created, err := dbClient.CreateUser(nextUser, "", userPassword)
+			if err != nil {
+				metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 				return ctrl.Result{}, err
 			}
-			//update role status
-			dbRoleClaim.Status.SchemaRoleStatus.RoleStatus[roleName] = "valid"
 
-			dbu := dbuser.NewDBUser(dbRoleClaim.Spec.UserName)
-			rotationTime := r.getPasswordRotationTime()
-
-			//create users if it's first time processing OR rotate user & password if it's older than 'rotationTime'
-			if dbRoleClaim.Status.SchemasRolesUpdatedAt == nil || time.Since(dbRoleClaim.Status.SchemasRolesUpdatedAt.Time) > rotationTime {
-				log.Info("rotating users")
-
-				userPassword, err := basefun.GeneratePassword(r.Config.Viper)
-				if err != nil {
+			//existing user, so update password
+			if !created {
+				if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
 					return ctrl.Result{}, err
-				}
-
-				nextUser := dbu.NextUser(dbRoleClaim.Status.Username)
-				dbRoleClaim.Status.Username = nextUser
-				created, err := dbClient.CreateUser(nextUser, roleName, userPassword)
-				if err != nil {
-					metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
-					return ctrl.Result{}, err
-				}
-
-				if !created {
-					//user exists already, so assign role to it
-					if err := dbClient.AssignRoleToUser(nextUser, roleName); err != nil {
-						metrics.UsersUpdated.Inc()
-						return ctrl.Result{}, err
-					}
-
-					if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
-						return ctrl.Result{}, err
-					}
 				}
 			}
+
+			//assign user to schema and roles
+			for schemaName, role := range dbRoleClaim.Spec.SchemaRoleMap {
+				schemaName = strings.ToLower(schemaName)
+				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
+
+				//user already exists, so assign role to it
+				if err := dbClient.AssignRoleToUser(nextUser, roleName); err != nil {
+					metrics.UsersUpdated.Inc()
+					return ctrl.Result{}, err
+				}
+			}
+
+			//copy source secret, change name, username and password
+			if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim, dbRoleClaim.Status.Username, userPassword); err != nil {
+				log.Error(err, "failed_copy_source_secret")
+				//r.Config.Recorder.Event(&dbRoleClaim, "Warning", "Update Failed", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
+				return r.manageError(ctx, &dbRoleClaim, err)
+			}
+
+			dbRoleClaim.Status.SecretUpdatedAt = &timeNow
+
+			dbRoleClaim.Status.SchemasRolesUpdatedAt = &timeNow
 		}
-		timeNow := metav1.Now()
-		dbRoleClaim.Status.SchemasRolesUpdatedAt = &timeNow
 
 		//update obj in k8s
 		if err = r.updateClientStatus(ctx, &dbRoleClaim); err != nil {
@@ -217,6 +242,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 		return r.manageSuccess(ctx, &dbRoleClaim)
 	}
+
 	//ELSE: username is not provided, so we just copy the current secret
 
 	if sourceSecret.GetResourceVersion() == dbRoleClaim.Status.SourceSecretResourceVersion {
@@ -227,14 +253,13 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	//copy source secret and change name
-	if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim); err != nil {
+	if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim, "", ""); err != nil {
 		log.Error(err, "failed_copy_source_secret")
 		//r.Config.Recorder.Event(&dbRoleClaim, "Warning", "Update Failed", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
 		return r.manageError(ctx, &dbRoleClaim, err)
 	}
 
 	dbRoleClaim.Status.SourceSecretResourceVersion = sourceSecret.GetResourceVersion()
-	timeNow := metav1.Now()
 	dbRoleClaim.Status.SecretUpdatedAt = &timeNow
 	//r.Config.Recorder.Event(&dbRoleClaim, "Normal", "Updated", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
 
@@ -284,60 +309,6 @@ func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, dat
 	}
 	return nil
 }
-
-// func getOrCreateSchemaStatus(schemaUserClaim *v1.DbRoleClaim, schemaName string) *v1.SchemaStatus {
-// 	schemaIdx := slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c v1.SchemaStatus) bool {
-// 		return c.Name == schemaName
-// 	})
-// 	if schemaIdx == -1 {
-// 		aux := &v1.SchemaStatus{
-// 			Name:        schemaName,
-// 			Status:      "created",
-// 			UsersStatus: []v1.UserStatusType{},
-// 		}
-// 		schemaUserClaim.Status.Schemas = append(schemaUserClaim.Status.Schemas, *aux)
-// 		schemaIdx = slices.IndexFunc(schemaUserClaim.Status.Schemas, func(c v1.SchemaStatus) bool {
-// 			return c.Name == schemaName
-// 		})
-// 	}
-// 	return &schemaUserClaim.Status.Schemas[schemaIdx]
-// }
-
-// func getOrCreateUserStatus(currentSchemaStatus *v1.SchemaStatus, userName string) *v1.UserStatusType {
-// 	userIdx := slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c v1.UserStatusType) bool {
-// 		return c.UserName == userName+dbuser.SuffixA || c.UserName == userName+dbuser.SuffixB
-// 	})
-// 	if userIdx == -1 {
-// 		aux := &v1.UserStatusType{
-// 			UserName:   userName,
-// 			UserStatus: "created",
-// 		}
-// 		currentSchemaStatus.UsersStatus = append(currentSchemaStatus.UsersStatus, *aux)
-// 		userIdx = slices.IndexFunc(currentSchemaStatus.UsersStatus, func(c v1.UserStatusType) bool {
-// 			return c.UserName == userName
-// 		})
-// 	}
-// 	return &currentSchemaStatus.UsersStatus[userIdx]
-// }
-
-// func (r *DbRoleClaimReconciler) getMasterPassword(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
-// 	secretKey := "password"
-// 	gs := &corev1.Secret{}
-
-// 	ns := dbClaim.Namespace
-// 	err := r.Client.Get(ctx, client.ObjectKey{
-// 		Namespace: ns,
-// 		Name:      dbClaim.Spec.SecretName,
-// 	}, gs)
-// 	if err == nil {
-// 		return string(gs.Data[secretKey]), nil
-// 	}
-// 	if !errors.IsNotFound(err) {
-// 		return "", err
-// 	}
-
-// 	return "", nil
-// }
 
 func (r *DbRoleClaimReconciler) getPasswordRotationTime() time.Duration {
 	prt := time.Duration(r.Config.Viper.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
@@ -426,11 +397,19 @@ func (r *DbRoleClaimReconciler) manageSuccess(ctx context.Context, dbRoleClaim *
 	return ctrl.Result{}, nil
 }
 
-func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecret *corev1.Secret, dbRoleClaim *v1.DbRoleClaim) error {
+func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecret *corev1.Secret, dbRoleClaim *v1.DbRoleClaim, newUser, newPassword string) error {
 	log := log.FromContext(ctx).WithValues("databaserole", "copySourceSecret")
 
 	secretName := dbRoleClaim.Spec.SecretName
 	sourceSecretData := sourceSecret.Data
+
+	if newUser != "" {
+		sourceSecretData["username"] = []byte(newUser)
+	}
+	if newPassword != "" {
+		sourceSecretData["password"] = []byte(newPassword)
+	}
+
 	role_secret := &corev1.Secret{}
 
 	//find SECRET

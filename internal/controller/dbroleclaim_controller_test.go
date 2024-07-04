@@ -340,8 +340,8 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 
 			//seed database to simulate existing user
 			dbClient.CreateSchema("schema1")
-			dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema2_admin", "schema1")
-			dbClient.CreateUser("user2_b", "schema1_regular", "123")
+			dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema1_admin", "schema1")
+			dbClient.CreateUser("user2_b", "schema1_admin", "123")
 
 			result, err := r.reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
 			if (err != nil) != tt.wantErr {
