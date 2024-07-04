@@ -41,9 +41,9 @@ HELM_VERSION ?= v3.15.2
 
 .PHONY: helm
 helm: $(HELM) ## Download golangci-lint locally if necessary.
-$(HELM): $(LOCALBIN)
-	test -s $(LOCALBIN)/helm || { curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH=${PATH}:$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; }
-	ln -sf $(LOCALBIN)/helm-$(HELM_VERSION) $(LOCALBIN)/helm
+$(HELM): localbin
+	@test -s $(LOCALBIN)/helm || { curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH=${PATH}:$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; }
+	@ln -sf $(LOCALBIN)/helm-$(HELM_VERSION) $(LOCALBIN)/helm
 
 .PHONY: helms3
 helms3: helm $(HELMS3)
@@ -56,10 +56,14 @@ $(HELMS3): $(LOCALBIN)
 
 package-charts: package-chart-db-controller package-chart-db-controller-crds
 
-package-chart-%: target=$(@:package-chart-%=%)
-package-chart-%: helm
+%-$(CHART_VERSION).tgz:
 	$(HELM) lint helm/$(*F)
 	$(HELM) package helm/$(*F) --version ${CHART_VERSION} --app-version ${CHART_VERSION}
+	touch $@
+
+package-chart-%: target=$(@:package-chart-%=%)
+package-chart-%: helm
+	$(MAKE) $(*F)-$(CHART_VERSION).tgz
 
 push-charts: .id push-chart-db-controller push-chart-db-controller-crds
 
@@ -78,7 +82,8 @@ build-images: docker-build docker-build-dbproxy docker-build-dsnexec
 # FIXME: remove for a single image
 push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 
-deploy: .id build-images push-images package-chart-db-controller
+.deploy-$(GIT_COMMIT): .id
+	@./scripts/check-context.sh
 	helm upgrade --install `cat .id` \
 		db-controller-${CHART_VERSION}.tgz \
 		--debug --wait --namespace "`cat .id`" \
@@ -86,3 +91,14 @@ deploy: .id build-images push-images package-chart-db-controller
 		-f helm/db-controller/minikube.yaml \
 		--set dbController.class=`cat .id` \
 		${HELM_SETFLAGS}
+	# Consider removing this, since we dont actually no
+	# helm upgrade is applied in the cluster
+	@touch $@
+
+deploy: package-chart-db-controller .deploy-$(GIT_COMMIT)
+
+undeploy:
+	helm -n `cat .id` uninstall `cat .id`
+
+helm-test:
+	helm -n `cat .id` test `cat .id`
