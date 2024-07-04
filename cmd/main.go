@@ -41,7 +41,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
-	"github.com/infobloxopen/db-controller/pkg/schemauserclaim"
+	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 
 	// +kubebuilder:scaffold:imports
 
@@ -207,34 +207,25 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
 	}
-	if err = (&controller.DbRoleClaimReconciler{
-		Class:    class,
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("dbRoleClaim-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
-		os.Exit(1)
-	}
-
-	schemaUserClaimConfig := &schemauserclaim.SchemaUserConfig{
+	dbRoleClaimConfig := &roleclaim.RoleConfig{
 		Viper: ctlConfig,
 
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
-		MasterAuth:            rdsauth.NewMasterAuth(),
-		MetricsDepYamlPath:    metricsDepYamlPath,
-		MetricsConfigYamlPath: metricsConfigYamlPath,
+		MasterAuth: rdsauth.NewMasterAuth(),
 	}
-	if err = (&controller.SchemaUserClaimReconciler{
+
+	if err = (&controller.DbRoleClaimReconciler{
+		Class:  class,
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Config: schemaUserClaimConfig,
+		Config: dbRoleClaimConfig,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
+		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
 		os.Exit(1)
 	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

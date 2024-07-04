@@ -37,6 +37,10 @@ type DbRoleClaimSpec struct {
 
 	// The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
 	SecretName string `json:"secretName,omitempty"`
+
+	UserName string `json:"username"`
+
+	SchemaRoleMap map[string]RoleType `json:"schemarolemap"`
 }
 
 // SourceDatabaseClaim defines the DatabaseClaim which owns the actual database
@@ -47,6 +51,19 @@ type SourceDatabaseClaim struct {
 
 	// Name  of the source databaseclaim
 	Name string `json:"name"`
+}
+
+type RoleType string
+
+const (
+	ReadOnly RoleType = "readonly"
+	Regular  RoleType = "regular"
+	Admin    RoleType = "admin"
+)
+
+type SchemaRoleStatus struct {
+	SchemaStatus map[string]string `json:"schemastatus"`
+	RoleStatus   map[string]string `json:"rolestatus"`
 }
 
 // DbRoleClaimStatus defines the observed state of DbRoleClaim
@@ -66,11 +83,15 @@ type DbRoleClaimStatus struct {
 	// Tracks the resourceVersion of the source secret. Used to identify changes to the secret and to trigger a sync
 	SourceSecretResourceVersion string `json:"sourceSecretResourceVersion,omitempty"`
 
-	// Time the secret attached to this claim was created
-	SecretCreatedAt *metav1.Time `json:"secretCreatedAt,omitempty"`
-
 	// Time the secret attached to this claim was updated
 	SecretUpdatedAt *metav1.Time `json:"secretUpdatedAt,omitempty"`
+
+	SchemaRoleStatus SchemaRoleStatus `json:"schemasstatus"`
+
+	// Time the schemas and roles were updated
+	SchemasRolesUpdatedAt *metav1.Time `json:"schemasrolesupdatedat,omitempty"`
+
+	Username string `json:"username"`
 }
 
 //+kubebuilder:object:root=true

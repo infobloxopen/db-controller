@@ -9,7 +9,7 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -27,6 +27,7 @@ func (m MockClient) GetResponseUpdate() interface{} {
 
 func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	_ = ctx
+	var time8DaysAgo = v1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
 	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest" || key.Namespace == "schema-user-test") &&
 		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test") {
 		sec, ok := obj.(*corev1.Secret)
@@ -60,87 +61,62 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 				},
 			}
 
-		} else { //SchemaUserClaim
-			sec, ok := obj.(*persistancev1.SchemaUserClaim)
+		} else if key.Name == "schema-user-claim-1" { //DBRoleClaim
+
+			sec, ok := obj.(*persistancev1.DbRoleClaim)
 			if !ok {
 				return fmt.Errorf("can't assert type")
 			}
 			sec.Spec.Class = ptr.String("default")
 			sec.Name = "schema1"
 			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
-			var time8DaysAgo = metav1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
-			sec.Spec.Schemas = make(map[string][]persistancev1.UserType, 6)
+			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType, 6)
 
-			sec.Spec.Schemas["schema0"] = nil
-			sec.Spec.Schemas["schema1"] = []persistancev1.UserType{
-				{
-					UserName:   "user1",
-					Permission: persistancev1.Regular,
-				},
+			sec.Spec.UserName = "user1"
+			sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
+			sec.Spec.SchemaRoleMap["schema2"] = persistancev1.Admin
+			sec.Spec.SchemaRoleMap["schema3"] = persistancev1.ReadOnly
+			sec.Spec.SchemaRoleMap["public"] = persistancev1.Admin
+			sec.Spec.SchemaRoleMap["schema4"] = persistancev1.Admin
+
+		} else if key.Name == "schema-user-claim-2" { //DBRoleClaim - EXISTING USER
+
+			sec, ok := obj.(*persistancev1.DbRoleClaim)
+			if !ok {
+				return fmt.Errorf("can't assert type")
 			}
-			sec.Spec.Schemas["schema2"] = []persistancev1.UserType{
-				{
-					UserName:   "user2_1",
-					Permission: persistancev1.Regular,
-				},
-				{
-					UserName:   "user2_2",
-					Permission: persistancev1.Admin,
-				},
+			sec.Spec.Class = ptr.String("default")
+			sec.Name = "schema1"
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
+			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType, 6)
+
+			sec.Spec.UserName = "user2"
+			sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
+			sec.Spec.SchemaRoleMap["schema2"] = persistancev1.Admin
+			sec.Spec.SchemaRoleMap["schema3"] = persistancev1.ReadOnly
+			sec.Status.SchemasRolesUpdatedAt = &time8DaysAgo
+			sec.Status.Username = "user2_a"
+
+		} else {
+
+			sec, ok := obj.(*persistancev1.DbRoleClaim)
+			if !ok {
+				return fmt.Errorf("can't assert type")
 			}
-			sec.Spec.Schemas["schema3"] = []persistancev1.UserType{
-				{
-					UserName:   "user3_1",
-					Permission: persistancev1.ReadOnly,
-				},
-				{
-					UserName:   "user3_2",
-					Permission: persistancev1.Regular,
-				},
-				{
-					UserName:   "user3_3",
-					Permission: persistancev1.Admin,
-				},
-				{
-					UserName:   "user3_4",
-					Permission: persistancev1.Admin,
-				},
-				{
-					UserName:   "user3_5",
-					Permission: persistancev1.Admin,
-				},
-			}
-			sec.Spec.Schemas["public"] = []persistancev1.UserType{
-				{
-					UserName:   "user4",
-					Permission: persistancev1.Admin,
-				},
-			}
-			sec.Spec.Schemas["schema4"] = []persistancev1.UserType{
-				{
-					UserName:   "userAlreadyCreated",
-					Permission: persistancev1.Admin,
-				},
-			}
-			sec.Status.Schemas = []persistancev1.SchemaStatus{
-				{
-					Name:   "schema4",
-					Status: "created",
-					UsersStatus: []persistancev1.UserStatusType{
-						{
-							UserName:      "userAlreadyCreated_a",
-							UserStatus:    "blablabla",
-							UserUpdatedAt: &time8DaysAgo,
-						},
-					},
-				},
-			}
+			sec.Spec.Class = ptr.String("default")
+			sec.Name = "schema1"
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
+			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType, 6)
+
+			sec.Spec.UserName = "user1"
+			sec.Spec.SchemaRoleMap["schema0"] = ""
 		}
 
 		return nil
 	}
 	return errors.NewNotFound(schema.GroupResource{Group: "core", Resource: "secret"}, key.Name)
 }
+
 func (m MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	_ = ctx
 	if (obj.GetNamespace() == "testNamespace") &&

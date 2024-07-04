@@ -27,6 +27,7 @@ type Client interface {
 	//Checks if a role exists in the database
 	RoleExists(roleName string) (bool, error)
 	CreateSchema(schemaName string) (bool, error)
+	AssignRoleToUser(username, rolename string) error
 
 	DBCloser
 }

@@ -537,7 +537,7 @@ func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, err
 	return created, nil
 }
 
-func (pc *client) assignRoleToUser(username, rolename string) error {
+func (pc *client) AssignRoleToUser(username, rolename string) error {
 	db := pc.DB
 	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {
 		return err
@@ -581,7 +581,7 @@ func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, err
 			return created, err
 		}
 
-		if err := pc.assignRoleToUser(userName, roleName); err != nil {
+		if err := pc.AssignRoleToUser(userName, roleName); err != nil {
 			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", roleName, userName))
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 
@@ -640,7 +640,7 @@ func (pc *client) UpdateUser(oldUsername, newUsername, rolename, password string
 			return err
 		}
 
-		if err := pc.assignRoleToUser(newUsername, rolename); err != nil {
+		if err := pc.AssignRoleToUser(newUsername, rolename); err != nil {
 			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, newUsername))
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 
