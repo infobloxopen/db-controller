@@ -59,7 +59,8 @@ fmt: ## Run go fmt against code.
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	# FIXME: remove this when integration tests are fully implemented
+	go vet $$(go list ./... | grep -v /e2e)
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.

@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -64,7 +63,7 @@ var _ = Describe("db-controller", func() {
 				if err != nil {
 					return false
 				}
-				fmt.Println(dbClaim.Status.Error)
+
 				return dbClaim.Status.Error == "can't find any instance label matching fragment keys"
 
 			}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())

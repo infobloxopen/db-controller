@@ -202,12 +202,6 @@ func render(ctx context.Context, cfg *Config, yaml string) (string, error) {
 		return "", err
 	}
 
-	// cfg.rawValues, err = cfg.Values.YAML()
-	// if err != nil {
-	// 	return "", err
-	// }
-	// fmt.Println("wtf", cfg.rawValues)
-
 	buf := bytes.Buffer{}
 	err = cfgTpl.Execute(&buf, cfg)
 	return strings.TrimSpace(buf.String()), err
