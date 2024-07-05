@@ -50,7 +50,7 @@ var class = ""
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	fmt.Fprintf(GinkgoWriter, "Starting migration suite\n")
+	fmt.Fprintf(GinkgoWriter, "Starting E2E suite\n")
 	RunSpecs(t, "e2e suite")
 }
 
@@ -74,8 +74,13 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
+	By("Building image")
+	cmd := exec.Command("make", "build-images")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
 	By("Pushing the operator images")
-	cmd := exec.Command("make", "push-images")
+	cmd = exec.Command("make", "push-images")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 

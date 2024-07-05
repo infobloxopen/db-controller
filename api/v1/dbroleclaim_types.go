@@ -40,7 +40,7 @@ type DbRoleClaimSpec struct {
 
 	UserName string `json:"username"`
 
-	SchemaRoleMap map[string]RoleType `json:"schemarolemap"`
+	SchemaRoleMap map[string]RoleType `json:"schemarolemap,omitempty"`
 }
 
 // SourceDatabaseClaim defines the DatabaseClaim which owns the actual database
@@ -62,8 +62,8 @@ const (
 )
 
 type SchemaRoleStatus struct {
-	SchemaStatus map[string]string `json:"schemastatus"`
-	RoleStatus   map[string]string `json:"rolestatus"`
+	SchemaStatus map[string]string `json:"schemastatus,omitempty"`
+	RoleStatus   map[string]string `json:"rolestatus,omitempty"`
 }
 
 // DbRoleClaimStatus defines the observed state of DbRoleClaim
@@ -86,7 +86,7 @@ type DbRoleClaimStatus struct {
 	// Time the secret attached to this claim was updated
 	SecretUpdatedAt *metav1.Time `json:"secretUpdatedAt,omitempty"`
 
-	SchemaRoleStatus SchemaRoleStatus `json:"schemasstatus"`
+	SchemaRoleStatus SchemaRoleStatus `json:"schemasstatus,omitempty"`
 
 	// Time the schemas and roles were updated
 	SchemasRolesUpdatedAt *metav1.Time `json:"schemasrolesupdatedat,omitempty"`

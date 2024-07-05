@@ -69,7 +69,6 @@ spec:
               username:
                 type: string
             required:
-            - schemarolemap
             - sourceDatabaseClaim
             - username
             type: object
@@ -96,9 +95,6 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                required:
-                - rolestatus
-                - schemastatus
                 type: object
               secretUpdatedAt:
                 description: Time the secret attached to this claim was updated
@@ -115,7 +111,6 @@ spec:
               username:
                 type: string
             required:
-            - schemasstatus
             - username
             type: object
         type: object

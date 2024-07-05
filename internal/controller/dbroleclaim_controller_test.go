@@ -20,8 +20,8 @@ import (
 	"context"
 	"strconv"
 	"testing"
-	"time"
 
+	"github.com/aws/smithy-go/ptr"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -42,9 +42,10 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 	. "github.com/infobloxopen/db-controller/testutils"
 	_ "github.com/lib/pq"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func TestReconcileDbRoleClaim_Simple(t *testing.T) {
+func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 	// FIXME: make this test do things
 
 	const resourceName = "test-resource"
@@ -56,6 +57,8 @@ func TestReconcileDbRoleClaim_Simple(t *testing.T) {
 		Namespace: "default",
 	}
 	dbroleclaim := &persistancev1.DbRoleClaim{}
+	viperObj := viper.New()
+	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
 	BeforeEach(func() {
 		By("creating the custom resource for the Kind DbRoleClaim")
@@ -68,14 +71,69 @@ func TestReconcileDbRoleClaim_Simple(t *testing.T) {
 				},
 				Spec: persistancev1.DbRoleClaimSpec{
 					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
-						Namespace: "Namespace",
-						Name:      "Name",
+						Namespace: "default",
+						Name:      "testdbclaim",
 					},
+					SecretName: "copy-secret",
+					Class:      ptr.String("default"),
 				},
+				Status: persistancev1.DbRoleClaimStatus{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			time.Sleep(2000)
+
+			dbClaim := &persistancev1.DatabaseClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testdbclaim",
+					Namespace: "default",
+				},
+				Spec: persistancev1.DatabaseClaimSpec{
+					SecretName: "master-secret",
+					Class:      ptr.String("default"),
+					Username:   "user1",
+				},
+				Status: persistancev1.DatabaseClaimStatus{},
+			}
+			Expect(k8sClient.Create(ctx, dbClaim)).To(Succeed())
+
+			sec := &corev1.Secret{}
+			sec.Data = map[string][]byte{
+				"password": []byte("masterpassword"),
+				"username": []byte("user_a"),
+			}
+			sec.Name = "master-secret"
+			sec.Namespace = "default"
+			Expect(k8sClient.Create(ctx, sec)).To(Succeed())
 		}
+	})
+
+	It("should successfully reconcile the resource", func() {
+		By("Reconciling the created resource")
+
+		controllerReconciler := &DbRoleClaimReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			Config: &roleclaim.RoleConfig{
+				Viper: viperObj,
+			},
+		}
+
+		controllerReconciler.SetupWithManager(nil)
+
+		_, err := controllerReconciler.reconciler.Reconcile(ctx, reconcile.Request{
+			NamespacedName: typeNamespacedName,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
+		// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+		var secret = &corev1.Secret{}
+		secretName := types.NamespacedName{
+			Name:      "copy-secret",
+			Namespace: "default",
+		}
+		err = k8sClient.Get(ctx, secretName, secret)
+
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -85,21 +143,6 @@ func TestReconcileDbRoleClaim_Simple(t *testing.T) {
 
 		By("Cleanup the specific resource instance DbRoleClaim")
 		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-	})
-
-	It("should successfully reconcile the resource", func() {
-		By("Reconciling the created resource")
-		controllerReconciler := &DbRoleClaimReconciler{
-			Client: k8sClient,
-			Scheme: k8sClient.Scheme(),
-		}
-
-		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-			NamespacedName: typeNamespacedName,
-		})
-		Expect(err).NotTo(HaveOccurred())
-		// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-		// Example: If you expect a certain status condition after reconciliation, verify it here.
 	})
 }
 
