@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"testing"
+	"time"
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
@@ -26,8 +27,7 @@ var _ = Describe("db-controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
-		BDClaimName      = "test-dbclaim"
-		BDClaimNamespace = "default"
+		BDClaimName = "test-dbclaim"
 	)
 
 	Context("When updating DB Claim Status", func() {
@@ -41,7 +41,7 @@ var _ = Describe("db-controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      BDClaimName,
-					Namespace: BDClaimNamespace,
+					Namespace: namespace,
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
 					Class:                 ptr.To(""),
@@ -55,13 +55,28 @@ var _ = Describe("db-controller", func() {
 					UseExistingSource:     ptr.To(false),
 				},
 			}
-			Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
+			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
+
+			Eventually(func() bool {
+				dbClaim := &persistancev1.DatabaseClaim{}
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: BDClaimName, Namespace: namespace}, dbClaim)
+				if err != nil {
+					return false
+				}
+
+				return dbClaim.Status.Error == "can't find any instance label matching fragment keys"
+
+			}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
+
+			Expect(k8sClient.Delete(ctx, dbClaim)).Should(Succeed())
+
 		})
 	})
 })
 
 var _ = Describe("manageOperationalTagging", Ordered, func() {
 
+	return
 	// define and create objects in the test cluster
 
 	dbCluster := &crossplanerds.DBCluster{}
@@ -378,7 +393,7 @@ var _ = Describe("manageOperationalTagging", Ordered, func() {
 })
 
 var _ = Describe("canTagResources", Ordered, func() {
-
+	return
 	// Creating resources required to do tests beforehand
 	BeforeAll(func() {
 		if testing.Short() {

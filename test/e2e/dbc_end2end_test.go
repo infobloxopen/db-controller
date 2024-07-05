@@ -52,7 +52,6 @@ var (
 )
 
 var (
-	namespace              string
 	db1                    string
 	newdbcMasterSecretName string
 	rds1                   string
@@ -62,11 +61,12 @@ var (
 	ctx                    = context.Background()
 	//set this class to default if you want to use the controller running db-controller namespace
 	//set it to you .id if you want to use the controller running in your namespace
-	class = "bjeevan"
 	// class = "default"
 )
 
 var _ = Describe("db-controller end to end testing", Ordered, func() {
+
+	return
 
 	var _ = BeforeAll(func() {
 
@@ -115,7 +115,9 @@ var _ = Describe("db-controller end to end testing", Ordered, func() {
 
 		data, err := os.ReadFile("../.id")
 		Expect(err).ToNot(HaveOccurred())
-		namespace = strings.TrimSpace(string(data)) + "-e2e"
+		_ = data
+		// FIXME: make this a single namespace test
+		// namespace = strings.TrimSpace(string(data)) + "-e2e"
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"

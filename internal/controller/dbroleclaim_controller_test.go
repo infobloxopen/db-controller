@@ -20,6 +20,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -65,8 +66,15 @@ func TestReconcileDbRoleClaim_Simple(t *testing.T) {
 					Name:      resourceName,
 					Namespace: "default",
 				},
+				Spec: persistancev1.DbRoleClaimSpec{
+					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+						Namespace: "Namespace",
+						Name:      "Name",
+					},
+				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			time.Sleep(2000)
 		}
 	})
 
@@ -78,6 +86,7 @@ func TestReconcileDbRoleClaim_Simple(t *testing.T) {
 		By("Cleanup the specific resource instance DbRoleClaim")
 		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 	})
+
 	It("should successfully reconcile the resource", func() {
 		By("Reconciling the created resource")
 		controllerReconciler := &DbRoleClaimReconciler{
