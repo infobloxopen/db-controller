@@ -445,7 +445,8 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 			exists, err = dbClient.RoleExists("schema3_readonly")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-
 		})
 	}
 }
+
+//TODO: create one test that copies a secret and test if it was copied correctly - using k8sClient

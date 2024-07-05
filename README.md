@@ -116,10 +116,13 @@ limitations under the License.
 ### Run integration tests
 
 1. Integration tests run against server box-3. Before running your tests, you'll have to update the cluster you are running against with the version you have your changes. 
-Otherwise it'll run against an old version
+Otherwise it'll run against an old version (see next step)
 
 2. Update file dbc_end2end_test.go (line 56) and file '.id' in the root folder, with a class name of your own (let's say your username). That will be used to create a namespace and the CRDs under it.
+Then run:
+    make build
+    make deploy
 
-3. if you want to read a single test at a time replace It() by Fit() in the test class, this is a focused test and only this test will run (output shows failure, but this is intended, not to fool you that everything ran successfully)
+3. if you want to run a single test at a time replace It() by Fit() in the test class, this is a focused test and only this test will run (output shows failure, but this is intended, not to fool you that everything ran successfully)
 
 4. in case the tests failed in the middle, sometimes the resources are not deleted from the AWS account. So you can go in there and delete the RDSs that were created. They can be searched for by using the namespace you set in step 2.
