@@ -340,7 +340,7 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 	RegisterFailHandler(Fail)
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	testDB := SetupSqlDB(t, "user_a", "masterpassword")
+	testDB := SetupSqlDB(t, "user_b", "masterpassword")
 	defer testDB.Close()
 
 	type reconciler struct {
