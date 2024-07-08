@@ -120,8 +120,8 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 		}
 		if missingParam {
-			log.Info("username, schema and role are mandatory when one of these fields are provided")
-			return ctrl.Result{}, errors.New("username, schema and role are mandatory when one of these fields are provided")
+			log.Info("schema and role are mandatory when one of these fields are provided")
+			return ctrl.Result{}, errors.New("schema and role are mandatory when one of these fields are provided")
 		}
 
 		//get db conn details
