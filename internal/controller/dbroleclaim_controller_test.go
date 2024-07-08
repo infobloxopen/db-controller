@@ -111,13 +111,15 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 
 		controllerReconciler := &DbRoleClaimReconciler{
 			Client: k8sClient,
-			Scheme: k8sClient.Scheme(),
 			Config: &roleclaim.RoleConfig{
 				Viper: viperObj,
 			},
 		}
 
-		controllerReconciler.SetupWithManager(nil)
+		controllerReconciler.reconciler = &roleclaim.DbRoleClaimReconciler{
+			Client: controllerReconciler.Client,
+			Config: controllerReconciler.Config,
+		}
 
 		_, err := controllerReconciler.reconciler.Reconcile(ctx, reconcile.Request{
 			NamespacedName: typeNamespacedName,
@@ -189,10 +191,13 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter(t *te
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DbRoleClaimReconciler{
 				Client: tt.rec.Client,
-				Scheme: tt.rec.Scheme,
 				Config: tt.rec.Config,
 			}
-			r.SetupWithManager(nil)
+
+			r.reconciler = &roleclaim.DbRoleClaimReconciler{
+				Client: r.Client,
+				Config: r.Config,
+			}
 
 			_, err := r.reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
 			if (err != nil) != tt.wantErr {
@@ -252,7 +257,11 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles(t *testing.T) {
 				Scheme: tt.rec.Scheme,
 				Config: tt.rec.Config,
 			}
-			r.SetupWithManager(nil)
+
+			r.reconciler = &roleclaim.DbRoleClaimReconciler{
+				Client: r.Client,
+				Config: r.Config,
+			}
 
 			result, err := r.reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
 			if (err != nil) != tt.wantErr {
@@ -374,10 +383,14 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DbRoleClaimReconciler{
 				Client: tt.rec.Client,
-				Scheme: tt.rec.Scheme,
 				Config: tt.rec.Config,
 			}
-			r.SetupWithManager(nil)
+
+			r.reconciler = &roleclaim.DbRoleClaimReconciler{
+				Client: r.Client,
+				Config: r.Config,
+			}
+
 			existingDBConnInfo, err := persistancev1.ParseUri(testDB.URL())
 			if err != nil {
 				t.Errorf("error = %v", err)

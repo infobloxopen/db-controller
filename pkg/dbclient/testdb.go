@@ -38,7 +38,7 @@ func (t *testDB) URL() string {
 }
 
 func (t *testDB) Close() {
-  t.Helper()
+	t.t.Helper()
 	t.t.Log("Tearing down dockertest resource of PostgreSQL DB")
 	if err := t.pool.Purge(t.resource); err != nil {
 		t.t.Errorf("Could not purge resource: %s", err)

@@ -70,7 +70,6 @@ spec:
                 type: string
             required:
             - sourceDatabaseClaim
-            - username
             type: object
           status:
             description: DbRoleClaimStatus defines the observed state of DbRoleClaim

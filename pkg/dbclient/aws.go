@@ -24,7 +24,7 @@ func awsAuthBuilderWithConfig(ctx context.Context, cliCfg Config, awsCfg aws.Con
 
 	parsed, err := url.Parse(cliCfg.DSN)
 	if err != nil {
-	  return "", err
+		return "", err
 	}
 	info := parsed.User
 

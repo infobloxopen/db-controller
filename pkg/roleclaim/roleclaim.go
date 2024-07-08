@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/lib/pq"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 
