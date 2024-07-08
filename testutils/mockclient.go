@@ -103,6 +103,21 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			sec.Spec.SchemaRoleMap["schema3"] = persistancev1.ReadOnly
 			sec.Status.SchemasRolesUpdatedAt = &time8DaysAgo
 			sec.Status.Username = "user2_a"
+		} else if key.Name == "schema-user-claim-invalidusername" {
+
+			sec, ok := obj.(*persistancev1.DbRoleClaim)
+			if !ok {
+				return fmt.Errorf("can't assert type")
+			}
+			sec.Spec.Class = ptr.String("default")
+			sec.Name = "schema1"
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
+			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType)
+			sec.Spec.SecretName = "sample-master-secret"
+			sec.Name = "TestClaim"
+			sec.Namespace = "schema-user-test"
+
+			sec.Spec.UserName = "123-invalid-username"
 
 		} else { //DBRoleClaim - invalid: schema without role
 

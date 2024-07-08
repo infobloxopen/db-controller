@@ -462,4 +462,48 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 	}
 }
 
+func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_InvalidUsername(t *testing.T) {
+	RegisterFailHandler(Fail)
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	type reconciler struct {
+		Client             client.Client
+		Log                logr.Logger
+		Scheme             *runtime.Scheme
+		Config             *roleclaim.RoleConfig
+		DbIdentifierPrefix string
+		Context            context.Context
+		Request            controllerruntime.Request
+	}
+
+	viperObj := viper.New()
+
+	rec := reconciler{
+		Client: &MockClient{},
+		Config: &roleclaim.RoleConfig{
+			Viper: viperObj,
+			Class: "default",
+		},
+		Request: controllerruntime.Request{
+			NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-invalidusername"},
+		},
+	}
+
+	r := &DbRoleClaimReconciler{
+		Client: rec.Client,
+		Config: rec.Config,
+	}
+
+	r.reconciler = &roleclaim.DbRoleClaimReconciler{
+		Client: r.Client,
+		Config: r.Config,
+	}
+
+	result, err := r.reconciler.Reconcile(context.Background(), rec.Request)
+	Expect(result.Requeue).Should(BeFalse())
+
+	Expect(err).Should(Not(BeNil()))
+	Expect(err.Error()).Should(Equal("username has incorrect format. Only letters, numbers and _ are allowed"))
+}
+
 //TODO: create one test that copies a secret and test if it was copied correctly - using k8sClient
