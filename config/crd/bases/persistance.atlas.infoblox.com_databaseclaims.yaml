@@ -59,6 +59,15 @@ spec:
                 description: Specifies an indentifier for the application using the
                   database.
                 type: string
+              autoMinorVersionUpgrade:
+                description: |-
+                  Specifies whether minor engine upgrades are applied automatically to the
+                  DB cluster during the maintenance window. By default, minor engine upgrades
+                  are applied automatically.
+
+
+                  Valid for Cluster Type: Multi-AZ DB clusters only
+                type: boolean
               backupPolicy:
                 description: BackupPolicy specifies the duration at which db backups
                   are taken
@@ -131,6 +140,35 @@ spec:
                 description: |-
                   The optional port to use for connecting to the host.
                   If the value is omitted, then the host value from the matching InstanceLabel will be used.
+                type: string
+              preferredMaintenanceWindow:
+                description: |-
+                  The weekly time range during which system maintenance can occur.
+
+
+                  Valid for Cluster Type: Aurora DB clusters and Multi-AZ DB clusters
+
+
+                  The default is a 30-minute window selected at random from an 8-hour block
+                  of time for each Amazon Web Services Region, occurring on a random day of
+                  the week. To see the time blocks available, see Adjusting the Preferred DB
+                  Cluster Maintenance Window (https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_UpgradeDBInstance.Maintenance.html#AdjustingTheMaintenanceWindow.Aurora)
+                  in the Amazon Aurora User Guide.
+
+
+                  Constraints:
+
+
+                     * Must be in the format ddd:hh24:mi-ddd:hh24:mi.
+
+
+                     * Days must be one of Mon | Tue | Wed | Thu | Fri | Sat | Sun.
+
+
+                     * Must be in Universal Coordinated Time (UTC).
+
+
+                     * Must be at least 30 minutes.
                 type: string
               restoreFrom:
                 description: RestoreFrom indicates the snapshot to restore the Database

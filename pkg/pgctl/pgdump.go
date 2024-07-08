@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -120,12 +121,25 @@ func (x *Dump) SetOptions(o []string) {
 func (x *Dump) GetOptions() []string {
 	return x.Options
 }
+
+// modifyPgDumpInfo modifies the pg_dump file to comment out certain policy
+// creation statements, add "IF NOT EXISTS" to schema creation, and remove the
+// schema specification for the pg_cron extension.
+// This method is OS-specific, adjusting the sed command for macOS or other systems.
 func (x *Dump) modifyPgDumpInfo() error {
 	// Build the full file path
 	filePath := x.Path + x.fileName
 
+	// Determine the OS-specific sed command. On macOS, the '-i' option requires an argument
+	// for the backup suffix (can be empty).
+	sedCmd := "sed"
+	sedArg := "-i"
+	if runtime.GOOS == "darwin" {
+		sedArg = "-i ''"
+	}
+
 	// Comment out the create policy statements
-	commentCmd := exec.Command("sed", "-i", "/^CREATE POLICY cron_job_/s/^/-- commented by dbc to avoid duplicate conflict during restore \\n--/", filePath)
+	commentCmd := exec.Command(sedCmd, sedArg, "/^CREATE POLICY cron_job_/s/^/-- commented by dbc to avoid duplicate conflict during restore \\n--/", filePath)
 	commentCmd.Stderr = os.Stderr
 	commentCmd.Stdout = os.Stdout
 
@@ -133,16 +147,16 @@ func (x *Dump) modifyPgDumpInfo() error {
 		return fmt.Errorf("error running sed command to comment create policy: %w", err)
 	}
 
-	// add if not exists to partman schema creation
-	replaceCmd := exec.Command("sed", "-i", "s/CREATE SCHEMA partman;/CREATE SCHEMA IF NOT EXISTS partman;/", filePath)
+	// Add if not exists to partman schema creation
+	replaceCmd := exec.Command(sedCmd, sedArg, "s/CREATE SCHEMA partman;/CREATE SCHEMA IF NOT EXISTS partman;/", filePath)
 	replaceCmd.Stderr = os.Stderr
 	replaceCmd.Stdout = os.Stdout
 	if err := replaceCmd.Run(); err != nil {
-		return fmt.Errorf("error running sed command add if not exists to partman schema creation: %w", err)
+		return fmt.Errorf("error running sed command to add if not exists to partman schema creation: %w", err)
 	}
 
-	// create pg_cron without specifying the schema
-	replacePgCronCmd := exec.Command("sed", "-i", "s/CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA public;/CREATE EXTENSION IF NOT EXISTS pg_cron;/", filePath)
+	// Create pg_cron without specifying the schema
+	replacePgCronCmd := exec.Command(sedCmd, sedArg, "s/CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA public;/CREATE EXTENSION IF NOT EXISTS pg_cron;/", filePath)
 	replacePgCronCmd.Stderr = os.Stderr
 	replacePgCronCmd.Stdout = os.Stdout
 	if err := replacePgCronCmd.Run(); err != nil {

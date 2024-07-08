@@ -47,3 +47,5 @@ spec:
       secretRef:
         namespace: ''
         name: ''
+  autoMinorVersionUpgrade: false
+  preferredBackupWindow: 03:00-03:30

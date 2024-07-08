@@ -18,3 +18,5 @@ spec:
   type: postgres
   useExistingSource: false
   userName: sample_user
+  autoMinorVersionUpgrade: false
+  preferredBackupWindow: 03:00-03:30
