@@ -1160,7 +1160,7 @@ func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Con
 	return password, nil
 }
 
-func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
+func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
 
 	if connInfo == nil {
 		return nil, fmt.Errorf("invalid connection info")
@@ -1201,7 +1201,7 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 	return connInfo
 }
 
-func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Client, error) {
+func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
 	logr.V(DebugLevel).Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
@@ -1599,7 +1599,7 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	return firstInsReady && secondInsReady, nil
 }
 
-func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Client, status *v1.Status) error {
+func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Clienter, status *v1.Status) error {
 	logr := log.FromContext(ctx)
 
 	dbName := r.Input.MasterConnInfo.DatabaseName
@@ -1625,7 +1625,7 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, dbClient dbclient.Client, status *v1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
 	logr := log.FromContext(ctx)
 
 	if status == nil {

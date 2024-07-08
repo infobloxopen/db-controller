@@ -58,7 +58,7 @@ func IsClassPermitted(claimClass, controllerClass string) bool {
 	return true
 }
 
-func GetClientForExistingDB(connInfo *persistancev1.DatabaseClaimConnectionInfo, log *logr.Logger) (dbclient.Client, error) {
+func GetClientForExistingDB(connInfo *persistancev1.DatabaseClaimConnectionInfo, log *logr.Logger) (dbclient.Clienter, error) {
 
 	err := ValidateConnectionParameters(connInfo)
 	if err != nil {

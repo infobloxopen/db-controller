@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -96,7 +97,6 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log.Info("found dbclaim", "secretName", sourceDbClaim.Spec.SecretName)
 
 	dbRoleClaim.Status.MatchedSourceClaim = sourceDbClaim.Namespace + "/" + sourceDbClaim.Name
-	//r.Config.Recorder.Event(&dbRoleClaim, "Normal", "Found", fmt.Sprintf("DatabaseClaim %s/%s", dbclaimNamespace, dbclaimName))
 	// #endregion
 
 	// #region find secret linked to DBClaim: sourceSecret
@@ -111,11 +111,16 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log.V(1).Info("dbclaim_secret", "secret_name", sourceDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
 
 	dbRoleClaim.Status.SourceSecret = sourceSecret.Namespace + "/" + sourceSecret.Name
-	//r.Config.Recorder.Event(&dbRoleClaim, "Normal", "Found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, sourceDbClaim.Spec.SecretName))
 	// #endregion find secret
 
 	//either create users and schemas OR fallout to ELSE: copy existing secret
 	if dbRoleClaim.Spec.UserName != "" || len(dbRoleClaim.Spec.SchemaRoleMap) > 0 {
+		matched, err := regexp.Match(`^[\pL_][\pL\pM_0-9$]*$`, []byte(dbRoleClaim.Spec.UserName))
+		if !matched || err != nil {
+			log.Info("username has incorrect format. Only letters, numbers and _ are allowed.")
+			return ctrl.Result{}, errors.New("username has incorrect format. Only letters, numbers and _ are allowed")
+		}
+
 		//validations for user, schema and roles
 		var missingParam bool = false
 		if dbRoleClaim.Spec.UserName == "" {
@@ -226,7 +231,6 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			//copy source secret, change name, username and password
 			if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim, dbRoleClaim.Status.Username, userPassword); err != nil {
 				log.Error(err, "failed_copy_source_secret")
-				//r.Config.Recorder.Event(&dbRoleClaim, "Warning", "Update Failed", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
 				return r.manageError(ctx, &dbRoleClaim, err)
 			}
 
@@ -255,19 +259,17 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	//copy source secret and change name
 	if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim, "", ""); err != nil {
 		log.Error(err, "failed_copy_source_secret")
-		//r.Config.Recorder.Event(&dbRoleClaim, "Warning", "Update Failed", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
 		return r.manageError(ctx, &dbRoleClaim, err)
 	}
 
 	dbRoleClaim.Status.SourceSecretResourceVersion = sourceSecret.GetResourceVersion()
 	dbRoleClaim.Status.SecretUpdatedAt = &timeNow
-	//r.Config.Recorder.Event(&dbRoleClaim, "Normal", "Updated", fmt.Sprintf("Secret %s/%s", dbRoleClaim.Namespace, dbRoleClaim.Spec.SecretName))
 
 	return r.manageSuccess(ctx, &dbRoleClaim)
 
 }
 
-func createSchema(dbClient dbclient.Client, schemaName string, log logr.Logger) error {
+func createSchema(dbClient dbclient.Clienter, schemaName string, log logr.Logger) error {
 	schemaExists, err := dbClient.SchemaExists(schemaName)
 	if err != nil {
 		log.Error(err, "checking if schema ["+schemaName+"] exists error.")
@@ -283,7 +285,7 @@ func createSchema(dbClient dbclient.Client, schemaName string, log logr.Logger) 
 	return nil
 }
 
-func createRole(roleName string, dbClient dbclient.Client, log *logr.Logger, databaseName string, schemaName string) error {
+func createRole(roleName string, dbClient dbclient.Clienter, log *logr.Logger, databaseName string, schemaName string) error {
 	roleExists, err := dbClient.RoleExists(roleName)
 	if err != nil {
 		log.Error(err, "checking if role ["+roleName+"] exists error.")

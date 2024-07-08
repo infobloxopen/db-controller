@@ -56,7 +56,7 @@ type Config struct {
 	UseIAM bool // attempt to connect with IAM user provided in DSN
 }
 
-func New(cfg Config) (Client, error) {
+func New(cfg Config) (Clienter, error) {
 
 	return newPostgresClient(context.TODO(), cfg)
 }
