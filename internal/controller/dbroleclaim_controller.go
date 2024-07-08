@@ -38,7 +38,7 @@ type DbRoleClaimReconciler struct {
 	Class      string
 	Scheme     *runtime.Scheme
 	Config     *roleclaim.RoleConfig
-	reconciler *roleclaim.DbRoleClaimReconciler
+	Reconciler *roleclaim.DbRoleClaimReconciler
 }
 
 const (
@@ -64,7 +64,7 @@ const (
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	return r.reconciler.Reconcile(ctx, req)
+	return r.Reconciler.Reconcile(ctx, req)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -76,7 +76,7 @@ func (r *DbRoleClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	r.reconciler = &roleclaim.DbRoleClaimReconciler{
+	r.Reconciler = &roleclaim.DbRoleClaimReconciler{
 		Client: r.Client,
 		Config: r.Config,
 	}
