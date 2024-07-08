@@ -59,12 +59,12 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	var dbRoleClaim v1.DbRoleClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbRoleClaim); err != nil {
-		log.Error(err, "unable to fetch DatabaseClaim")
+		log.Error(err, "unable to fetch DatabaseRoleClaim")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if permitted := basefun.IsClassPermitted(r.Config.Class, *dbRoleClaim.Spec.Class); !permitted {
-		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbRoleClaim.Spec.Class, "controllerClas", r.Config.Class)
+		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbRoleClaim.Spec.Class, "controllerClass", r.Config.Class)
 		return ctrl.Result{}, nil
 	}
 
