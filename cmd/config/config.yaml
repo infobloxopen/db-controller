@@ -31,13 +31,12 @@ passwordConfig:
   minPasswordLength: 15
   passwordRotationPeriod: 60
 sample-connection:
-  masterUsername: root
+  masterUsername: postgres
   username: postgres
   host: localhost
   port: 5432
   sslMode: disable
   passwordSecretRef: postgres-postgresql
-  passwordSecretKey: postgresql-password
 # host omitted, allocates database dynamically
 dynamic-connection:
   masterUsername: root

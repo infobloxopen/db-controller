@@ -93,7 +93,7 @@ push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 		${HELM_SETFLAGS}
 	# Consider removing this, since we dont actually no
 	# helm upgrade is applied in the cluster
-	@touch $@
+	#@touch $@
 
 deploy: package-chart-db-controller .deploy-$(GIT_COMMIT)
 

@@ -18,6 +18,13 @@ pipeline {
         sudo apt-get update
 
         if ! which psql > /dev/null; then
+
+
+          timeout 300 bash -c -- 'while sudo fuser /var/lib/dpkg/lock-frontend > /dev/null 2>&1
+                            do
+                              echo "Waiting to get lock /var/lib/dpkg/lock-frontend..."
+                              sleep 5
+                            done'
           sudo apt-get install -y postgresql-client-14
         fi
 

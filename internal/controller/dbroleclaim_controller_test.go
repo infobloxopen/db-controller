@@ -53,6 +53,15 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 		Name:      resourceName,
 		Namespace: "default",
 	}
+	typeNamespacedClaimName := types.NamespacedName{
+		Name:      "testdbclaim",
+		Namespace: "default",
+	}
+	typeNamespacedSecretName := types.NamespacedName{
+		Name:      "master-secret",
+		Namespace: "default",
+	}
+
 	dbroleclaim := &persistancev1.DbRoleClaim{}
 	viperObj := viper.New()
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
@@ -77,7 +86,11 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 				Status: persistancev1.DbRoleClaimStatus{},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		}
 
+		dbclaim := persistancev1.DatabaseClaim{}
+		err = k8sClient.Get(ctx, typeNamespacedClaimName, &dbclaim)
+		if err != nil && errors.IsNotFound(err) {
 			dbClaim := &persistancev1.DatabaseClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "testdbclaim",
@@ -91,14 +104,22 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 				Status: persistancev1.DatabaseClaimStatus{},
 			}
 			Expect(k8sClient.Create(ctx, dbClaim)).To(Succeed())
+		}
 
-			sec := &corev1.Secret{}
-			sec.Data = map[string][]byte{
-				"password": []byte("masterpassword"),
-				"username": []byte("user_a"),
+		secret := corev1.Secret{}
+		err = k8sClient.Get(ctx, typeNamespacedSecretName, &secret)
+		if err != nil && errors.IsNotFound(err) {
+
+			sec := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "master-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"password": []byte("masterpassword"),
+					"username": []byte("user_a"),
+				},
 			}
-			sec.Name = "master-secret"
-			sec.Namespace = "default"
 			Expect(k8sClient.Create(ctx, sec)).To(Succeed())
 		}
 	})
