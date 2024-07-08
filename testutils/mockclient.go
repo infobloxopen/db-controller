@@ -36,7 +36,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		sec.Data = map[string][]byte{
 			"password": []byte("masterpassword"),
-			"username": []byte("user_a"),
+			"username": []byte("mainUser"),
 		}
 		return nil
 	} else if key.Namespace == "schema-user-test" {
@@ -56,7 +56,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 						DatabaseName: "postgres",
 						Host:         "localhost",
 						Port:         m.Port,
-						Username:     "user_a",
+						Username:     "mainUser",
 						SSLMode:      "disable",
 					},
 				},
@@ -129,7 +129,7 @@ func (m MockClient) Create(ctx context.Context, obj client.Object, opts ...clien
 		}
 		sec.Data = map[string][]byte{
 			"password": []byte("masterpassword"),
-			"username": []byte("user_a"),
+			"username": []byte("mainUser"),
 		}
 		return nil
 	}

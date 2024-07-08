@@ -95,7 +95,7 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 			sec := &corev1.Secret{}
 			sec.Data = map[string][]byte{
 				"password": []byte("masterpassword"),
-				"username": []byte("user_a"),
+				"username": []byte("mainUser"),
 			}
 			sec.Name = "master-secret"
 			sec.Namespace = "default"

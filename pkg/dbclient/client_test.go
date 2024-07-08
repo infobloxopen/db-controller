@@ -25,7 +25,10 @@ func init() {
 }
 
 func TestPostgresClientOperations(t *testing.T) {
-	testDB := SetupSqlDB(t, "test", "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./")
+	testDB, err := SetupSqlDB("test", "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./")
+	if err != nil {
+		t.Error(err)
+	}
 	defer testDB.Close()
 	type mockClient struct {
 		dbType string
