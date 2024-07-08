@@ -319,8 +319,7 @@ func (pc *client) SchemaExists(schemaName string) (bool, error) {
 	var exists bool
 	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)", schemaName).Scan(&exists)
 	if err != nil {
-		pc.log.Error(err, "could not query for schema "+schemaName)
-		return false, err
+		return false, fmt.Errorf("schema_exists %s: %w", schemaName, err)
 	}
 	return exists, nil
 }
