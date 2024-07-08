@@ -21,10 +21,16 @@ import (
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type DbRoleClaimReconciler struct {
@@ -34,6 +40,11 @@ type DbRoleClaimReconciler struct {
 	Config     *roleclaim.RoleConfig
 	reconciler *roleclaim.DbRoleClaimReconciler
 }
+
+const (
+	dbClaimField  = ".spec.sourceDatabaseClaim.name"
+	finalizerName = "dbroleclaims.persistance.atlas.infoblox.com/finalizer"
+)
 
 //+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=dbroleclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=dbroleclaims/status,verbs=get;update;patch
@@ -58,6 +69,12 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DbRoleClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.DbRoleClaim{}, dbClaimField, func(rawObj client.Object) []string {
+		dbRoleClaim := rawObj.(*v1.DbRoleClaim)
+		return []string{dbRoleClaim.Spec.SourceDatabaseClaim.Name}
+	}); err != nil {
+		return err
+	}
 
 	r.reconciler = &roleclaim.DbRoleClaimReconciler{
 		Client: r.Client,
@@ -66,45 +83,32 @@ func (r *DbRoleClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.DbRoleClaim{}).
+		Watches(
+			client.Object(&v1.DatabaseClaim{}),
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForDatabaseClaim),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 
-// // SetupWithManager sets up the controller with the Manager.
-// func (r *DbRoleClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
-// 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &persistancev1.DbRoleClaim{}, dbClaimField, func(rawObj client.Object) []string {
-// 		dbRoleClaim := rawObj.(*persistancev1.DbRoleClaim)
-// 		return []string{dbRoleClaim.Spec.SourceDatabaseClaim.Name}
-// 	}); err != nil {
-// 		return err
-// 	}
-// 	return ctrl.NewControllerManagedBy(mgr).
-// 		For(&persistancev1.DbRoleClaim{}).
-// 		Watches(
-// 			client.Object(&persistancev1.DatabaseClaim{}),
-// 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForDatabaseClaim),
-// 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-// 		).
-// 		Complete(r)
-// }
+func (r *DbRoleClaimReconciler) findObjectsForDatabaseClaim(ctx context.Context, databaseClaim client.Object) []reconcile.Request {
+	associatedDbRoleClaims := &v1.DbRoleClaimList{}
+	listOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(dbClaimField, databaseClaim.GetName()),
+	}
+	err := r.List(context.TODO(), associatedDbRoleClaims, listOps)
+	if err != nil {
+		return []reconcile.Request{}
+	}
 
-// func (r *DbRoleClaimReconciler) findObjectsForDatabaseClaim(ctx context.Context, databaseClaim client.Object) []reconcile.Request {
-// 	associatedDbRoleClaims := &persistancev1.DbRoleClaimList{}
-// 	listOps := &client.ListOptions{
-// 		FieldSelector: fields.OneTermEqualSelector(dbClaimField, databaseClaim.GetName()),
-// 	}
-// 	err := r.List(context.TODO(), associatedDbRoleClaims, listOps)
-// 	if err != nil {
-// 		return []reconcile.Request{}
-// 	}
-
-// 	requests := make([]reconcile.Request, len(associatedDbRoleClaims.Items))
-// 	for i, item := range associatedDbRoleClaims.Items {
-// 		requests[i] = reconcile.Request{
-// 			NamespacedName: types.NamespacedName{
-// 				Name:      item.GetName(),
-// 				Namespace: item.GetNamespace(),
-// 			},
-// 		}
-// 	}
-// 	return requests
-// }
+	requests := make([]reconcile.Request, len(associatedDbRoleClaims.Items))
+	for i, item := range associatedDbRoleClaims.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+	return requests
+}
