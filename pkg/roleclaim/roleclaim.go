@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -111,18 +110,9 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// #endregion find secret
 
 	//either create users and schemas OR fallout to ELSE: copy existing secret
-	if dbRoleClaim.Spec.UserName != "" || len(dbRoleClaim.Spec.SchemaRoleMap) > 0 {
-		matched, err := regexp.Match(`^[\pL_][\pL\pM_0-9$]*$`, []byte(dbRoleClaim.Spec.UserName))
-		if !matched || err != nil {
-			log.Info("username has incorrect format. Only letters, numbers and _ are allowed.")
-			return ctrl.Result{}, errors.New("username has incorrect format. Only letters, numbers and _ are allowed")
-		}
-
+	if len(dbRoleClaim.Spec.SchemaRoleMap) > 0 {
 		//validations for user, schema and roles
 		var missingParam bool = false
-		if dbRoleClaim.Spec.UserName == "" {
-			missingParam = true
-		}
 		for schema, role := range dbRoleClaim.Spec.SchemaRoleMap {
 			if schema == "" || role == "" {
 				missingParam = true
@@ -155,7 +145,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			dbRoleClaim.Status.SchemaRoleStatus.RoleStatus = make(map[string]string)
 		}
 		if dbRoleClaim.Status.Username == "" {
-			dbRoleClaim.Status.Username = dbRoleClaim.Spec.UserName
+			dbRoleClaim.Status.Username = dbRoleClaim.Name
 		}
 
 		rotationTime := r.getPasswordRotationTime()
@@ -192,7 +182,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 
 			//create user
-			dbu := dbuser.NewDBUser(dbRoleClaim.Spec.UserName)
+			dbu := dbuser.NewDBUser(strings.ToLower(dbRoleClaim.Name) + "_user")
 			userPassword, err := basefun.GeneratePassword(r.Config.Viper)
 			if err != nil {
 				return ctrl.Result{}, err

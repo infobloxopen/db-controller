@@ -38,8 +38,6 @@ type DbRoleClaimSpec struct {
 	// The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
 	SecretName string `json:"secretName,omitempty"`
 
-	UserName string `json:"username,omitempty"`
-
 	SchemaRoleMap map[string]RoleType `json:"schemarolemap,omitempty"`
 }
 

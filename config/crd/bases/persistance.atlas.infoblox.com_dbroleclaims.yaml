@@ -66,8 +66,6 @@ spec:
                 - name
                 - namespace
                 type: object
-              username:
-                type: string
             required:
             - sourceDatabaseClaim
             type: object

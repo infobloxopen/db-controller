@@ -254,7 +254,6 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &DbRoleClaimReconciler{
 				Client: tt.rec.Client,
-				Scheme: tt.rec.Scheme,
 				Config: tt.rec.Config,
 			}
 
@@ -309,7 +308,7 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles(t *testing.T) {
 			exists, err = dbClient.RoleExists("schema1_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user1_a")
+			exists, err = dbClient.UserExists("testclaim_user_a")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			//-----------------
@@ -420,7 +419,7 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 			var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 			Expect(schemaUserClaimStatus).Should(Not(BeNil()))
 			Expect(schemaUserClaimStatus.Error).Should(BeEmpty())
-			Expect(schemaUserClaimStatus.Username).Should(Equal("user2_b"))
+			Expect(schemaUserClaimStatus.Username).Should(Equal("testclaim_user_b"))
 			Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus).Should(HaveLen(3))
 
 			Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus["schema1"]).Should(Equal("valid"))
@@ -439,7 +438,7 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 			exists, err = dbClient.RoleExists("schema1_regular")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
-			exists, err = dbClient.UserExists("user2_b")
+			exists, err = dbClient.UserExists("testclaim_user_b")
 			Expect(exists).Should(BeTrue())
 			Expect(err).Should(BeNil())
 			//-----------------
@@ -460,50 +459,6 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_UpdatePassword(t *test
 			Expect(err).Should(BeNil())
 		})
 	}
-}
-
-func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_InvalidUsername(t *testing.T) {
-	RegisterFailHandler(Fail)
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	type reconciler struct {
-		Client             client.Client
-		Log                logr.Logger
-		Scheme             *runtime.Scheme
-		Config             *roleclaim.RoleConfig
-		DbIdentifierPrefix string
-		Context            context.Context
-		Request            controllerruntime.Request
-	}
-
-	viperObj := viper.New()
-
-	rec := reconciler{
-		Client: &MockClient{},
-		Config: &roleclaim.RoleConfig{
-			Viper: viperObj,
-			Class: "default",
-		},
-		Request: controllerruntime.Request{
-			NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-invalidusername"},
-		},
-	}
-
-	r := &DbRoleClaimReconciler{
-		Client: rec.Client,
-		Config: rec.Config,
-	}
-
-	r.reconciler = &roleclaim.DbRoleClaimReconciler{
-		Client: r.Client,
-		Config: r.Config,
-	}
-
-	result, err := r.reconciler.Reconcile(context.Background(), rec.Request)
-	Expect(result.Requeue).Should(BeFalse())
-
-	Expect(err).Should(Not(BeNil()))
-	Expect(err.Error()).Should(Equal("username has incorrect format. Only letters, numbers and _ are allowed"))
 }
 
 //TODO: create one test that copies a secret and test if it was copied correctly - using k8sClient
