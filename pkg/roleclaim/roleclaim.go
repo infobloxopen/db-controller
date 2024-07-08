@@ -89,7 +89,6 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	err = r.Get(ctx, types.NamespacedName{Name: dbclaimName, Namespace: dbclaimNamespace}, sourceDbClaim)
 	if err != nil {
 		log.Error(err, "specified dbclaim not found", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
-		//r.Config.Recorder.Event(&dbRoleClaim, "Warning", "Not found", fmt.Sprintf("DatabaseClaim %s/%s", dbclaimNamespace, dbclaimName))
 		dbRoleClaim.Status.MatchedSourceClaim = ""
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbclaimName))
 	}
@@ -103,7 +102,6 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	err = r.Get(ctx, types.NamespacedName{Name: sourceDbClaim.Spec.SecretName, Namespace: dbclaimNamespace}, sourceSecret)
 	if err != nil {
 		log.Error(err, "dbclaim_secret_not_found", "secret_name", sourceDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
-		//r.Config.Recorder.Event(&dbRoleClaim, "Warning", "Not found", fmt.Sprintf("Secret %s/%s", dbclaimNamespace, sourceDbClaim.Spec.SecretName))
 		dbRoleClaim.Status.SourceSecret = ""
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s source secret not found", sourceDbClaim.Spec.SecretName))
 	}
