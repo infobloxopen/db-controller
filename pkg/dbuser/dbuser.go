@@ -49,7 +49,7 @@ func (dbu DBUser) GetUserB() string {
 // changes in current behavior of the func.
 func (dbu DBUser) NextUser(curUser string) string {
 
-	if dbu.userA == curUser {
+	if strings.HasSuffix(curUser, SuffixA) {
 		return dbu.GetUserB()
 	}
 

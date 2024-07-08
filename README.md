@@ -112,3 +112,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+
+### Run integration tests
+
+1. Integration tests run against server box-3. Before running your tests, you'll have to build and deploy to make sure you are running against the latest version.
+
+2. Update file '.id' in the root folder, with a class name of your own (let's say your username). That will be used to create a namespace and the CRDs under it.
+Then run:
+    make docker-build
+    make deploy
+
+3. if you want to run a single test at a time replace It() by Fit() in the test class, this is a focused test and only this test will run (output shows failure, but this is intended, not to fool you that everything ran successfully)
+
+4. in case the tests failed in the middle, sometimes the resources are not deleted from the AWS account (actually it might takes a long time sometimes). So you can go in there and delete the RDSs that were created. They can be searched for by using the namespace you set in step 2.

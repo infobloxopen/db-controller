@@ -419,16 +419,16 @@ func (s *create_subscription_state) Execute() (State, error) {
 
 	err = targetDBAdmin.QueryRow(q, DefaultSubName).Scan(&exists)
 	if err != nil {
-		log.Error(err, "could not query for subsription name", "stmt", createSub)
+		log.Error(err, "could not query for subscription name", "stmt", createSub)
 		return nil, err
 	}
 	if !exists {
-		log.Info("creating subsription:", "with name", DefaultSubName)
+		log.Info("creating subscription:", "with name", DefaultSubName)
 		if _, err := targetDBAdmin.Exec(createSub); err != nil {
-			log.Error(err, "could not create subsription")
+			log.Error(err, "could not create subscription")
 			return nil, err
 		}
-		log.Info("subsription created", "name", DefaultSubName)
+		log.Info("subscription created", "name", DefaultSubName)
 	}
 	log.Info("completed")
 	return &enable_subscription_state{

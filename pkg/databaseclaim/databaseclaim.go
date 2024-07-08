@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
+	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -37,13 +38,6 @@ import (
 )
 
 var (
-	minRotationTime = 60 * time.Minute // rotation time in minutes
-	maxRotationTime = 1440 * time.Minute
-	maxWaitTime     = 10 * time.Minute
-
-	defaultPassLen                  = 32
-	defaultNumDig                   = 10
-	defaultNumSimb                  = 10
 	maxNameLen                      = 44 // max length of dbclaim name
 	serviceNamespaceEnvVar          = "SERVICE_NAMESPACE"
 	defaultRestoreFromSource        = "Snapshot"
@@ -630,7 +624,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 		return err
 	}
 	existingDBConnInfo.Password = masterPassword
-	dbClient, err := r.getClientForExistingDB(ctx, logr, dbClaim, existingDBConnInfo)
+	dbClient, err := r.getClientForExistingDB(ctx, dbClaim, existingDBConnInfo)
 	if err != nil {
 		logr.Error(err, "creating database client error")
 		return err
@@ -688,7 +682,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
 		logr.Info("cloud instance ready. reading generated master secret")
-		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier, dbClaim)
+		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 		if err != nil {
 			logr.Info("unable to read the complete secret. requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
@@ -700,7 +694,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
 
 	} else {
 		//was used only for local testing
-		password, err := r.readMasterPassword(ctx, dbClaim)
+		password, err := r.readMasterPassword(ctx)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -778,7 +772,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	logr.Info("Migration is progress", "state", migrationState)
 
 	logr.Info("cloud instance ready. reading generated master secret")
-	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier, dbClaim)
+	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 	if err != nil {
 		logr.Info("unable to read the complete secret. requeueing")
 		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
@@ -816,7 +810,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		r.mode == M_InitiateDBUpgrade {
 		activeHost, _, _ := strings.Cut(dbClaim.Status.ActiveDB.ConnectionInfo.Host, ".")
 
-		activeConnInfo, err := r.readResourceSecret(ctx, activeHost, dbClaim)
+		activeConnInfo, err := r.readResourceSecret(ctx, activeHost)
 		if err != nil {
 			logr.Info("unable to read the complete secret. requeueing")
 			return r.manageError(ctx, dbClaim, err)
@@ -1166,8 +1160,7 @@ func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Con
 	return password, nil
 }
 
-func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, logr logr.Logger,
-	dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Client, error) {
+func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
 
 	if connInfo == nil {
 		return nil, fmt.Errorf("invalid connection info")
@@ -1202,13 +1195,13 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 
 	connInfo.Host = r.getMasterHost(dbClaim)
 	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = r.getMasterUser(dbClaim)
-	connInfo.SSLMode = r.getSSLMode(dbClaim)
+	connInfo.Username = r.getMasterUser()
+	connInfo.SSLMode = r.getSSLMode()
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
 
-func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Client, error) {
+func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
 	logr.V(DebugLevel).Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
@@ -1275,7 +1268,7 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 
 		if reclaimPolicy == "delete" {
 			dbHostName := r.getDynamicHostName(dbClaim)
-			pgName := r.getParameterGroupName(ctx, dbClaim)
+			pgName := r.getParameterGroupName(dbClaim)
 			if fragmentKey == "" {
 				// Delete
 				if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
@@ -1329,7 +1322,7 @@ func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 			return "", err
 		}
 	} else {
-		pass, err = gen.Generate(defaultPassLen, defaultNumDig, defaultNumSimb, false, false)
+		pass, err = gen.Generate(basefun.GetDefaultPassLen(), basefun.GetDefaultNumDig(), basefun.GetDefaultNumSimb(), false, false)
 		if err != nil {
 			return "", err
 		}
@@ -1378,7 +1371,7 @@ func (r *DatabaseClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) strin
 	return r.Config.Viper.GetString(fmt.Sprintf("%s::Host", r.Input.FragmentKey))
 }
 
-func (r *DatabaseClaimReconciler) getMasterUser(dbClaim *v1.DatabaseClaim) string {
+func (r *DatabaseClaimReconciler) getMasterUser() string {
 
 	u := r.Config.Viper.GetString(fmt.Sprintf("%s::masterUsername", r.Input.FragmentKey))
 	if u != "" {
@@ -1401,7 +1394,7 @@ func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) strin
 	return r.Config.Viper.GetString("defaultMasterPort")
 }
 
-func (r *DatabaseClaimReconciler) getSSLMode(dbClaim *v1.DatabaseClaim) string {
+func (r *DatabaseClaimReconciler) getSSLMode() string {
 
 	s := r.Config.Viper.GetString(fmt.Sprintf("%s::sslMode", r.Input.FragmentKey))
 	if s != "" {
@@ -1414,10 +1407,10 @@ func (r *DatabaseClaimReconciler) getSSLMode(dbClaim *v1.DatabaseClaim) string {
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 	prt := time.Duration(r.Config.Viper.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
 
-	if prt < minRotationTime || prt > maxRotationTime {
+	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
 		// TODO: add this back maybe
 		// r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
-		return minRotationTime
+		return basefun.GetMinRotationTime()
 	}
 
 	return prt
@@ -1472,7 +1465,7 @@ func (r *DatabaseClaimReconciler) getSystemFunctions() map[string]string {
 func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
 	t := time.Duration(r.Config.Viper.GetInt("dynamicHostWaitTimeMin")) * time.Minute
 
-	if t > maxWaitTime {
+	if t > basefun.GetMaxWaitTime() {
 		// TODO: add this back maybe
 		// r.Log.Info(fmt.Sprintf("dynamic host wait time is out of range, should be between 1min and %s", maxWaitTime))
 		return time.Minute
@@ -1516,7 +1509,7 @@ func extractVersion(message string) string {
 	return versionStr
 }
 
-func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secretName string, dbClaim *v1.DatabaseClaim) (v1.DatabaseClaimConnectionInfo, error) {
+func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secretName string) (v1.DatabaseClaimConnectionInfo, error) {
 	rs := &corev1.Secret{}
 	connInfo := v1.DatabaseClaimConnectionInfo{}
 
@@ -1560,7 +1553,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim) 
 	return prefix + r.Input.FragmentKey + suffix
 }
 
-func (r *DatabaseClaimReconciler) getParameterGroupName(ctx context.Context, dbClaim *v1.DatabaseClaim) string {
+func (r *DatabaseClaimReconciler) getParameterGroupName(dbClaim *v1.DatabaseClaim) string {
 	hostName := r.getDynamicHostName(dbClaim)
 	params := &r.Input.HostParams
 
@@ -1606,7 +1599,7 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	return firstInsReady && secondInsReady, nil
 }
 
-func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Client, status *v1.Status) error {
+func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Clienter, status *v1.Status) error {
 	logr := log.FromContext(ctx)
 
 	dbName := r.Input.MasterConnInfo.DatabaseName
@@ -1632,7 +1625,7 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, dbClient dbclient.Client, status *v1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
 	logr := log.FromContext(ctx)
 
 	if status == nil {
@@ -1644,7 +1637,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, d
 	rotationTime := r.getPasswordRotationTime()
 
 	// create role
-	roleCreated, err := dbClient.CreateGroup(dbName, baseUsername)
+	roleCreated, err := dbClient.CreateRole(dbName, baseUsername, "public")
 	if err != nil {
 		return err
 	}
@@ -2165,7 +2158,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(ctx, dbClaim)
+	pgName := r.getParameterGroupName(dbClaim)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
@@ -2253,7 +2246,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(ctx, dbClaim)
+	pgName := r.getParameterGroupName(dbClaim)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
@@ -2337,7 +2330,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
 	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(ctx, dbClaim)
+	pgName := r.getParameterGroupName(dbClaim)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
@@ -2610,7 +2603,7 @@ func (r *DatabaseClaimReconciler) updateDBCluster(ctx context.Context, dbClaim *
 		return false, nil
 	}
 	logr.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
-	r.Client.Patch(ctx, dbCluster, patchDBCluster)
+	err = r.Client.Patch(ctx, dbCluster, patchDBCluster)
 	if err != nil {
 		return false, err
 	}
@@ -2645,7 +2638,7 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		fallthrough
 	case v1.AuroraPostgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
-		dbURI = dbclient.PostgresURI(fmt.Sprintf("%s:%s", connInfo.Host, connInfo.Port), connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
+		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
 	default:
 		return fmt.Errorf("unknown DB type")
 	}
@@ -2724,7 +2717,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	return r.Client.Update(ctx, exSecret)
 }
 
-func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context) (string, error) {
 	gs := &corev1.Secret{}
 	secretName := r.getSecretRef(r.Input.FragmentKey)
 	secretKey := r.getSecretKey(r.Input.FragmentKey)

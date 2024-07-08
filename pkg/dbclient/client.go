@@ -56,7 +56,7 @@ type Config struct {
 	UseIAM bool // attempt to connect with IAM user provided in DSN
 }
 
-func New(cfg Config) (Client, error) {
+func New(cfg Config) (Clienter, error) {
 
 	return newPostgresClient(context.TODO(), cfg)
 }
@@ -105,8 +105,9 @@ func PostgresConnectionString(host, port, user, password, dbname, sslmode string
 }
 
 // PostgresURI returns a URI for a postgres connection
-func PostgresURI(addr, user, password, dbname, sslmode string) string {
-	return fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", url.QueryEscape(user), url.QueryEscape(password), addr, url.QueryEscape(dbname), sslmode)
+func PostgresURI(host, port, user, password, dbname, sslmode string) string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		url.QueryEscape(user), url.QueryEscape(password), host, port, url.QueryEscape(dbname), sslmode)
 }
 
 // CreateDataBase implements typo func name incase anybody is using it
@@ -183,6 +184,7 @@ func (pc *client) CreateSpecialExtensions(dbName string, role string) error {
 	}
 	return nil
 }
+
 func (pc *client) pg_cron(dbName string, role string) error {
 	// create extension pg_cron and grant usage to public
 	db, err := pc.getDB(dbName)
@@ -207,6 +209,7 @@ func (pc *client) pg_cron(dbName string, role string) error {
 
 	return nil
 }
+
 func (pc *client) pg_partman(dbName string, role string) error {
 
 	db, err := pc.getDB(dbName)
@@ -312,12 +315,53 @@ func (pc *client) ManageSystemFunctions(dbName string, functions map[string]stri
 	return nil
 }
 
-func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
+func (pc *client) SchemaExists(schemaName string) (bool, error) {
+	var exists bool
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)", schemaName).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("schema_exists %s: %w", schemaName, err)
+	}
+	return exists, nil
+}
+
+func (pc *client) CreateSchema(schemaName string) (bool, error) {
+	createSchema := strings.Replace(`
+			CREATE SCHEMA IF NOT EXISTS %schema%;
+			REVOKE ALL ON SCHEMA %schema% FROM PUBLIC;
+			GRANT USAGE ON SCHEMA %schema% TO PUBLIC;			
+			REVOKE ALL ON ALL TABLES IN SCHEMA %schema% FROM PUBLIC ;
+			GRANT SELECT ON ALL TABLES IN SCHEMA %schema% TO PUBLIC;
+		`, "%schema%", schemaName, -1)
+	//create schema
+	_, err := pc.DB.Exec(createSchema)
+	if err != nil {
+		pc.log.Error(err, "could not create schema "+schemaName)
+		return false, err
+	}
+	return true, nil
+}
+
+func (pc *client) RoleExists(roleName string) (bool, error) {
+	var exists bool
+
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", roleName).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for role "+roleName)
+		return false, err
+	}
+	return exists, nil
+}
+
+func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
+	if schema == "" {
+		schema = "public"
+	}
+
 	start := time.Now()
 	var exists bool
 	created := false
 
-	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for role")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
@@ -328,11 +372,11 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 		pc.log.Info("creating a ROLE", "role", rolename)
 		grantDB := `
 			GRANT ALL PRIVILEGES ON DATABASE %s TO %s;
-			GRANT ALL ON SCHEMA public TO %s;
-			GRANT ALL ON ALL TABLES IN SCHEMA public TO %s;
+			GRANT ALL ON SCHEMA %s TO %s;
+			GRANT ALL ON ALL TABLES IN SCHEMA %s TO %s;
 		`
 		grantSchemaPrivileges := `
-			GRANT ALL ON SCHEMA public TO %s;
+			GRANT ALL ON SCHEMA %s TO %s;
 		`
 		_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
 		if err != nil {
@@ -341,9 +385,14 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 			return created, err
 		}
 
-		_, err := pc.DB.Exec(fmt.Sprintf(grantDB, pq.QuoteIdentifier(dbName),
-			pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(rolename),
-			pq.QuoteIdentifier(rolename)))
+		_, err := pc.DB.Exec(
+			fmt.Sprintf(grantDB,
+				pq.QuoteIdentifier(dbName),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename)))
 		if err != nil {
 			pc.log.Error(err, "could not set permissions to role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
@@ -357,7 +406,7 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 		}
 		defer db.Close()
 		//grant schema privileges
-		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(rolename)))
+		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename)))
 		if err != nil {
 			pc.log.Error(err, "could not set schema privileges to role "+rolename)
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
@@ -374,22 +423,153 @@ func (pc *client) CreateGroup(dbName, rolename string) (bool, error) {
 	return created, nil
 }
 
-func (pc *client) setGroup(username, rolename string) error {
+func (pc *client) CreateAdminRole(dbName, rolename, schema string) (bool, error) {
+	created, err := pc.CreateRole(dbName, rolename, schema)
+
+	if err != nil {
+		return created, err
+	}
+
+	if created {
+		grantSchemaPrivileges := `
+			GRANT ALL ON SCHEMA %s TO %s;
+			GRANT CONNECT ON DATABASE %s TO %s;
+		`
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(fmt.Sprintf(grantSchemaPrivileges, pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename)))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+	}
+
+	return created, nil
+}
+
+func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, error) {
+	created, err := pc.CreateRole(dbName, rolename, schema)
+
+	if err != nil {
+		return created, err
+	}
+
+	if created {
+		grantSchemaPrivileges := `
+		    GRANT CONNECT ON DATABASE %s TO %s;
+			GRANT USAGE, CREATE ON SCHEMA %s TO %s;
+			GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %s TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s;
+			GRANT USAGE ON ALL SEQUENCES IN SCHEMA %s TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON SEQUENCES TO %s;
+		`
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(
+			fmt.Sprintf(grantSchemaPrivileges,
+				pq.QuoteIdentifier(dbName),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+			))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+	}
+
+	return created, nil
+}
+
+func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, error) {
+	created, err := pc.CreateRole(dbName, rolename, schema)
+
+	if err != nil {
+		return created, err
+	}
+
+	if created {
+		grantSchemaPrivileges := `
+		    GRANT CONNECT ON DATABASE %s TO %s;
+			GRANT USAGE ON SCHEMA %s TO %s;
+			GRANT SELECT ON ALL TABLES IN SCHEMA %s TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT SELECT ON TABLES TO %s;
+		`
+		db, err := pc.getDB(dbName)
+		if err != nil {
+			pc.log.Error(err, "could not connect to db", "database", dbName)
+			return created, err
+		}
+		defer db.Close()
+		//grant schema privileges
+		_, err = db.Exec(
+			fmt.Sprintf(grantSchemaPrivileges,
+				pq.QuoteIdentifier(dbName),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+			))
+		if err != nil {
+			pc.log.Error(err, "could not set schema privileges to role "+rolename)
+			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
+			return created, err
+		}
+	}
+
+	return created, nil
+}
+
+func (pc *client) AssignRoleToUser(username, rolename string) error {
 	db := pc.DB
-	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("GRANT %s TO %s", pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(username))); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (pc *client) CreateUser(username, rolename, userPassword string) (bool, error) {
+func (pc *client) UserExists(userName string) (bool, error) {
+	var exists bool
+
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", userName).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for user name")
+		return false, err
+	}
+	return exists, nil
+}
+
+func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, error) {
 	start := time.Now()
 	var exists bool
 	db := pc.DB
 	created := false
 
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
+	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", userName).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
@@ -397,25 +577,30 @@ func (pc *client) CreateUser(username, rolename, userPassword string) (bool, err
 	}
 
 	if !exists {
-		pc.log.Info("creating a user", "user", username)
-
-		s := fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword), pq.QuoteIdentifier(rolename))
-		_, err = pc.DB.Exec(s)
+		pc.log.Info("creating a user", "user", userName)
+		var sql string
+		if roleName != "" {
+			sql = fmt.Sprintf("CREATE ROLE %s with encrypted password %s LOGIN IN ROLE %s", pq.QuoteIdentifier(userName), pq.QuoteLiteral(userPassword), pq.QuoteIdentifier(roleName))
+		} else {
+			sql = fmt.Sprintf("CREATE USER %s with encrypted password %s", pq.QuoteIdentifier(userName), pq.QuoteLiteral(userPassword))
+		}
+		_, err = pc.DB.Exec(sql)
 		if err != nil {
-			pc.log.Error(err, "could not create user "+username)
+			pc.log.Error(err, "could not create user "+userName)
 			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
 			return created, err
 		}
+		if roleName != "" {
+			if err := pc.AssignRoleToUser(userName, roleName); err != nil {
+				pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", roleName, userName))
+				metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 
-		if err := pc.setGroup(username, rolename); err != nil {
-			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, username))
-			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
-
-			return created, err
+				return created, err
+			}
 		}
 
 		created = true
-		pc.log.Info("user has been created", "user", username)
+		pc.log.Info("user has been created", "user", userName)
 		metrics.UsersCreated.Inc()
 		duration := time.Since(start)
 		metrics.UsersCreateTime.Observe(duration.Seconds())
@@ -466,7 +651,7 @@ func (pc *client) UpdateUser(oldUsername, newUsername, rolename, password string
 			return err
 		}
 
-		if err := pc.setGroup(newUsername, rolename); err != nil {
+		if err := pc.AssignRoleToUser(newUsername, rolename); err != nil {
 			pc.log.Error(err, fmt.Sprintf("could not set role %s to user %s", rolename, newUsername))
 			metrics.UsersCreatedErrors.WithLabelValues("grant error").Inc()
 
@@ -511,6 +696,7 @@ func (pc *client) UpdatePassword(username string, userPassword string) error {
 
 	return nil
 }
+
 func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) error {
 	var (
 		hasSuperUser bool
