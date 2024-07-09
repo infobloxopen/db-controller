@@ -17,11 +17,15 @@ limitations under the License.
 package controller
 
 import (
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -42,17 +46,26 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var namespace string
+var logger logr.Logger
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
+
+	logger = funcr.New(func(prefix, args string) {
+		t.Log(prefix, args)
+	}, funcr.Options{
+		Verbosity: 1,
+	})
 }
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
+	namespace = "default"
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
@@ -81,9 +94,21 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
+	now := time.Now()
+	testdb, testDSN, cleanupTestDB = RunDB()
+	logger.Info("postgres_setup_took", "duration", time.Since(now))
+
 })
 
+// Stand up postgres in a container
+var (
+	testdb        *sql.DB
+	testDSN       string
+	cleanupTestDB func()
+)
+
 var _ = AfterSuite(func() {
+	cleanupTestDB()
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())

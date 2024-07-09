@@ -3,22 +3,13 @@ package dbclient
 import (
 	"database/sql"
 	"flag"
-	"fmt"
-	"net"
-	"net/url"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
 )
 
 const succeed = "\u2713"
 const failed = "\u2717"
-
-var sqlDB *sql.DB
 
 // The following gingo struct and associted init() is required to run go test with ginkgo related flags
 // Since this test is not using ginkgo, this is a hack to get around the issue of go test complaining about
@@ -33,144 +24,8 @@ func init() {
 	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
 }
 
-type testDB struct {
-	t        *testing.T
-	port     int
-	username string
-	password string
-	resource *dockertest.Resource
-	pool     *dockertest.Pool
-}
-
-func (t *testDB) URL() string {
-	u := url.URL{
-		Scheme: "postgres",
-		Host:   fmt.Sprintf("localhost:%d", t.port),
-		User:   url.UserPassword(t.username, t.password),
-		Path:   "/postgres",
-	}
-	q := u.Query()
-	q.Set("sslmode", "disable")
-	u.RawQuery = q.Encode()
-	return u.String()
-}
-
-func (t *testDB) Close() {
-	t.t.Log("Tearing down dockertest resource of PostgreSQL DB")
-	if err := t.pool.Purge(t.resource); err != nil {
-		t.t.Errorf("Could not purge resource: %s", err)
-	}
-}
-
-func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
-	if dbname == "" {
-		dbname = "postgres"
-	}
-	dbConnStr := fmt.Sprintf("host=localhost port=%d user=%s dbname=%s password=%s sslmode=disable",
-		t.port, username, dbname, password)
-	return sql.Open("postgres", dbConnStr)
-}
-
-func (t *testDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, error) {
-	if dbname == "" {
-		dbname = "postgres"
-	}
-
-	dbConnStr := PostgresURI(fmt.Sprintf("localhost:%d", t.port), username, password, dbname, "disable")
-	t.t.Log("dbConnStr", dbConnStr)
-	return sql.Open("postgres", dbConnStr)
-}
-
-func (t *testDB) OpenUserWithConnectionString(dbname, username, password string) (*sql.DB, error) {
-	if dbname == "" {
-		dbname = "postgres"
-	}
-	dbConnStr := PostgresConnectionString("localhost", strconv.Itoa(t.port), username, password, dbname, "disable")
-	t.t.Log("dbConnStr", dbConnStr)
-	return sql.Open("postgres", dbConnStr)
-}
-
-func openPort(t *testing.T) (string, int) {
-	port, err := net.Listen("tcp", "0.0.0.0:0")
-	if err != nil {
-		t.Fatalf("Unable to find an opened port for DB: %v", err)
-	}
-	defer port.Close()
-
-	return port.Addr().String(), port.Addr().(*net.TCPAddr).Port
-
-}
-
-func setupSqlDB(t *testing.T) *testDB {
-	t.Helper()
-	t.Log("Setting up an instance of PostgreSQL DB with dockertest")
-
-	addr, port := openPort(t)
-
-	t.Log("Got available addr for DB: ", addr)
-	user := "test"
-	pass := "password"
-
-	// Create a new pool for docker containers
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		t.Fatalf("Could not construct pool: %s", err)
-	}
-	pool.MaxWait = 15 * time.Second
-
-	// uses pool to try to connect to Docker
-	err = pool.Client.Ping()
-	if err != nil {
-		t.Fatalf("Could not connect to Docker: %s", err)
-	}
-
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "postgres",
-		Tag:        "15",
-		Env: []string{
-			"POSTGRES_USER=" + user,
-			"POSTGRES_PASSWORD=" + pass,
-			"POSTGRES_DB=postgres",
-		},
-		ExposedPorts: []string{"5432"},
-		PortBindings: map[docker.Port][]docker.PortBinding{
-			"5432": {
-				{HostIP: "0.0.0.0", HostPort: strconv.Itoa(port)},
-			},
-		},
-	}, func(config *docker.HostConfig) {
-		// set AutoRemove to true for the stopped container to go away by itself
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{
-			Name: "no",
-		}
-	})
-
-	// Exponential retry to connect to database while it is booting
-	if err := pool.Retry(func() error {
-		dbConnStr := PostgresURI(addr, user, pass, "postgres", "disable")
-		sqlDB, err = sql.Open("postgres", dbConnStr)
-		if err != nil {
-			t.Log("Database is not ready yet (it is booting up, wait for a few tries)...")
-			return err
-		}
-		// Tests if database is reachable
-		return sqlDB.Ping()
-	}); err != nil {
-		t.Fatalf("Could not connect to docker: %s", err)
-	}
-	return &testDB{
-		t:        t,
-		username: user,
-		password: pass,
-		port:     port,
-		resource: resource,
-		pool:     pool,
-	}
-}
-
 func TestPostgresClientOperations(t *testing.T) {
-	testDB := setupSqlDB(t)
+	testDB := SetupSqlDB(t, "test", "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./")
 	defer testDB.Close()
 	type mockClient struct {
 		dbType string
@@ -255,19 +110,19 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s CreateDataBase() is passed", succeed)
 
-			t.Logf("CreateGroup()")
-			got, err = pc.CreateGroup(tt.args.dbName, tt.args.role)
+			t.Logf("CreateRole()")
+			got, err = pc.CreateRole(tt.args.dbName, tt.args.role, "")
 			if (err != nil) != tt.wantErr {
-				t.Errorf("\t%s CreateGroup() error = %v, wantErr %v", failed, err, tt.wantErr)
+				t.Errorf("\t%s CreateRole() error = %v, wantErr %v", failed, err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("\t%sCreateGroup() got = %v, want %v", failed, got, tt.want)
+				t.Errorf("\t%sCreateRole() got = %v, want %v", failed, got, tt.want)
 			}
 
 			err = pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", tt.args.role).Scan(&exists)
 			if err != nil {
-				t.Errorf("\t%s CreateGroup error = %v", failed, err)
+				t.Errorf("\t%s CreateRole error = %v", failed, err)
 			}
 
 			if exists {
@@ -275,7 +130,7 @@ func TestPostgresClientOperations(t *testing.T) {
 			} else {
 				t.Errorf("\t%s can't find user %v", failed, tt.args.role)
 			}
-			t.Logf("\t%s CreateGroup() is passed", succeed)
+			t.Logf("\t%s CreateRole() is passed", succeed)
 
 			t.Logf("CreateUser()")
 			got, err = pc.CreateUser(tt.args.username, tt.args.role, tt.args.userPassword)
@@ -641,7 +496,7 @@ func TestPostgresURI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := PostgresURI(fmt.Sprintf("%s:%s", tt.args.host, tt.args.port), tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
+			if got := PostgresURI(tt.args.host, tt.args.port, tt.args.user, tt.args.password, tt.args.dbname, tt.args.sslmode); got != tt.want {
 				t.Errorf("\n   got: %s\nwanted: %s", got, tt.want)
 			}
 		})

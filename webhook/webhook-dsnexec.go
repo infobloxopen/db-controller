@@ -56,7 +56,9 @@ func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) admission.Response {
 	pod := &corev1.Pod{}
 
-	err := dbpi.Decoder.Decode(req, pod)
+	decoder := admission.NewDecoder(dbpi.Client.Scheme())
+	err := decoder.Decode(req, pod)
+
 	if err != nil {
 		dsnexecLog.Error(err, "Sdecar-Injector: cannot decode")
 		return admission.Errored(http.StatusBadRequest, err)

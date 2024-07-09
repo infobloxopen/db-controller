@@ -59,7 +59,8 @@ fmt: ## Run go fmt against code.
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	# FIXME: remove this when integration tests are fully implemented
+	go vet $$(go list ./... | grep -v /e2e)
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
@@ -67,8 +68,9 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
+test-e2e: NS?=$(shell cat .id)
 test-e2e:
-	go test ./test/e2e/ -v -ginkgo.v
+	NAMESPACE=$(NS) ENV=box-3 go test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -142,13 +144,15 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 # 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
-undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+#undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+#	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
+
+localbin: $(LOCALBIN)
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 

@@ -41,6 +41,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 
 	// +kubebuilder:scaffold:imports
 
@@ -187,13 +188,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := &databaseclaim.DatabaseClaimConfig{
-		Viper: ctlConfig,
-
+	dbClaimConfig := &databaseclaim.DatabaseClaimConfig{
+		Viper:              ctlConfig,
+		Namespace:          os.Getenv("SERVICE_NAMESPACE"),
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
 		MasterAuth:            rdsauth.NewMasterAuth(),
+		MetricsEnabled:        true,
 		MetricsDepYamlPath:    metricsDepYamlPath,
 		MetricsConfigYamlPath: metricsConfigYamlPath,
 	}
@@ -201,20 +203,30 @@ func main() {
 	if err = (&controller.DatabaseClaimReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Config: cfg,
+		Config: dbClaimConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatabaseClaim")
 		os.Exit(1)
 	}
+	dbRoleClaimConfig := &roleclaim.RoleConfig{
+		Viper: ctlConfig,
+
+		Class:              class,
+		DbIdentifierPrefix: dbIdentifierPrefix,
+		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
+		MasterAuth: rdsauth.NewMasterAuth(),
+	}
+
 	if err = (&controller.DbRoleClaimReconciler{
-		Class:    class,
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("dbRoleClaim-controller"),
+		Class:  class,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Config: dbRoleClaimConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
 		os.Exit(1)
 	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
