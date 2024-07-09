@@ -38,8 +38,8 @@ var (
 	repository       = "postgres"
 	sourceVersion    = "13.14"
 	targetVersion    = "15.6"
-	sourcePort       = "5435"
-	targetPort       = "5436"
+	sourcePort       = "15435"
+	targetPort       = "15436"
 	testDBNetwork    = "testDBNetwork"
 )
 
@@ -95,10 +95,33 @@ func realTestMain(m *testing.M) int {
 		}
 	}
 	if networkExists {
+		// Remove all containers that are attached to the network
+		containers, err := pool.Client.ListContainers(docker.ListContainersOptions{All: true})
+		if err != nil {
+			panic(err)
+		}
+		for _, container := range containers {
+			for _, network := range container.Networks.Networks {
+				if network.NetworkID == netID {
+					if container.State == "running" {
+						// stop running container then remove it
+						err = pool.Client.StopContainer(container.ID, 10)
+						if err != nil {
+							panic(err)
+						}
+					}
+
+					err = pool.Client.RemoveContainer(docker.RemoveContainerOptions{ID: container.ID})
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
+		}
+
 		err = pool.Client.RemoveNetwork(netID)
 		if err != nil {
-			fmt.Println(err)
-			return 1
+			panic(err)
 		}
 	}
 
@@ -118,8 +141,7 @@ func realTestMain(m *testing.M) int {
 	TargetDBAdminDsn, targetResource, err = setUpTargetDatabase(pool)
 	defer pool.Purge(targetResource)
 	if err != nil {
-		fmt.Println(err)
-		return 1
+		panic(err)
 	}
 
 	TargetDBUserDsn = fmt.Sprintf("postgres://appuser_b:secret@localhost:%s/sub?sslmode=disable", targetPort)
@@ -132,18 +154,11 @@ func realTestMain(m *testing.M) int {
 	}
 	SourceDBUserDsn = fmt.Sprintf("postgres://appuser_a:secret@localhost:%s/pub?sslmode=disable", sourcePort)
 
-	if err = setWalLevel(repository, sourceVersion, sourcePort); err != nil {
-		fmt.Println(err)
-		return 1
-	}
-
 	if err = loadSourceTestData(SourceDBAdminDsn); err != nil {
-		fmt.Println(err)
-		return 1
+		panic(err)
 	}
 	if err = loadTargetTestData(TargetDBAdminDsn); err != nil {
-		fmt.Println(err)
-		return 1
+		panic(err)
 	}
 
 	rc := m.Run()
@@ -225,12 +240,17 @@ func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.R
 	if len(networks) != 1 {
 		return "", nil, fmt.Errorf("Expected 1 but got %v networks", len(networks))
 	}
-
+	logger.Info("starting db on", "port", pgInfo.port)
 	opts := dockertest.RunOptions{
 		Repository: repository,
 		Tag:        pgInfo.version,
 		Hostname:   pgInfo.dbHost,
 		NetworkID:  networks[0].Network.ID,
+		Cmd: []string{
+			"postgres",
+			"-c",
+			"wal_level=logical",
+		},
 		Env: []string{
 			"POSTGRES_USER=" + pgInfo.user,
 			"POSTGRES_PASSWORD=" + pgInfo.password,
@@ -249,12 +269,14 @@ func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.R
 		logger.Error(err, "could not start resource")
 		return "", resource, err
 	}
+	logger.Info("started_database", "id", resource.Container.ID, "port", pgInfo.port)
 	var dbc *sql.DB
 	pgInfo.dsn = fmt.Sprintf(pgInfo.dsn, pgInfo.user, pgInfo.password, pgInfo.port, pgInfo.db)
-	resource.Expire(300) // Tell docker to hard kill the container in 300 seconds
+	// FIXME: dont expire the container
+	// resource.Expire(600) // Tell docker to hard kill the container in 300 seconds
 
+	// FIXME: Retry never exits, find a way to kill it when container doesnt start
 	if err = pool.Retry(func() error {
-		logger.Info("Connecting to database", "with url", pgInfo.dsn)
 		dbc, err = sql.Open(pgInfo.dialect, pgInfo.dsn)
 		if err != nil {
 			return err
@@ -263,6 +285,7 @@ func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.R
 	}); err != nil {
 		return "", resource, fmt.Errorf("Could not connect to docker: %s", err)
 	}
+	logger.Info("database_connected", "dsn", pgInfo.dsn, "ping", dbc.Ping())
 	return pgInfo.dsn, resource, nil
 }
 
@@ -283,11 +306,12 @@ func loadTargetTestData(dsn string) error {
 }
 
 func setWalLevel(repo string, tag string, port string) error {
-	_, err := Exec("./test/change_wal_level.sh", repo, tag, port)
-	if err != nil {
-		return err
-	}
-	return nil
+	panic("nope, dont restart the container")
+	// _, err := Exec("./test/change_wal_level.sh", repo, tag, port)
+	// if err != nil {
+	// 	return err
+	// }
+	// return nil
 }
 
 func TestWrapper(t *testing.T) {
