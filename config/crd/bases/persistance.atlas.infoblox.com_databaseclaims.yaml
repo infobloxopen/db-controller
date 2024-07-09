@@ -59,15 +59,6 @@ spec:
                 description: Specifies an indentifier for the application using the
                   database.
                 type: string
-              autoMinorVersionUpgrade:
-                description: |-
-                  Specifies whether minor engine upgrades are applied automatically to the
-                  DB cluster during the maintenance window. By default, minor engine upgrades
-                  are applied automatically.
-
-
-                  Valid for Cluster Type: Multi-AZ DB clusters only
-                type: boolean
               backupPolicy:
                 description: BackupPolicy specifies the duration at which db backups
                   are taken

@@ -18,5 +18,8 @@ spec:
   type: postgres
   useExistingSource: false
   userName: sample_user
-  autoMinorVersionUpgrade: false
-  preferredBackupWindow: 03:00-03:30
+#  The 30-minute maintenance window is selected at random from an 8-hour block of time per region.
+#  If you don't specify a maintenance window when you create the DB cluster, RDS assigns a 30-minute
+#  maintenance window on a randomly selected day of the week.
+#  Uncomment the field below to specify a value.
+#  preferredMaintenanceWindow: 03:00-03:30

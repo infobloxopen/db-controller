@@ -224,13 +224,6 @@ type DatabaseClaimSpec struct {
 	// +nullable
 	Tags []Tag `json:"tags,omitempty"`
 
-	// Specifies whether minor engine upgrades are applied automatically to the
-	// DB cluster during the maintenance window. By default, minor engine upgrades
-	// are applied automatically.
-	//
-	// Valid for Cluster Type: Multi-AZ DB clusters only
-	AutoMinorVersionUpgrade *bool `json:"autoMinorVersionUpgrade,omitempty"`
-
 	// The weekly time range during which system maintenance can occur.
 	//
 	// Valid for Cluster Type: Aurora DB clusters and Multi-AZ DB clusters

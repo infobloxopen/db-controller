@@ -151,11 +151,6 @@ func (in *DatabaseClaimSpec) DeepCopyInto(out *DatabaseClaimSpec) {
 		*out = make([]Tag, len(*in))
 		copy(*out, *in)
 	}
-	if in.AutoMinorVersionUpgrade != nil {
-		in, out := &in.AutoMinorVersionUpgrade, &out.AutoMinorVersionUpgrade
-		*out = new(bool)
-		**out = **in
-	}
 	if in.PreferredMaintenanceWindow != nil {
 		in, out := &in.PreferredMaintenanceWindow, &out.PreferredMaintenanceWindow
 		*out = new(string)
