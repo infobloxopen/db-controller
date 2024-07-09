@@ -223,6 +223,27 @@ type DatabaseClaimSpec struct {
 	// +optional
 	// +nullable
 	Tags []Tag `json:"tags,omitempty"`
+
+	// The weekly time range during which system maintenance can occur.
+	//
+	// Valid for Cluster Type: Aurora DB clusters and Multi-AZ DB clusters
+	//
+	// The default is a 30-minute window selected at random from an 8-hour block
+	// of time for each Amazon Web Services Region, occurring on a random day of
+	// the week. To see the time blocks available, see Adjusting the Preferred DB
+	// Cluster Maintenance Window (https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_UpgradeDBInstance.Maintenance.html#AdjustingTheMaintenanceWindow.Aurora)
+	// in the Amazon Aurora User Guide.
+	//
+	// Constraints:
+	//
+	//    * Must be in the format ddd:hh24:mi-ddd:hh24:mi.
+	//
+	//    * Days must be one of Mon | Tue | Wed | Thu | Fri | Sat | Sun.
+	//
+	//    * Must be in Universal Coordinated Time (UTC).
+	//
+	//    * Must be at least 30 minutes.
+	PreferredMaintenanceWindow *string `json:"preferredMaintenanceWindow,omitempty"`
 }
 
 // Tag
