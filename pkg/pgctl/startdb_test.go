@@ -81,17 +81,17 @@ func StartNetwork() func() {
 				log.Println(cmd.String())
 				cmd.Stderr = os.Stderr
 				if err := cmd.Run(); err != nil {
-					panic(err)
+					log.Println("failed to disconnect container", container)
 				}
 			}
 
 		}
 
-		cmd = exec.Command("docker", "network", "rm", "pgctl")
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			panic(err)
-		}
+		retryTest(nil, func() error {
+			cmd = exec.Command("docker", "network", "rm", "pgctl")
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}, time.Second, 15*time.Second)
 	}
 }
 
@@ -174,7 +174,9 @@ func RunDB(cfg dbConfig) (*sql.DB, string, func()) {
 }
 
 func retryTest(t *testing.T, mightFail func() error, retryInterval, timeout time.Duration) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 
 	var err error
 	startTime := time.Now()
@@ -184,10 +186,18 @@ func retryTest(t *testing.T, mightFail func() error, retryInterval, timeout time
 		if err == nil {
 			return
 		}
-		t.Logf("retryTest: %s", err)
+		if t != nil {
+			t.Logf("retryTest: %s", err)
+		} else {
+			log.Printf("retryTest: %s", err)
+		}
 		time.Sleep(retryInterval)
 	}
 
 	// If we reach here, the function did not succeed within the timeout
-	t.Fatalf("retry_did_not_succeed within %s: %v", timeout, err)
+	if t != nil {
+		t.Fatalf("retry_did_not_succeed within %s: %v", timeout, err)
+	} else {
+		panic(fmt.Sprintf("retry_did_not_succeed within %s: %v", timeout, err))
+	}
 }
