@@ -70,7 +70,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
 test-e2e: NS?=$(shell cat .id)
 test-e2e:
-	NAMESPACE=$(NS) go test ./test/e2e/ -v -ginkgo.v
+	NAMESPACE=$(NS) ENV=box-3 go test ./test/e2e/ -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter

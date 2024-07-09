@@ -21,8 +21,11 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/test/utils"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -46,12 +49,23 @@ func init() {
 
 // FIXME: remove this and use namespace instead
 var class = ""
+var logger logr.Logger
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting E2E suite\n")
 	RunSpecs(t, "e2e suite")
+	logger = NewGinkgoLogger(t)
+}
+
+func NewGinkgoLogger(t *testing.T) logr.Logger {
+	// Create a new logger with the formatter and a test writer
+	return funcr.New(func(prefix, args string) {
+		t.Log(prefix, args)
+	}, funcr.Options{
+		Verbosity: 1,
+	})
 }
 
 var _ = BeforeSuite(func() {
@@ -89,12 +103,24 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
+	By("validating that the controller-manager pod is running as expected")
+	verifyControllerUp := func() error {
+		// Get pod name
+
+		cmd := exec.Command("make", "helm-test")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+		return nil
+	}
+	EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+
 })
 
 var _ = AfterSuite(func() {
 
-	By("Helm upgrading the manager")
-	cmd := exec.Command("make", "undeploy")
-	_, err := utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred())
+	// By("Helm upgrading the manager")
+	// cmd := exec.Command("make", "undeploy")
+	// _, err := utils.Run(cmd)
+	// Expect(err).NotTo(HaveOccurred())
 })

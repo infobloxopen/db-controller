@@ -3,7 +3,6 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -71,9 +70,10 @@ type input struct {
 	// FIXME: this is type DatabaseType, not string
 	DbType string
 
-	FragmentKey                string
-	ManageCloudDB              bool
-	SharedDBHost               bool
+	FragmentKey   string
+	ManageCloudDB bool
+	SharedDBHost  bool
+	// FIXME: remove this, it's being logged as well. Remove those
 	MasterConnInfo             v1.DatabaseClaimConnectionInfo
 	TempSecret                 string
 	DbHostIdentifier           string
@@ -104,6 +104,8 @@ type DatabaseClaimConfig struct {
 	MasterAuth            *rdsauth.MasterAuth
 	DbIdentifierPrefix    string
 	Class                 string
+	Namespace             string
+	MetricsEnabled        bool
 	MetricsDepYamlPath    string
 	MetricsConfigYamlPath string
 }
@@ -273,6 +275,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		}
 		sharedDBHost = true
 	}
+
 	r.Input.FragmentKey = fragmentKey
 	connInfo := r.getClientConn(dbClaim)
 	if connInfo.Port == "" {
@@ -334,6 +337,14 @@ func Reconcile(r *DatabaseClaimReconciler, ctx context.Context, req ctrl.Request
 
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", req.NamespacedName)
+
+	if r.Config == nil {
+		return ctrl.Result{}, fmt.Errorf("DatabaseClaimConfig is not set")
+	}
+
+	if r.Client == nil {
+		return ctrl.Result{}, fmt.Errorf("client is not set")
+	}
 
 	var dbClaim v1.DatabaseClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
@@ -411,9 +422,10 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// FIXME: turn on metrics deployments later when testing on box-2 is available
-	if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
-		return ctrl.Result{}, err
+	if r.Config.MetricsEnabled {
+		if err := r.createMetricsDeployment(ctx, dbClaim); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 	return r.executeDbClaimRequest(ctx, &dbClaim)
 }
@@ -659,8 +671,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context,
-	dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
 
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 	logr.Info("reconcileNewDB", "r.Input", r.Input)
@@ -943,7 +954,7 @@ func ReplaceOrAddTag(tags []*crossplanerds.Tag, key string, value string) []*cro
 	return tags
 }
 
-func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) {
+func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) error {
 	dbParameterGroup := &crossplanerds.DBParameterGroup{}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
@@ -951,31 +962,29 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.
 	}, dbParameterGroup)
 
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return // nothing to delete
-		}
-		logr.Error(err, "Error getting crossplane db param group for old DB ")
-	} else {
-		operationalTagForProviderPresent := false
-		for _, tag := range dbParameterGroup.Spec.ForProvider.Tags {
-			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
-				operationalTagForProviderPresent = true
-			}
-		}
-		if !operationalTagForProviderPresent {
-			patchDBParameterGroup := client.MergeFrom(dbParameterGroup.DeepCopy())
-
-			dbParameterGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbParameterGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
-
-			err := r.Client.Patch(ctx, dbParameterGroup, patchDBParameterGroup)
-			if err != nil {
-				logr.Error(err, "Error updating operational tags for  crossplane db param group ")
-			}
+		return err
+	}
+	operationalTagForProviderPresent := false
+	for _, tag := range dbParameterGroup.Spec.ForProvider.Tags {
+		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+			operationalTagForProviderPresent = true
 		}
 	}
+	if !operationalTagForProviderPresent {
+		patchDBParameterGroup := client.MergeFrom(dbParameterGroup.DeepCopy())
+
+		dbParameterGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbParameterGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+
+		err := r.Client.Patch(ctx, dbParameterGroup, patchDBParameterGroup)
+		if err != nil {
+			logr.Error(err, "Error updating operational tags for  crossplane db param group ")
+			return err
+		}
+	}
+	return nil
 }
 
-func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) {
+func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx context.Context, logr logr.Logger, dbParamGroupName string) error {
 	dbClusterParamGroup := &crossplanerds.DBClusterParameterGroup{}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
@@ -983,32 +992,32 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx c
 	}, dbClusterParamGroup)
 
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return // nothing to delete
-		}
 		logr.Error(err, "Error getting crossplane db cluster param group for old DB ")
-	} else {
-		operationalTagForProviderPresent := false
-		for _, tag := range dbClusterParamGroup.Spec.ForProvider.Tags {
-			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
-				operationalTagForProviderPresent = true
-			}
-		}
-		if !operationalTagForProviderPresent {
-			patchDBClusterParameterGroup := client.MergeFrom(dbClusterParamGroup.DeepCopy())
+		return err
+	}
 
-			dbClusterParamGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbClusterParamGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
-
-			err := r.Client.Patch(ctx, dbClusterParamGroup, patchDBClusterParameterGroup)
-			if err != nil {
-				logr.Error(err, "Error updating operational tags for  crossplane db cluster param group ")
-			}
+	operationalTagForProviderPresent := false
+	for _, tag := range dbClusterParamGroup.Spec.ForProvider.Tags {
+		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+			operationalTagForProviderPresent = true
 		}
 	}
 
+	if !operationalTagForProviderPresent {
+		patchDBClusterParameterGroup := client.MergeFrom(dbClusterParamGroup.DeepCopy())
+
+		dbClusterParamGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbClusterParamGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+
+		err := r.Client.Patch(ctx, dbClusterParamGroup, patchDBClusterParameterGroup)
+		if err != nil {
+			logr.Error(err, "Error updating operational tags for  crossplane db cluster param group ")
+			return err
+		}
+	}
+	return nil
 }
 
-func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Context, logr logr.Logger, dbHostName string) {
+func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Context, logr logr.Logger, dbHostName string) error {
 	dbCluster := &crossplanerds.DBCluster{}
 
 	err := r.Client.Get(ctx, client.ObjectKey{
@@ -1016,28 +1025,27 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Con
 	}, dbCluster)
 
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return // nothing to delete
-		}
-		logr.Error(err, "Error getting crossplane DBCluster for old DB")
-	} else {
-		operationalTagForProviderPresent := false
-		for _, tag := range dbCluster.Spec.ForProvider.Tags {
-			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
-				operationalTagForProviderPresent = true
-			}
-		}
-		if !operationalTagForProviderPresent {
-			patchDBClusterParameterGroup := client.MergeFrom(dbCluster.DeepCopy())
-
-			dbCluster.Spec.ForProvider.Tags = ReplaceOrAddTag(dbCluster.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
-
-			err := r.Client.Patch(ctx, dbCluster, patchDBClusterParameterGroup)
-			if err != nil {
-				logr.Error(err, "Error updating operational tags for  crossplane db cluster   ")
-			}
+		return err
+	}
+	operationalTagForProviderPresent := false
+	for _, tag := range dbCluster.Spec.ForProvider.Tags {
+		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+			operationalTagForProviderPresent = true
 		}
 	}
+
+	if !operationalTagForProviderPresent {
+		patchDBClusterParameterGroup := client.MergeFrom(dbCluster.DeepCopy())
+
+		dbCluster.Spec.ForProvider.Tags = ReplaceOrAddTag(dbCluster.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+
+		err := r.Client.Patch(ctx, dbCluster, patchDBClusterParameterGroup)
+		if err != nil {
+			logr.Error(err, "Error updating operational tags for  crossplane db cluster   ")
+			return err
+		}
+	}
+	return nil
 
 }
 
@@ -1050,7 +1058,6 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Co
 	}, dbInstance)
 
 	if err != nil {
-		logr.Error(err, "Error getting crossplane dbInstance for old DB")
 		return false, err
 	} else {
 		operationalTagForProviderPresent := false
@@ -1106,9 +1113,18 @@ func (r *DatabaseClaimReconciler) ManageOperationalTagging(ctx context.Context, 
 
 func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, logr logr.Logger, dbInstanceName, dbParamGroupName string) (bool, error) {
 
-	r.operationalTaggingForDbClusterParamGroup(ctx, logr, dbParamGroupName)
-	r.operationalTaggingForDbParamGroup(ctx, logr, dbParamGroupName)
-	r.operationalTaggingForDbCluster(ctx, logr, dbInstanceName)
+	err := r.operationalTaggingForDbClusterParamGroup(ctx, logr, dbParamGroupName)
+	if err != nil {
+		return false, err
+	}
+	err = r.operationalTaggingForDbParamGroup(ctx, logr, dbParamGroupName)
+	if err != nil {
+		return false, err
+	}
+	err = r.operationalTaggingForDbCluster(ctx, logr, dbInstanceName)
+	if err != nil {
+		return false, err
+	}
 
 	// unlike other resources above, verifying tags updation and handling errors if any just for "DBInstance" resource
 	isVerfied, err := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName)
@@ -1152,8 +1168,8 @@ func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Con
 	if err != nil {
 		return "", err
 	}
-	password := string(gs.Data[secretKey])
 
+	password := string(gs.Data[secretKey])
 	if password == "" {
 		return "", fmt.Errorf("invalid credentials (password)")
 	}
@@ -1427,6 +1443,7 @@ func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
 }
 
 func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
+
 	return r.Config.Viper.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
 }
 
@@ -1513,7 +1530,7 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secret
 	rs := &corev1.Secret{}
 	connInfo := v1.DatabaseClaimConnectionInfo{}
 
-	serviceNS, _ := getServiceNamespace()
+	serviceNS, _ := r.getServiceNamespace()
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: serviceNS,
@@ -1787,7 +1804,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 		return false, err
 	}
 
-	serviceNS, err := getServiceNamespace()
+	serviceNS, err := r.getServiceNamespace()
 	if err != nil {
 		return false, err
 	}
@@ -1913,7 +1930,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 
 func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, dbHostName string, dbClaim *v1.DatabaseClaim) (bool, error) {
 	logr := log.FromContext(ctx)
-	serviceNS, err := getServiceNamespace()
+	serviceNS, err := r.getServiceNamespace()
 	if err != nil {
 		return false, err
 	}
@@ -2648,18 +2665,14 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Name:      secretName,
 	}, gs)
 
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		}
+	if err != nil && errors.IsNotFound(err) {
 		if err := r.createSecret(ctx, dbClaim, dsn, dbURI, connInfo); err != nil {
 			return err
 		}
-	} else if err := r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, connInfo, gs); err != nil {
-		return err
+		return nil
 	}
 
-	return nil
+	return r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, connInfo, gs)
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
@@ -2704,6 +2717,11 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 
 	logr := log.FromContext(ctx)
 
+	// FIXME: move this to validation logic
+	if dsnName == "" {
+		dsnName = "dsn.txt"
+	}
+
 	exSecret.Data[dsnName] = []byte(dsn)
 	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
 	exSecret.Data["hostname"] = []byte(connInfo.Host)
@@ -2720,6 +2738,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context) (string, error) {
 	gs := &corev1.Secret{}
 	secretName := r.getSecretRef(r.Input.FragmentKey)
+	// FIXME: remove this nonsense, only unit tests were using a special secret key. This is pointless
 	secretKey := r.getSecretKey(r.Input.FragmentKey)
 	if secretKey == "" {
 		secretKey = "password"
@@ -2727,10 +2746,11 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context) (strin
 	if secretName == "" {
 		return "", fmt.Errorf("an empty password secret reference")
 	}
-	namespace, err := getServiceNamespace()
+	namespace, err := r.getServiceNamespace()
 	if err != nil {
 		return "", err
 	}
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Namespace: namespace,
 		Name:      secretName,
@@ -2738,6 +2758,7 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context) (strin
 	if err != nil {
 		return "", err
 	}
+
 	return string(gs.Data[secretKey]), nil
 }
 
@@ -2751,6 +2772,7 @@ func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *v1.DatabaseClaim) 
 			rTree.Insert(k, true)
 		}
 	}
+
 	// Find the longest prefix match
 	m, _, ok := rTree.LongestPrefix(dbClaim.Spec.InstanceLabel)
 	if !ok {
@@ -2855,12 +2877,12 @@ func updateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams) {
 	}
 }
 
-func getServiceNamespace() (string, error) {
-	ns, found := os.LookupEnv(serviceNamespaceEnvVar)
-	if !found {
+func (r *DatabaseClaimReconciler) getServiceNamespace() (string, error) {
+	if r.Config.Namespace == "" {
 		return "", fmt.Errorf("service namespace env %s must be set", serviceNamespaceEnvVar)
 	}
-	return ns, nil
+
+	return r.Config.Namespace, nil
 }
 
 func (r *DatabaseClaimReconciler) getSrcAdminPasswdFromSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {

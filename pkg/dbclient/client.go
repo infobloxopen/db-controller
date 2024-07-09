@@ -149,6 +149,17 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	return created, err
 }
 
+func (pc *client) CheckExtension(extName string) (bool, error) {
+	var exists bool
+	db := pc.DB
+	err := db.QueryRow("SELECT EXISTS(SELECT * FROM pg_extension WHERE extname = $1)", extName).Scan(&exists)
+	if err != nil {
+		pc.log.Error(err, "could not query for extension")
+		return exists, err
+	}
+	return exists, nil
+}
+
 func (pc *client) CreateDefaultExtensions(dbName string) error {
 	db, err := pc.getDB(dbName)
 	if err != nil {
@@ -158,8 +169,15 @@ func (pc *client) CreateDefaultExtensions(dbName string) error {
 	pc.log.Info("connected to " + dbName)
 	defer db.Close()
 	for _, s := range getDefaulExtensions() {
+		ok, err := pc.CheckExtension(s)
+		if err != nil {
+			return fmt.Errorf("psql_extension_query %s: %w", s, err)
+		}
+		if !ok {
+			continue
+		}
+
 		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
-			pc.log.Error(err, "could not create extension", "database_name", dbName)
 			return fmt.Errorf("could not create extension %s: %s", s, err)
 		}
 		pc.log.Info("created extension " + s)
