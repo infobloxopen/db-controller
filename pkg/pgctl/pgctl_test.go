@@ -1,9 +1,10 @@
 package pgctl
 
 import (
+	"cmp"
 	"database/sql"
-	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"reflect"
 	"testing"
@@ -11,36 +12,22 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/lib/pq"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
-
-// The following gingo struct and associted init() is required to run go test with ginkgo related flags
-// Since this test is not using ginkgo, this is a hack to get around the issue of go test complaining about
-// unknown flags.
-var ginkgo struct {
-	dry_run      string
-	label_filter string
-}
-
-func init() {
-	flag.StringVar(&ginkgo.dry_run, "ginkgo.dry-run", "", "Ignore this flag")
-	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
-}
 
 var (
 	SourceDBAdminDsn string
 	SourceDBUserDsn  string
 	TargetDBAdminDsn string
 	TargetDBUserDsn  string
-	ExportFilePath   = "/tmp/"
-	repository       = "postgres"
-	sourceVersion    = "13.14"
-	targetVersion    = "15.6"
-	sourcePort       = "15435"
-	targetPort       = "15436"
-	testDBNetwork    = "testDBNetwork"
+
+	ExportFilePath = "/tmp/"
+	repository     = "postgres"
+	sourceVersion  = "13.14"
+	targetVersion  = "15.6"
+	sourcePort     = "15435"
+	targetPort     = "15436"
+	testDBNetwork  = "testDBNetwork"
 )
 
 type PgInfo struct {
@@ -48,8 +35,8 @@ type PgInfo struct {
 	password string
 	db       string
 	dbHost   string
-	version  string
 	port     string
+	version  string
 	dialect  string
 	dsn      string
 }
@@ -64,229 +51,46 @@ func TestMain(m *testing.M) {
 
 func realTestMain(m *testing.M) int {
 
-	var targetResource, sourceResource *dockertest.Resource
-
 	opts := zap.Options{
 		Development: true,
 	}
 
 	logger = zap.New(zap.UseFlagOptions(&opts))
 
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		fmt.Println(err)
-		return 1
+	var err error
+
+	removeNetwork := StartNetwork()
+	defer removeNetwork()
+
+	_, sourceDSN, sourceClose := RunDB(dbConfig{HostName: "pubHost", DockerTag: sourceVersion, Database: "pub", Username: "sourceAdmin", Password: "sourceSecret"})
+	defer sourceClose()
+
+	if err = loadSourceTestData(sourceDSN); err != nil {
+		panic(err)
 	}
 
-	//validate that no other network is lingering around from a prev test
-	//networks, err := pool.NetworksByName(testDBNetwork)
-	networks, err := pool.Client.ListNetworks()
-	if err != nil {
-		fmt.Println(err)
-		return 1
-	}
-	networkExists := false
-	netID := ""
-	for _, network := range networks {
-		if network.Name == testDBNetwork {
-			networkExists = true
-			netID = network.ID
-			break
-		}
-	}
-	if networkExists {
-		// Remove all containers that are attached to the network
-		containers, err := pool.Client.ListContainers(docker.ListContainersOptions{All: true})
-		if err != nil {
-			panic(err)
-		}
-		for _, container := range containers {
-			for _, network := range container.Networks.Networks {
-				if network.NetworkID == netID {
-					if container.State == "running" {
-						// stop running container then remove it
-						err = pool.Client.StopContainer(container.ID, 10)
-						if err != nil {
-							panic(err)
-						}
-					}
+	_, targetDSN, targetClose := RunDB(dbConfig{HostName: "subHost", DockerTag: targetVersion, Database: "sub", Username: "targetAdmin", Password: "targetSecret"})
+	defer targetClose()
 
-					err = pool.Client.RemoveContainer(docker.RemoveContainerOptions{ID: container.ID})
-					if err != nil {
-						panic(err)
-					}
-				}
-			}
-		}
-
-		err = pool.Client.RemoveNetwork(netID)
-		if err != nil {
-			panic(err)
-		}
+	if err = loadTargetTestData(targetDSN); err != nil {
+		panic(err)
 	}
 
-	network, err := pool.CreateNetwork(testDBNetwork)
-	if err != nil {
-		fmt.Println(err)
-		return 1
-	}
-	defer pool.RemoveNetwork(network)
-
-	pool.MaxWait = 300 * time.Second
-	if err != nil {
-		logger.Error(err, "Could not connect to docker")
-		return 1
-	}
-
-	TargetDBAdminDsn, targetResource, err = setUpTargetDatabase(pool)
-	defer pool.Purge(targetResource)
+	_, err = url.Parse(sourceDSN)
 	if err != nil {
 		panic(err)
 	}
 
-	TargetDBUserDsn = fmt.Sprintf("postgres://appuser_b:secret@localhost:%s/sub?sslmode=disable", targetPort)
+	// Set a bunch of package variables. This should be done in the test setup
+	TargetDBAdminDsn = targetDSN
+	SourceDBAdminDsn = sourceDSN
 
-	SourceDBAdminDsn, sourceResource, err = setUpSourceDatabase(pool)
-	defer pool.Purge(sourceResource)
-	if err != nil {
-		fmt.Println(err)
-		return 1
-	}
-	SourceDBUserDsn = fmt.Sprintf("postgres://appuser_a:secret@localhost:%s/pub?sslmode=disable", sourcePort)
-
-	if err = loadSourceTestData(SourceDBAdminDsn); err != nil {
-		panic(err)
-	}
-	if err = loadTargetTestData(TargetDBAdminDsn); err != nil {
-		panic(err)
-	}
+	TargetDBUserDsn = changeUserInfo(TargetDBAdminDsn, "appuser_b", "secret")
+	SourceDBUserDsn = changeUserInfo(SourceDBAdminDsn, "appuser_a", "secret")
 
 	rc := m.Run()
 
-	if err := pool.Purge(targetResource); err != nil {
-		fmt.Println(err)
-		rc = 2
-	}
-	if err := pool.Purge(sourceResource); err != nil {
-		fmt.Println(err)
-		rc = 3
-	}
-	if err := pool.RemoveNetwork(network); err != nil {
-		fmt.Println(err)
-		rc = 4
-	}
-
 	return rc
-
-}
-
-func setUpTargetDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, error) {
-
-	pgInfo := PgInfo{
-		user:     "targetAdmin",
-		password: "targetSecret",
-		db:       "sub",
-		dbHost:   "subHost",
-		version:  targetVersion,
-		port:     targetPort,
-		dialect:  "postgres",
-		dsn:      "postgres://%s:%s@localhost:%s/%s?sslmode=disable"}
-
-	var (
-		dsn      string
-		resource *dockertest.Resource
-		err      error
-	)
-
-	if dsn, resource, err = setUpDatabase(pool, &pgInfo); err != nil {
-		return "", resource, err
-	}
-
-	return dsn, resource, nil
-}
-
-func setUpSourceDatabase(pool *dockertest.Pool) (string, *dockertest.Resource, error) {
-
-	pgInfo := PgInfo{
-		user:     "sourceAdmin",
-		password: "sourceSecret",
-		db:       "pub",
-		dbHost:   "pubHost",
-		version:  sourceVersion,
-		port:     sourcePort,
-		dialect:  "postgres",
-		dsn:      "postgres://%s:%s@localhost:%s/%s?sslmode=disable"}
-
-	var (
-		dsn      string
-		resource *dockertest.Resource
-		err      error
-	)
-
-	if dsn, resource, err = setUpDatabase(pool, &pgInfo); err != nil {
-		return "", resource, err
-	}
-
-	return dsn, resource, nil
-}
-
-func setUpDatabase(pool *dockertest.Pool, pgInfo *PgInfo) (string, *dockertest.Resource, error) {
-
-	networks, err := pool.NetworksByName(testDBNetwork)
-	if err != nil {
-		return "", nil, err
-	}
-
-	if len(networks) != 1 {
-		return "", nil, fmt.Errorf("Expected 1 but got %v networks", len(networks))
-	}
-	logger.Info("starting db on", "port", pgInfo.port)
-	opts := dockertest.RunOptions{
-		Repository: repository,
-		Tag:        pgInfo.version,
-		Hostname:   pgInfo.dbHost,
-		NetworkID:  networks[0].Network.ID,
-		Cmd: []string{
-			"postgres",
-			"-c",
-			"wal_level=logical",
-		},
-		Env: []string{
-			"POSTGRES_USER=" + pgInfo.user,
-			"POSTGRES_PASSWORD=" + pgInfo.password,
-			"POSTGRES_DB=" + pgInfo.db,
-		},
-		ExposedPorts: []string{"5432"},
-		PortBindings: map[docker.Port][]docker.PortBinding{
-			"5432": {
-				{HostIP: "0.0.0.0", HostPort: pgInfo.port},
-			},
-		},
-	}
-
-	resource, err := pool.RunWithOptions(&opts)
-	if err != nil {
-		logger.Error(err, "could not start resource")
-		return "", resource, err
-	}
-	logger.Info("started_database", "id", resource.Container.ID, "port", pgInfo.port)
-	var dbc *sql.DB
-	pgInfo.dsn = fmt.Sprintf(pgInfo.dsn, pgInfo.user, pgInfo.password, pgInfo.port, pgInfo.db)
-	// FIXME: dont expire the container
-	// resource.Expire(600) // Tell docker to hard kill the container in 300 seconds
-
-	// FIXME: Retry never exits, find a way to kill it when container doesnt start
-	if err = pool.Retry(func() error {
-		dbc, err = sql.Open(pgInfo.dialect, pgInfo.dsn)
-		if err != nil {
-			return err
-		}
-		return dbc.Ping()
-	}); err != nil {
-		return "", resource, fmt.Errorf("Could not connect to docker: %s", err)
-	}
-	logger.Info("database_connected", "dsn", pgInfo.dsn, "ping", dbc.Ping())
-	return pgInfo.dsn, resource, nil
 }
 
 func loadSourceTestData(dsn string) error {
@@ -397,8 +201,6 @@ loop:
 
 func testInitalState(t *testing.T) {
 
-	fmt.Println("in initial state")
-
 	type testcase struct {
 		args          Config
 		name          string
@@ -482,8 +284,9 @@ func test_validate_connection_state_Execute(t *testing.T) {
 	}{
 		{name: "test_validate_connection_state_Execute_no_admin_access", wantErr: true,
 			fields: fields{Config{
-				Log:              logger,
-				SourceDBAdminDsn: "postgres://noadminaccess:secret@localhost:" + sourcePort + "/pub?sslmode=disable",
+				Log: logger,
+				// SourceDBAdminDsn: "postgres://noadminaccess:secret@localhost:" + sourcePort + "/pub?sslmode=disable",
+				SourceDBAdminDsn: changeUserInfo(SourceDBAdminDsn, "noadminaccess", "secret"),
 				SourceDBUserDsn:  SourceDBUserDsn,
 				TargetDBUserDsn:  TargetDBUserDsn,
 				TargetDBAdminDsn: TargetDBAdminDsn,
@@ -507,13 +310,13 @@ func test_validate_connection_state_Execute(t *testing.T) {
 			got, err := s.Execute()
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("validate_connection_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("validate_connection_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantErr && err != nil {
 				return
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
+			if cmp.Compare(got.Id(), tt.want) != 0 {
 				t.Errorf("validate_connection_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
@@ -547,10 +350,9 @@ func test_create_publication_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("create_publication_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("create_publication_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
+			if cmp.Compare(got.Id(), tt.want) != 0 {
 				t.Errorf("create_publication_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
@@ -605,10 +407,9 @@ func test_copy_schema_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("copy_schema_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("copy_schema_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
+			if cmp.Compare(got.Id(), tt.want) != 0 {
 				t.Errorf("copy_schema_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
@@ -645,10 +446,10 @@ func test_create_subscription_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("create_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("create_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
+
+			if cmp.Compare(got.Id(), tt.want) != 0 {
 				t.Errorf("create_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
@@ -682,11 +483,10 @@ func test_enable_subscription_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("enable_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("enable_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("enable_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
+				t.Fatalf("enable_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -702,7 +502,10 @@ func test_cut_over_readiness_check_state_Execute(t *testing.T) {
 		want    StateEnum
 		wantErr bool
 	}{
-		{name: "test_cut_over_readiness_check_state_Executeok", wantErr: false, want: S_Retry,
+		{
+			name:    "test_cut_over_readiness_check_state_Executeok",
+			wantErr: false,
+			want:    S_Retry,
 			fields: fields{Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
@@ -718,12 +521,14 @@ func test_cut_over_readiness_check_state_Execute(t *testing.T) {
 				config: tt.fields.config,
 			}
 			got, err := s.Execute()
+
 			if (err != nil) != tt.wantErr {
-				t.Errorf("cut_over_readiness_check_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("error: %v wantErr: %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("cut_over_readiness_check_state.Execute() = %v, want %v", got.Id(), tt.want)
+
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("   got: %v\nwanted: %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -756,11 +561,10 @@ func test_reset_target_sequence_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("reset_target_sequence_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("reset_target_sequence_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("reset_target_sequence_state.Execute() = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("reset_target_sequence_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -793,11 +597,10 @@ func test_reroute_target_secret_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("reroute_target_secret_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("reroute_target_secret_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("reroute_target_secret_state.Execute() = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("reroute_target_secret_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -828,14 +631,17 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 			s := &validate_migration_status_state{
 				config: tt.fields.config,
 			}
-			got, err := s.Execute()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validate_migration_status_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("validate_migration_status_state.Execute() = %v, want %v", got.Id(), tt.want)
-			}
+			retryTest(t, func() error {
+				got, err := s.Execute()
+				if (err != nil) != tt.wantErr {
+					t.Fatalf("validate_migration_status_state.Execute()\n   got: %s", err)
+				}
+
+				if e := tt.want; cmp.Compare(got.Id(), tt.want) != 0 {
+					return fmt.Errorf("   got: %s\nwanted: %s", got.Id(), e)
+				}
+				return nil
+			}, 500*time.Millisecond, 20*time.Second)
 		})
 	}
 }
@@ -867,13 +673,11 @@ func test_wait_to_disable_source_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			//simulate the wait
-			time.Sleep(20 * time.Second)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("test_wait_to_disable_source_state_Execute error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("test_wait_to_disable_source_state_Execute error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("test_wait_to_disable_source_state_Execute = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("test_wait_to_disable_source_state_Execute = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -906,11 +710,10 @@ func test_disable_source_access_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("disable_source_access_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("disable_source_access_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("disable_source_access_state.Execute() = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("disable_source_access_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -943,11 +746,10 @@ func test_disable_subscription_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("enable_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("enable_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("enable_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("enable_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -980,11 +782,10 @@ func test_delete_subscription_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("delete_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("delete_subscription_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("delete_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("delete_subscription_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
@@ -1017,12 +818,20 @@ func test_delete_publication_state_Execute(t *testing.T) {
 			}
 			got, err := s.Execute()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("delete_publication_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Fatalf("delete_publication_state.Execute() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(got.Id(), tt.want) {
-				t.Errorf("delete_publication_state.Execute() = %v, want %v", got.Id(), tt.want)
+			if cmp.Compare(got.Id(), tt.want) != 0 {
+				t.Fatalf("delete_publication_state.Execute() = %v, want %v", got.Id(), tt.want)
 			}
 		})
 	}
+}
+
+func changeUserInfo(dsn string, username string, password string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		panic(err)
+	}
+	u.User = url.UserPassword(username, password)
+	return u.String()
 }
