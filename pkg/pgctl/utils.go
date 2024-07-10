@@ -105,14 +105,9 @@ func Exec(name string, arg ...string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		fmt.Println(err)
 		outStr, errStr := stdout.String(), stderr.String()
 
-		if exitError, ok := err.(*exec.ExitError); ok {
-			fmt.Println(exitError.ExitCode(), errStr)
-			return outStr, fmt.Errorf("command %s\nfailed with\n%s", cmd.String(), errStr)
-		}
-		return outStr, err
+		return outStr, fmt.Errorf("command_failed %s:\n%s %s", cmd.String(), outStr, errStr)
 	}
 	return stdout.String(), nil
 }
