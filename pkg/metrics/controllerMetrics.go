@@ -83,7 +83,7 @@ var (
 func init() {
 	// Register custom metrics with the global prometheus registry
 	metrics.Registry.MustRegister(UsersCreated, UsersDeleted, UsersCreatedErrors, UsersCreateTime)
-	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersUpdateTime)
+	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersDeletedErrors, UsersUpdateTime)
 	metrics.Registry.MustRegister(DBCreated, DBProvisioningErrors)
 	metrics.Registry.MustRegister(PasswordRotated, PasswordRotatedErrors, PasswordRotateTime)
 }
