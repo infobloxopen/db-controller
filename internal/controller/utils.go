@@ -26,7 +26,7 @@ func RunDB() (*sql.DB, string, func()) {
 	port := getEphemeralPort()
 
 	// Run PostgreSQL in Docker
-	cmd := exec.Command("docker", "run", "-d", "-p", fmt.Sprintf("%d:5432", port), "-e", "POSTGRES_PASSWORD=postgres", "postgres:15")
+	cmd := exec.Command("docker", "run", "-d", "--name", "pgDB", "-p", fmt.Sprintf("%d:5432", port), "-e", "POSTGRES_PASSWORD=postgres", "postgres:15")
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {

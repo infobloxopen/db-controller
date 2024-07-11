@@ -23,14 +23,18 @@ import (
 	"testing"
 	"time"
 
+	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	. "github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/test/utils"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	. "github.com/infobloxopen/db-controller/pkg/dbclient"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -66,42 +70,40 @@ func NewGinkgoLogger(t *testing.T) logr.Logger {
 	})
 }
 
-var _ = BeforeSuite(func(ctx SpecContext) {
+var _ = BeforeSuite(func() {
 
 	Expect(namespace).NotTo(Equal(""), "you must set the namespace")
 	class = namespace
 
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	//var err error
+	var err error
 
-	// // Add all the schemas needed
-	// err = persistancev1.AddToScheme(scheme.Scheme)
-	// Expect(err).NotTo(HaveOccurred())
+	// Add all the schemas needed
+	err = persistancev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
-	// err = crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
-	// Expect(err).NotTo(HaveOccurred())
+	err = crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
 
-	// k8sClient, err = client.New(config.GetConfigOrDie(), client.Options{})
-	// Expect(err).NotTo(HaveOccurred())
-	// Expect(k8sClient).NotTo(BeNil())
+	k8sClient, err = client.New(config.GetConfigOrDie(), client.Options{})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sClient).NotTo(BeNil())
 
-	// By("Building image")
-	// cmd := exec.Command("make", "build-images")
-	// _, err = utils.Run(cmd)
-	// ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	By("Building image")
+	cmd := exec.Command("make", "build-images")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-	// By("Pushing the operator images")
-	// cmd = exec.Command("make", "push-images")
-	// _, err = utils.Run(cmd)
-	// ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	By("Pushing the operator images")
+	cmd = exec.Command("make", "push-images")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-	// By("Helm upgrading the manager")
-	// cmd = exec.Command("make", "deploy")
-	// _, err = utils.Run(cmd)
-	// ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-	TestDb, _ = SetupSqlDB("mainUser", "masterpassword")
+	By("Helm upgrading the manager")
+	cmd = exec.Command("make", "deploy")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("validating that the controller-manager pod is running as expected")
 	verifyControllerUp := func() error {
@@ -115,6 +117,8 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	}
 	EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
 
+	TestDb, _ = SetupSqlDB("mainUser", "masterpassword")
+
 })
 
 var _ = AfterSuite(func() {
@@ -123,4 +127,6 @@ var _ = AfterSuite(func() {
 	// cmd := exec.Command("make", "undeploy")
 	// _, err := utils.Run(cmd)
 	// Expect(err).NotTo(HaveOccurred())
+
+	TestDb.Close()
 })

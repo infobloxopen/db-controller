@@ -67,7 +67,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	isObjectDeleted, err := r.deleteWorkflow(ctx, &dbRoleClaim)
+	isObjectDeleted, err := r.deleteWorkflow(ctx, &dbRoleClaim, &log)
 	if err != nil {
 		log.Error(err, "error in delete workflow")
 		return ctrl.Result{}, err
@@ -82,31 +82,17 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// #region find DBClaim: sourceDbClaim
-	dbclaimName := dbRoleClaim.Spec.SourceDatabaseClaim.Name
-	dbclaimNamespace := dbRoleClaim.Spec.SourceDatabaseClaim.Namespace
-	sourceDbClaim := &v1.DatabaseClaim{}
-	err = r.Get(ctx, types.NamespacedName{Name: dbclaimName, Namespace: dbclaimNamespace}, sourceDbClaim)
+	sourceDbClaim, err := r.getSourceDBClaim(ctx, &dbRoleClaim, &log)
 	if err != nil {
-		log.Error(err, "specified dbclaim not found", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
-		dbRoleClaim.Status.MatchedSourceClaim = ""
-		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbclaimName))
+		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
 	}
-	log.Info("found dbclaim", "secretName", sourceDbClaim.Spec.SecretName)
-
-	dbRoleClaim.Status.MatchedSourceClaim = sourceDbClaim.Namespace + "/" + sourceDbClaim.Name
 	// #endregion
 
 	// #region find secret linked to DBClaim: sourceSecret
-	sourceSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{Name: sourceDbClaim.Spec.SecretName, Namespace: dbclaimNamespace}, sourceSecret)
+	sourceSecret, err := r.getSourceSecret(ctx, sourceDbClaim.Spec.SecretName, &dbRoleClaim, &log)
 	if err != nil {
-		log.Error(err, "dbclaim_secret_not_found", "secret_name", sourceDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
-		dbRoleClaim.Status.SourceSecret = ""
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s source secret not found", sourceDbClaim.Spec.SecretName))
 	}
-	log.V(1).Info("dbclaim_secret", "secret_name", sourceDbClaim.Spec.SecretName, "secret_namespace", dbclaimNamespace)
-
-	dbRoleClaim.Status.SourceSecret = sourceSecret.Namespace + "/" + sourceSecret.Name
 	// #endregion find secret
 
 	//either create users and schemas OR fallout to ELSE: copy existing secret
@@ -138,15 +124,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		defer dbClient.Close()
 
-		if dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus == nil {
-			dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus = make(map[string]string)
-		}
-		if dbRoleClaim.Status.SchemaRoleStatus.RoleStatus == nil {
-			dbRoleClaim.Status.SchemaRoleStatus.RoleStatus = make(map[string]string)
-		}
-		if dbRoleClaim.Status.Username == "" {
-			dbRoleClaim.Status.Username = dbRoleClaim.Name
-		}
+		initStatusValues(&dbRoleClaim)
 
 		rotationTime := r.getPasswordRotationTime()
 
@@ -170,7 +148,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				//update schema status
 				dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus[schemaName] = "valid"
 
-				//create user and assign role
+				//create role
 				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
 				// check if role exists, if not: create it
 				if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
@@ -190,7 +168,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			nextUser := dbu.NextUser(dbRoleClaim.Status.Username)
 			dbRoleClaim.Status.Username = nextUser
-			created, err := dbClient.CreateUser(nextUser, "", userPassword)
+			created, err := dbClient.CreateUser(nextUser, "", userPassword) //role will be assigned later on
 			if err != nil {
 				metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 				return ctrl.Result{}, err
@@ -254,6 +232,48 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	return r.manageSuccess(ctx, &dbRoleClaim)
 
+}
+
+func (r *DbRoleClaimReconciler) getSourceSecret(ctx context.Context, secretName string, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (*corev1.Secret, error) {
+	sourceSecret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: dbRoleClaim.Spec.SourceDatabaseClaim.Namespace}, sourceSecret)
+	if err != nil {
+		log.Error(err, "dbclaim_secret_not_found", "secret_name", secretName, "secret_namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
+		dbRoleClaim.Status.SourceSecret = ""
+		return nil, err
+	}
+	log.V(1).Info("dbclaim_secret", "secret_name", secretName, "secret_namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
+
+	dbRoleClaim.Status.SourceSecret = sourceSecret.Namespace + "/" + sourceSecret.Name
+	return sourceSecret, nil
+}
+
+func (r *DbRoleClaimReconciler) getSourceDBClaim(ctx context.Context, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (*v1.DatabaseClaim, error) {
+	dbclaimName := dbRoleClaim.Spec.SourceDatabaseClaim.Name
+	dbclaimNamespace := dbRoleClaim.Spec.SourceDatabaseClaim.Namespace
+	sourceDbClaim := &v1.DatabaseClaim{}
+	err := r.Get(ctx, types.NamespacedName{Name: dbclaimName, Namespace: dbclaimNamespace}, sourceDbClaim)
+	if err != nil {
+		log.Error(err, "specified dbclaim not found", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
+		dbRoleClaim.Status.MatchedSourceClaim = ""
+		return nil, err
+	}
+	log.Info("found dbclaim", "secretName", sourceDbClaim.Spec.SecretName)
+
+	dbRoleClaim.Status.MatchedSourceClaim = sourceDbClaim.Namespace + "/" + sourceDbClaim.Name
+	return sourceDbClaim, nil
+}
+
+func initStatusValues(dbRoleClaim *v1.DbRoleClaim) {
+	if dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus == nil {
+		dbRoleClaim.Status.SchemaRoleStatus.SchemaStatus = make(map[string]string)
+	}
+	if dbRoleClaim.Status.SchemaRoleStatus.RoleStatus == nil {
+		dbRoleClaim.Status.SchemaRoleStatus.RoleStatus = make(map[string]string)
+	}
+	if dbRoleClaim.Status.Username == "" {
+		dbRoleClaim.Status.Username = dbRoleClaim.Name
+	}
 }
 
 func createSchema(dbClient dbclient.Clienter, schemaName string, log logr.Logger) error {
@@ -323,7 +343,7 @@ func (r *DbRoleClaimReconciler) updateClientStatus(ctx context.Context, schemaUs
 	return nil
 }
 
-func (r *DbRoleClaimReconciler) deleteWorkflow(ctx context.Context, dbRoleClaim *v1.DbRoleClaim) (bool, error) {
+func (r *DbRoleClaimReconciler) deleteWorkflow(ctx context.Context, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (bool, error) {
 
 	// examine DeletionTimestamp to determine if object is under deletion
 	if dbRoleClaim.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -337,6 +357,12 @@ func (r *DbRoleClaimReconciler) deleteWorkflow(ctx context.Context, dbRoleClaim 
 	}
 	// The object is being deleted
 	if controllerutil.ContainsFinalizer(dbRoleClaim, finalizerName) {
+		// our finalizer is present, so lets handle any external dependency
+		if err := r.deleteExternalResources(ctx, dbRoleClaim, log); err != nil {
+			// if fail to delete the external dependency here, return with error
+			// so that it can be retried
+			return false, err
+		}
 		// remove our finalizer from the list and update it.
 		controllerutil.RemoveFinalizer(dbRoleClaim, finalizerName)
 		if err := r.Update(ctx, dbRoleClaim); err != nil {
@@ -345,6 +371,43 @@ func (r *DbRoleClaimReconciler) deleteWorkflow(ctx context.Context, dbRoleClaim 
 	}
 	// Stop reconciliation as the item is being deleted
 	return true, nil
+}
+
+func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) error {
+	// delete any external resources associated with the dbRoleClaim
+	// #region find DBClaim: sourceDbClaim
+	sourceDbClaim, err := r.getSourceDBClaim(ctx, dbRoleClaim, log)
+	if err != nil {
+		return err
+	}
+	// #endregion
+
+	// #region find secret linked to DBClaim: sourceSecret
+	sourceSecret, err := r.getSourceSecret(ctx, dbRoleClaim.Spec.SecretName, dbRoleClaim, log)
+	if err != nil {
+		return err
+	}
+	// #endregion find secret
+
+	//get db conn details
+	existingDBConnInfo := sourceDbClaim.Status.ActiveDB.ConnectionInfo
+
+	// retrieve dB master password
+	existingDBConnInfo.Password = string(sourceSecret.Data["password"])
+
+	// get client to DB
+	dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, log)
+	if err != nil {
+		log.Error(err, "creating database client error.")
+		return err
+	}
+	defer dbClient.Close()
+
+	//delete users linked to this DBRoleClaim
+	dbClient.DeleteUser(dbRoleClaim.Name + "_user" + dbuser.SuffixA)
+	dbClient.DeleteUser(dbRoleClaim.Name + "_user" + dbuser.SuffixB)
+
+	return nil
 }
 
 func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *v1.DbRoleClaim, inErr error) (ctrl.Result, error) {
