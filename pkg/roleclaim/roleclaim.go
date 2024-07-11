@@ -383,7 +383,7 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	// #endregion
 
 	// #region find secret linked to DBClaim: sourceSecret
-	sourceSecret, err := r.getSourceSecret(ctx, dbRoleClaim.Spec.SecretName, dbRoleClaim, log)
+	sourceSecret, err := r.getSourceSecret(ctx, sourceDbClaim.Spec.SecretName, dbRoleClaim, log)
 	if err != nil {
 		return err
 	}

@@ -41,8 +41,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-//func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
-
 var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() {
 
 	const resourceName = "test-resource"
@@ -164,7 +162,6 @@ var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() 
 	})
 })
 
-// func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter(t *testing.T) {
 var _ = Describe("TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter", Ordered, func() {
 	RegisterFailHandler(Fail)
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -205,7 +202,6 @@ var _ = Describe("TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingPa
 	}
 
 	for _, tt := range tests {
-		//t.Run(tt.name, func(t *testing.T) {
 		r := &DbRoleClaimReconciler{
 			Client: tt.rec.Client,
 			Config: tt.rec.Config,
@@ -218,10 +214,8 @@ var _ = Describe("TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingPa
 
 		_, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
 		if (err != nil) != tt.wantErr {
-			//t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 			Expect(err).ToNot(BeNil())
 			return
 		}
-		//})
 	}
 })
