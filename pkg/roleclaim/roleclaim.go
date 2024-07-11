@@ -404,8 +404,15 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	defer dbClient.Close()
 
 	//delete users linked to this DBRoleClaim
-	dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, existingDBConnInfo.Username)
-	dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, existingDBConnInfo.Username)
+	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, existingDBConnInfo.Username); err != nil {
+		log.Error(err, "droping user "+dbRoleClaim.Name+"_user"+dbuser.SuffixA)
+		return err
+	}
+
+	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, existingDBConnInfo.Username); err != nil {
+		log.Error(err, "droping user "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
+		return err
+	}
 
 	return nil
 }
