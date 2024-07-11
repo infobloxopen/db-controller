@@ -67,8 +67,6 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	var delTime metav1.Time = metav1.NewTime(time.Now())
-	dbRoleClaim.DeletionTimestamp = &delTime
 	isObjectDeleted, err := r.deleteWorkflow(ctx, &dbRoleClaim, &log)
 	if err != nil {
 		log.Error(err, "error in delete workflow")
