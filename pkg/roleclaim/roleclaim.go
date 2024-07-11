@@ -67,6 +67,8 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
+	var delTime metav1.Time = metav1.NewTime(time.Now())
+	dbRoleClaim.DeletionTimestamp = &delTime
 	isObjectDeleted, err := r.deleteWorkflow(ctx, &dbRoleClaim, &log)
 	if err != nil {
 		log.Error(err, "error in delete workflow")
@@ -404,8 +406,8 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	defer dbClient.Close()
 
 	//delete users linked to this DBRoleClaim
-	dbClient.DeleteUser(dbRoleClaim.Name + "_user" + dbuser.SuffixA)
-	dbClient.DeleteUser(dbRoleClaim.Name + "_user" + dbuser.SuffixB)
+	dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, existingDBConnInfo.Username)
+	dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, existingDBConnInfo.Username)
 
 	return nil
 }

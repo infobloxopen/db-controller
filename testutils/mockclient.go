@@ -40,7 +40,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		return nil
 	} else if key.Namespace == "schema-user-test" {
-		if key.Name == "TestClaim" { //DBClaim
+		if key.Name == "testclaim" { //DBClaim
 
 			sec, ok := obj.(*persistancev1.DatabaseClaim)
 			if !ok {
@@ -48,7 +48,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			}
 			sec.Spec.Class = ptr.String("default")
 			sec.Spec.SecretName = "sample-master-secret"
-			sec.Name = "TestClaim"
+			sec.Name = "testclaim"
 			sec.Namespace = "schema-user-test"
 			sec.Status = persistancev1.DatabaseClaimStatus{
 				ActiveDB: persistancev1.Status{
@@ -69,10 +69,10 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 				return fmt.Errorf("can't assert type")
 			}
 			sec.Spec.Class = ptr.String("default")
-			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "testclaim"}
 			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType)
 			sec.Spec.SecretName = "sample-master-secret"
-			sec.Name = "TestClaim"
+			sec.Name = "testclaim"
 			sec.Namespace = "schema-user-test"
 
 			sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
@@ -87,11 +87,12 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			if !ok {
 				return fmt.Errorf("can't assert type")
 			}
+			sec.Finalizers = append(sec.Finalizers, "dbroleclaims.persistance.atlas.infoblox.com/finalizer")
 			sec.Spec.Class = ptr.String("default")
-			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "testclaim"}
 			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType)
 			sec.Spec.SecretName = "sample-master-secret"
-			sec.Name = "TestClaim"
+			sec.Name = "testclaim"
 			sec.Namespace = "schema-user-test"
 
 			sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
@@ -107,8 +108,8 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 				return fmt.Errorf("can't assert type")
 			}
 			sec.Spec.Class = ptr.String("default")
-			sec.Name = "TestClaim"
-			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "TestClaim"}
+			sec.Name = "testclaim"
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "testclaim"}
 			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType, 6)
 
 			sec.Spec.SchemaRoleMap["schema0"] = ""

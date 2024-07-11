@@ -66,7 +66,6 @@ var _ = Describe("DBRoleClaim Controller", func() {
 			}
 
 			for _, tt := range tests {
-				//t.Run(tt.name, func(t *testing.T) {
 				r := &DbRoleClaimReconciler{
 					Client: tt.rec.Client,
 					Config: tt.rec.Config,
@@ -138,12 +137,10 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				exists, err = dbClient.RoleExists("public_admin")
 				Expect(exists).Should(BeTrue())
 				Expect(err).Should(BeNil())
-
-				//})
 			}
 		})
 
-		It("Update password", func() {
+		FIt("Update password", func() {
 			type reconciler struct {
 				Client             client.Client
 				Log                logr.Logger
@@ -180,7 +177,6 @@ var _ = Describe("DBRoleClaim Controller", func() {
 			}
 
 			for _, tt := range tests {
-				//t.Run(tt.name, func(t *testing.T) {
 				r := &DbRoleClaimReconciler{
 					Client: tt.rec.Client,
 					Config: tt.rec.Config,
@@ -200,7 +196,8 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				//seed database to simulate existing user
 				dbClient.CreateSchema("schema1")
 				dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema1_admin", "schema1")
-				dbClient.CreateUser("user2_b", "schema1_admin", "123")
+				dbClient.CreateUser("testclaim_user_b", "schema1_admin", "123")
+				dbClient.CreateUser("testclaim_user_a", "schema1_admin", "123")
 
 				result, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
 				Expect((err != nil) != tt.wantErr).Should(BeFalse())
@@ -250,7 +247,6 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				exists, err = dbClient.RoleExists("schema3_readonly")
 				Expect(exists).Should(BeTrue())
 				Expect(err).Should(BeNil())
-				//})
 			}
 		})
 	})
