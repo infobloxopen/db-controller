@@ -19,8 +19,13 @@ package e2e
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
+	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
+	"github.com/infobloxopen/db-controller/test/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -42,12 +47,23 @@ func init() {
 
 // FIXME: remove this and use namespace instead
 var class = ""
+var logger logr.Logger
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting E2E suite\n")
 	RunSpecs(t, "e2e suite")
+	logger = NewGinkgoLogger(t)
+}
+
+func NewGinkgoLogger(t *testing.T) logr.Logger {
+	// Create a new logger with the formatter and a test writer
+	return funcr.New(func(prefix, args string) {
+		t.Log(prefix, args)
+	}, funcr.Options{
+		Verbosity: 1,
+	})
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
@@ -87,6 +103,18 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 	TestDb, _ = SetupSqlDB("mainUser", "masterpassword")
 
+	By("validating that the controller-manager pod is running as expected")
+	verifyControllerUp := func() error {
+		// Get pod name
+
+		cmd := exec.Command("make", "helm-test")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+		return nil
+	}
+	EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+
 })
 
 var _ = AfterSuite(func() {
@@ -95,6 +123,4 @@ var _ = AfterSuite(func() {
 	// cmd := exec.Command("make", "undeploy")
 	// _, err := utils.Run(cmd)
 	// Expect(err).NotTo(HaveOccurred())
-
-	TestDb.Close()
 })

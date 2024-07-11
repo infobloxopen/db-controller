@@ -189,12 +189,13 @@ func main() {
 	}
 
 	dbClaimConfig := &databaseclaim.DatabaseClaimConfig{
-		Viper: ctlConfig,
-
+		Viper:              ctlConfig,
+		Namespace:          os.Getenv("SERVICE_NAMESPACE"),
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
 		MasterAuth:            rdsauth.NewMasterAuth(),
+		MetricsEnabled:        true,
 		MetricsDepYamlPath:    metricsDepYamlPath,
 		MetricsConfigYamlPath: metricsConfigYamlPath,
 	}

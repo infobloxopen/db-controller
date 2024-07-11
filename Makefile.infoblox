@@ -16,6 +16,9 @@ DSNEXEC_IMG ?= ghcr.io/infobloxopen/db-controller/dsnexec:${GIT_COMMIT}
 .id:
 	git config user.email | awk -F@ '{print $$1}' > .id
 
+.env:
+	kubectl config current-context | awk -F@ '{print $$1}' > .env
+
 docker-build-%: target=$(@:docker-build-%=%)
 docker-build-%: .id
 	cd $(target) && $(CONTAINER_TOOL) build -t ghcr.io/infobloxopen/$(target):$(GIT_COMMIT) .
@@ -93,7 +96,7 @@ push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 		${HELM_SETFLAGS}
 	# Consider removing this, since we dont actually no
 	# helm upgrade is applied in the cluster
-	@touch $@
+	#@touch $@
 
 deploy: package-chart-db-controller .deploy-$(GIT_COMMIT)
 

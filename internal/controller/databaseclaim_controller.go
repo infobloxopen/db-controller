@@ -62,13 +62,17 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return r.reconciler.Reconcile(ctx, req)
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
+func (r *DatabaseClaimReconciler) Setup() {
 	r.reconciler = &databaseclaim.DatabaseClaimReconciler{
 		Client: r.Client,
 		Config: r.Config,
 	}
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	r.Setup()
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&persistancev1.DatabaseClaim{}).
