@@ -1,0 +1,30 @@
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DbRoleClaim
+metadata:
+  annotations:
+    meta.helm.sh/release-name: auditlog
+    meta.helm.sh/release-namespace: auditlog
+  creationTimestamp: "2024-06-14T00:20:10Z"
+  finalizers:
+  - dbroleclaims.persistance.atlas.infoblox.com/finalizer
+  generation: 1
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    helm.toolkit.fluxcd.io/name: auditlog
+    helm.toolkit.fluxcd.io/namespace: vela-system
+  name: auditlog-identity-dsn
+  namespace: auditlog
+  resourceVersion: "1425628477"
+  uid: 413c7405-9993-4827-a2df-c308ccc8b4a5
+spec:
+  class: default
+  sourcedatabaseclaim:
+    namespace: schema-user-test
+    name: testclaim
+  secretname: sample-master-secret
+  schemarolemap:
+    public: admin
+    schema1: regular
+    schema2: admin
+    schema3: readonly
+    schema4: admin

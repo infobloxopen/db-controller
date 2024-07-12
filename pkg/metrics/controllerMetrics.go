@@ -12,10 +12,22 @@ var (
 			Help: "Number of created users ",
 		},
 	)
+	UsersDeleted = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "users_deleted_total",
+			Help: "Number of deleted users ",
+		},
+	)
 	UsersCreatedErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "users_create_errors_total",
 			Help: "Number of users created with errors",
+		}, []string{"reason"},
+	)
+	UsersDeletedErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "users_deleted_errors_total",
+			Help: "Number of users deleted with errors",
 		}, []string{"reason"},
 	)
 	UsersCreateTime = prometheus.NewHistogram(prometheus.HistogramOpts{
@@ -70,8 +82,8 @@ var (
 
 func init() {
 	// Register custom metrics with the global prometheus registry
-	metrics.Registry.MustRegister(UsersCreated, UsersCreatedErrors, UsersCreateTime)
-	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersUpdateTime)
+	metrics.Registry.MustRegister(UsersCreated, UsersDeleted, UsersCreatedErrors, UsersCreateTime)
+	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersDeletedErrors, UsersUpdateTime)
 	metrics.Registry.MustRegister(DBCreated, DBProvisioningErrors)
 	metrics.Registry.MustRegister(PasswordRotated, PasswordRotatedErrors, PasswordRotateTime)
 }

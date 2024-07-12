@@ -9,14 +9,11 @@ import (
 	intg "github.com/infobloxopen/atlas-app-toolkit/integration"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
-
-	"testing"
 )
 
 var sqlDB *sql.DB
 
-type testDB struct {
-	t        *testing.T
+type TestDB struct {
 	Port     int
 	username string
 	password string
@@ -24,7 +21,7 @@ type testDB struct {
 	pool     *dockertest.Pool
 }
 
-func (t *testDB) URL() string {
+func (t *TestDB) URL() string {
 	u := url.URL{
 		Scheme: "postgres",
 		Host:   fmt.Sprintf("localhost:%d", t.Port),
@@ -37,15 +34,16 @@ func (t *testDB) URL() string {
 	return u.String()
 }
 
-func (t *testDB) Close() {
-	t.t.Helper()
-	t.t.Log("Tearing down dockertest resource of PostgreSQL DB")
+func (t *TestDB) Close() error {
+	fmt.Print("Tearing down dockertest resource of PostgreSQL DB")
 	if err := t.pool.Purge(t.resource); err != nil {
-		t.t.Errorf("Could not purge resource: %s", err)
+		fmt.Println("Could not purge resource")
+		return err
 	}
+	return nil
 }
 
-func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
+func (t *TestDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
 	if dbname == "" {
 		dbname = "postgres"
 	}
@@ -54,45 +52,48 @@ func (t *testDB) OpenUser(dbname, username, password string) (*sql.DB, error) {
 	return sql.Open("postgres", dbConnStr)
 }
 
-func (t *testDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, error) {
+func (t *TestDB) OpenUserWithURI(dbname, username, password string) (*sql.DB, error) {
 	if dbname == "" {
 		dbname = "postgres"
 	}
 
 	dbConnStr := PostgresURI("localhost", strconv.Itoa(t.Port), username, password, dbname, "disable")
-	t.t.Log("dbConnStr", dbConnStr)
+	fmt.Println("dbConnStr", dbConnStr)
 	return sql.Open("postgres", dbConnStr)
 }
 
-func (t *testDB) OpenUserWithConnectionString(dbname, username, password string) (*sql.DB, error) {
+func (t *TestDB) OpenUserWithConnectionString(dbname, username, password string) (*sql.DB, error) {
 	if dbname == "" {
 		dbname = "postgres"
 	}
 	dbConnStr := PostgresConnectionString("localhost", strconv.Itoa(t.Port), username, password, dbname, "disable")
-	t.t.Log("dbConnStr", dbConnStr)
+	fmt.Println("dbConnStr", dbConnStr)
 	return sql.Open("postgres", dbConnStr)
 }
 
-func SetupSqlDB(t *testing.T, user, pass string) *testDB {
-	t.Log("Setting up an instance of PostgreSQL DB with dockertest")
+func SetupSqlDB(user, pass string) (*TestDB, error) {
+	fmt.Print("Setting up an instance of PostgreSQL DB with dockertest")
 
 	host := "localhost"
 	port, err := intg.GetOpenPortInRange(50000, 60000)
 	if err != nil {
-		t.Fatalf("Unable to find an opened port for DB: %v", err)
+		fmt.Print("Unable to find an opened port for DB")
+		return nil, err
 	}
-	t.Log("Got available port for DB: ", port)
+	fmt.Print("Got available port for DB: ", port)
 
 	// Create a new pool for docker containers
 	pool, err := dockertest.NewPool("")
 	if err != nil {
-		t.Fatalf("Could not construct pool: %s", err)
+		fmt.Print("Could not construct pool")
+		return nil, err
 	}
 
 	// uses pool to try to connect to Docker
 	err = pool.Client.Ping()
 	if err != nil {
-		t.Fatalf("Could not connect to Docker: %s", err)
+		fmt.Print("Could not connect to Docker")
+		return nil, err
 	}
 
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
@@ -122,20 +123,20 @@ func SetupSqlDB(t *testing.T, user, pass string) *testDB {
 		dbConnStr := PostgresURI(host, strconv.Itoa(port), user, pass, "postgres", "disable")
 		sqlDB, err = sql.Open("postgres", dbConnStr)
 		if err != nil {
-			t.Log("Database is not ready yet (it is booting up, wait for a few tries)...")
+			fmt.Print("Database is not ready yet (it is booting up, wait for a few tries)...")
 			return err
 		}
 		// Tests if database is reachable
 		return sqlDB.Ping()
 	}); err != nil {
-		t.Fatalf("Could not connect to docker: %s", err)
+		fmt.Print("Could not connect to docker")
+		return nil, err
 	}
-	return &testDB{
-		t:        t,
+	return &TestDB{
 		username: user,
 		password: pass,
 		Port:     port,
 		resource: resource,
 		pool:     pool,
-	}
+	}, nil
 }

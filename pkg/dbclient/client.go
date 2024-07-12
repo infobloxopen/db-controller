@@ -581,6 +581,29 @@ func (pc *client) UserExists(userName string) (bool, error) {
 	return exists, nil
 }
 
+func (pc *client) DeleteUser(username, reassignToUser string) error {
+	db := pc.DB
+	if username == "" {
+		err := fmt.Errorf("an empty username")
+		pc.log.Error(err, "error occurred")
+		metrics.UsersDeleted.Inc()
+		return err
+	}
+
+	pc.log.Info("drop user", "user:", username)
+	_, err := db.Exec(fmt.Sprintf(
+		`REASSIGN OWNED BY %s TO %s;
+DROP USER %s;`, pq.QuoteIdentifier(username), pq.QuoteIdentifier(reassignToUser), pq.QuoteIdentifier(username)))
+	if err != nil {
+		pc.log.Error(err, "could not drop user "+username)
+		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+		return err
+	}
+	metrics.UsersDeleted.Inc()
+
+	return nil
+}
+
 func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, error) {
 	start := time.Now()
 	var exists bool

@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"testing"
 
 	"github.com/aws/smithy-go/ptr"
 	"github.com/go-logr/logr"
@@ -42,8 +41,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
-	// FIXME: make this test do things
+var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() {
 
 	const resourceName = "test-resource"
 
@@ -143,8 +141,6 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 			NamespacedName: typeNamespacedName,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-		// Example: If you expect a certain status condition after reconciliation, verify it here.
 
 		var secret = &corev1.Secret{}
 		secretName := types.NamespacedName{
@@ -164,9 +160,9 @@ func TestReconcileDbRoleClaim_CopyExistingSecret(t *testing.T) {
 		By("Cleanup the specific resource instance DbRoleClaim")
 		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 	})
-}
+})
 
-func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter(t *testing.T) {
+var _ = Describe("TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter", Ordered, func() {
 	RegisterFailHandler(Fail)
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
@@ -191,7 +187,7 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter(t *te
 		{
 			"Get UserSchema claim 1",
 			reconciler{
-				Client: &MockClient{Port: "123"},
+				Client: &MockClient{},
 				Config: &roleclaim.RoleConfig{
 					Viper: viperObj,
 					Class: "default",
@@ -206,24 +202,20 @@ func TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter(t *te
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &DbRoleClaimReconciler{
-				Client: tt.rec.Client,
-				Config: tt.rec.Config,
-			}
+		r := &DbRoleClaimReconciler{
+			Client: tt.rec.Client,
+			Config: tt.rec.Config,
+		}
 
-			r.Reconciler = &roleclaim.DbRoleClaimReconciler{
-				Client: r.Client,
-				Config: r.Config,
-			}
+		r.Reconciler = &roleclaim.DbRoleClaimReconciler{
+			Client: r.Client,
+			Config: r.Config,
+		}
 
-			_, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-		})
+		_, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
+		if (err != nil) != tt.wantErr {
+			Expect(err).ToNot(BeNil())
+			return
+		}
 	}
-}
-
-//TODO: create one test that copies a secret and test if it was copied correctly - using k8sClient
+})

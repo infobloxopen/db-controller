@@ -5,6 +5,7 @@ import "github.com/aws/aws-sdk-go-v2/aws"
 type Clienter interface {
 	Creater
 	Updater
+	Remover
 	Exister
 	DBCloser
 
@@ -42,6 +43,10 @@ type Exister interface {
 	UserExists(userName string) (bool, error)
 	// Checks if a role exists in the database
 	RoleExists(roleName string) (bool, error)
+}
+
+type Remover interface {
+	DeleteUser(username, reassignToUser string) error
 }
 
 // DBClient is retired interface, use Client
