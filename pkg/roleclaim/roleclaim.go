@@ -58,8 +58,13 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	var dbRoleClaim v1.DbRoleClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbRoleClaim); err != nil {
-		log.Error(err, "unable to fetch DatabaseRoleClaim")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch DatabaseRoleClaim")
+			return ctrl.Result{}, err
+		} else {
+			log.Error(err, "databaseRoleClaim not found")
+			return ctrl.Result{}, nil
+		}
 	}
 
 	if permitted := basefun.IsClassPermitted(r.Config.Class, *dbRoleClaim.Spec.Class); !permitted {
@@ -195,7 +200,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			//copy source secret, change name, username and password
 			if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim, dbRoleClaim.Status.Username, userPassword); err != nil {
-				log.Error(err, "failed_copy_source_secret")
+				log.Error(err, "failure copying source secret")
 				return r.manageError(ctx, &dbRoleClaim, err)
 			}
 
@@ -223,7 +228,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	//copy source secret and change name
 	if err = r.copySourceSecret(ctx, sourceSecret, &dbRoleClaim, "", ""); err != nil {
-		log.Error(err, "failed_copy_source_secret")
+		log.Error(err, "failure copying source secret")
 		return r.manageError(ctx, &dbRoleClaim, err)
 	}
 
@@ -236,13 +241,16 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 func (r *DbRoleClaimReconciler) getSourceSecret(ctx context.Context, secretName string, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (*corev1.Secret, error) {
 	sourceSecret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: dbRoleClaim.Spec.SourceDatabaseClaim.Namespace}, sourceSecret)
-	if err != nil {
-		log.Error(err, "dbclaim_secret_not_found", "secret_name", secretName, "secret_namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
-		dbRoleClaim.Status.SourceSecret = ""
-		return nil, err
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: dbRoleClaim.Spec.SourceDatabaseClaim.Namespace}, sourceSecret); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch secret", "secret_name", secretName, "secret namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
+			return nil, err
+		} else {
+			log.Error(err, "dbClaim secret not found", "secret_name", secretName, "secret namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
+			return nil, err
+		}
 	}
-	log.V(1).Info("dbclaim_secret", "secret_name", secretName, "secret_namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
+	log.V(1).Info("dbclaim secret", "secret name", secretName, "secret namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
 
 	dbRoleClaim.Status.SourceSecret = sourceSecret.Namespace + "/" + sourceSecret.Name
 	return sourceSecret, nil
@@ -252,11 +260,14 @@ func (r *DbRoleClaimReconciler) getSourceDBClaim(ctx context.Context, dbRoleClai
 	dbclaimName := dbRoleClaim.Spec.SourceDatabaseClaim.Name
 	dbclaimNamespace := dbRoleClaim.Spec.SourceDatabaseClaim.Namespace
 	sourceDbClaim := &v1.DatabaseClaim{}
-	err := r.Get(ctx, types.NamespacedName{Name: dbclaimName, Namespace: dbclaimNamespace}, sourceDbClaim)
-	if err != nil {
-		log.Error(err, "specified dbclaim not found", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
-		dbRoleClaim.Status.MatchedSourceClaim = ""
-		return nil, err
+	if err := r.Get(ctx, types.NamespacedName{Name: dbclaimName, Namespace: dbclaimNamespace}, sourceDbClaim); err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch DBClaim", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
+			return nil, err
+		} else {
+			log.Error(err, "specified dbclaim not found", "dbclaimname", dbclaimName, "dbclaimNamespace", dbclaimNamespace)
+			return nil, err
+		}
 	}
 	log.Info("found dbclaim", "secretName", sourceDbClaim.Spec.SecretName)
 
@@ -405,12 +416,12 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 
 	//delete users linked to this DBRoleClaim
 	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, existingDBConnInfo.Username); err != nil {
-		log.Error(err, "droping user "+dbRoleClaim.Name+"_user"+dbuser.SuffixA)
+		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixA)
 		return err
 	}
 
 	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, existingDBConnInfo.Username); err != nil {
-		log.Error(err, "droping user "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
+		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
 		return err
 	}
 
@@ -420,7 +431,7 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *v1.DbRoleClaim, inErr error) (ctrl.Result, error) {
 
 	if dbRoleClaim == nil {
-		return ctrl.Result{}, fmt.Errorf("dbroleclaim_is_nil: %w", inErr)
+		return ctrl.Result{}, fmt.Errorf("dbroleclaim is nil: %w", inErr)
 	}
 
 	dbRoleClaim.Status.Error = inErr.Error()
@@ -439,7 +450,7 @@ func (r *DbRoleClaimReconciler) manageError(ctx context.Context, dbRoleClaim *v1
 func (r *DbRoleClaimReconciler) manageSuccess(ctx context.Context, dbRoleClaim *v1.DbRoleClaim) (ctrl.Result, error) {
 
 	if dbRoleClaim == nil {
-		return ctrl.Result{}, fmt.Errorf("dbroleclaim_is_nil")
+		return ctrl.Result{}, fmt.Errorf("dbroleclaim is nil")
 	}
 
 	dbRoleClaim.Status.Error = ""

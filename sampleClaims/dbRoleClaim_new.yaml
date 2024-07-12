@@ -28,8 +28,3 @@ spec:
     schema2: admin
     schema3: readonly
     schema4: admin
-status:
-  matchedSourceClaim: identity/identity-api
-  secretUpdatedAt: "2024-07-02T15:58:05Z"
-  sourceSecret: identity/identity-api-dsn
-  sourceSecretResourceVersion: "1425628474":dbrole
