@@ -280,8 +280,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 			logger.Error(err, "failed to remove temp file")
 		}
 
-		cmd = exec.Command("docker", "rm", "-f", container)
-		cmd.Stderr = os.Stderr
+		cmd := exec.Command("docker", "rm", "-f", container)
 		// This take 10 seconds to run, and we don't care if
 		// it was successful. So use Start() to not wait for
 		// it to finish.
