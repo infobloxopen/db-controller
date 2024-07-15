@@ -13,6 +13,8 @@ type Clienter interface {
 	ManageSuperUserRole(username string, enableSuperUser bool) error
 	ManageCreateRole(username string, enableCreateRole bool) error
 	ManageSystemFunctions(dbName string, functions map[string]string) error
+
+	GetCurrentUserRoles(username string) ([]string, error)
 }
 
 type Creater interface {

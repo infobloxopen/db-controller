@@ -923,6 +923,39 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 	return nil
 }
 
+func (pc *client) GetCurrentUserRoles(username string) ([]string, error) {
+
+	rows, err := pc.DB.Query(`WITH users AS (select rolname, oid
+               from pg_roles
+               union
+               select 'PUBLIC', 0)
+SELECT distinct nspname   as schema
+FROM pg_namespace,
+     aclexplode(nspacl) AS a
+     JOIN users AS e
+          ON a.grantee = e.oid
+     JOIN users AS r
+          ON a.grantor = r.oid WHERE e.rolname = %s;`, pq.QuoteIdentifier(username))
+
+	if err != nil {
+		pc.log.Error(err, "could not query for roles from user  "+username)
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var schemas []string = make([]string, 0)
+	for rows.Next() {
+		var schema string
+		if err = rows.Scan(&schema); err != nil {
+			return nil, err
+		}
+		schemas = append(schemas, schema)
+	}
+
+	return schemas, nil
+}
+
 func (pc *client) Close() error {
 	if pc.DB != nil {
 		return pc.DB.Close()

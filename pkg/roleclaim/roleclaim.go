@@ -116,10 +116,14 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 
 		//get db conn details
-		existingDBConnInfo := sourceDbClaim.Status.ActiveDB.ConnectionInfo
-
-		// retrieve dB master password
-		existingDBConnInfo.Password = string(sourceSecret.Data["password"])
+		existingDBConnInfo := &v1.DatabaseClaimConnectionInfo{
+			Host:         string(sourceSecret.Data["host"]),
+			Port:         string(sourceSecret.Data["port"]),
+			DatabaseName: string(sourceSecret.Data["database"]),
+			Username:     string(sourceSecret.Data["username"]),
+			Password:     string(sourceSecret.Data["password"]),
+			SSLMode:      string(sourceSecret.Data["sslmode"]),
+		}
 
 		// get client to DB
 		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &log)
@@ -401,10 +405,14 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	// #endregion find secret
 
 	//get db conn details
-	existingDBConnInfo := sourceDbClaim.Status.ActiveDB.ConnectionInfo
-
-	// retrieve dB master password
-	existingDBConnInfo.Password = string(sourceSecret.Data["password"])
+	existingDBConnInfo := &v1.DatabaseClaimConnectionInfo{
+		Host:         string(sourceSecret.Data["host"]),
+		Port:         string(sourceSecret.Data["port"]),
+		DatabaseName: string(sourceSecret.Data["database"]),
+		Username:     string(sourceSecret.Data["username"]),
+		Password:     string(sourceSecret.Data["password"]),
+		SSLMode:      string(sourceSecret.Data["sslmode"]),
+	}
 
 	// get client to DB
 	dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, log)
