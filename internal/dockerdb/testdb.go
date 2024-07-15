@@ -147,7 +147,6 @@ func StartNetwork(networkName string) func() {
 				buf, err := cmd.Output()
 				if err != nil {
 					logger.Error(err, "failed to disconnect container", "container", container, "stderr", errBuf.String())
-					os.Exit(1)
 				}
 				logger.V(1).Info(string(buf))
 			}
