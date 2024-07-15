@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"net/url"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -222,13 +221,3 @@ var _ = Describe("DatabaseClaim Controller", func() {
 		})
 	})
 })
-
-func TestDB(t *testing.T) {
-	db, _, cleanup := RunDB()
-	defer cleanup()
-	defer db.Close()
-	_, err := db.Exec("CREATE TABLE test (id SERIAL PRIMARY KEY, name TEXT)")
-	if err != nil {
-		panic(err)
-	}
-}

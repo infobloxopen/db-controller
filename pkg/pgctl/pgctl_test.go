@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	"github.com/lib/pq"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -58,18 +59,32 @@ func realTestMain(m *testing.M) int {
 	logger = zap.New(zap.UseFlagOptions(&opts))
 
 	var err error
-
-	removeNetwork := StartNetwork()
+	networkName := "pgctl"
+	removeNetwork := dockerdb.StartNetwork(networkName)
 	defer removeNetwork()
-
-	_, sourceDSN, sourceClose := RunDB(dbConfig{HostName: "pubHost", DockerTag: sourceVersion, Database: "pub", Username: "sourceAdmin", Password: "sourceSecret"})
+	// FIXME: randomly generate network name
+	_, sourceDSN, sourceClose := dockerdb.Run(dockerdb.Config{
+		HostName:  "pubHost",
+		DockerTag: sourceVersion,
+		Database:  "pub",
+		Username:  "sourceAdmin",
+		Password:  "sourceSecret",
+		Network:   networkName,
+	})
 	defer sourceClose()
 
 	if err = loadSourceTestData(sourceDSN); err != nil {
 		panic(err)
 	}
 
-	_, targetDSN, targetClose := RunDB(dbConfig{HostName: "subHost", DockerTag: targetVersion, Database: "sub", Username: "targetAdmin", Password: "targetSecret"})
+	_, targetDSN, targetClose := dockerdb.Run(dockerdb.Config{
+		HostName:  "subHost",
+		DockerTag: targetVersion,
+		Database:  "sub",
+		Username:  "targetAdmin",
+		Password:  "targetSecret",
+		Network:   networkName,
+	})
 	defer targetClose()
 
 	if err = loadTargetTestData(targetDSN); err != nil {
@@ -631,7 +646,7 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 			s := &validate_migration_status_state{
 				config: tt.fields.config,
 			}
-			retryTest(t, func() error {
+			dockerdb.RetryFn(t, func() error {
 				got, err := s.Execute()
 				if (err != nil) != tt.wantErr {
 					t.Fatalf("validate_migration_status_state.Execute()\n   got: %s", err)
