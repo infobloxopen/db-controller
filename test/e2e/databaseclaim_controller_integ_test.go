@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"testing"
 	"time"
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
@@ -34,6 +33,7 @@ var _ = Describe("db-controller", func() {
 		It("Should update DB Claim status", func() {
 			By("By creating a new DB Claim")
 			ctx := context.Background()
+			Expect(namespace).NotTo(Equal(""), "you must set the namespace")
 			dbClaim := &persistancev1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
@@ -421,107 +421,106 @@ func checkInstanceStatus(k8sClient client.Client, name string, expected bool) {
 
 }
 
-var _ = Describe("canTagResources", Ordered, func() {
-	return
-	// Creating resources required to do tests beforehand
-	BeforeAll(func() {
-		if testing.Short() {
-			Skip("skipping k8s based tests")
-		}
-		ctx := context.Background()
-		dbClaim := &persistancev1.DatabaseClaim{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "persistance.atlas.infoblox.com/v1",
-				Kind:       "DatabaseClaim",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dbclaim",
-				Namespace: "default",
-			},
-			Spec: persistancev1.DatabaseClaimSpec{
-				AppID:         "sample-app",
-				DatabaseName:  "sample_app",
-				InstanceLabel: "sample-connection-3",
-				SecretName:    "sample-secret",
-				Username:      "sample_user",
-			},
-		}
-		Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
-		ctx2 := context.Background()
-		dbClaim2 := &persistancev1.DatabaseClaim{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "persistance.atlas.infoblox.com/v1",
-				Kind:       "DatabaseClaim",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dbclaim-2",
-				Namespace: "default",
-			},
-			Spec: persistancev1.DatabaseClaimSpec{
-				AppID:         "sample-app",
-				DatabaseName:  "sample_app",
-				InstanceLabel: "sample-connection-3",
-				SecretName:    "sample-secret",
-				Username:      "sample_user",
-			},
-		}
-		Expect(e2e_k8sClient.Create(ctx2, dbClaim2)).Should(Succeed())
-	})
+// var _ = Describe("canTagResources", Ordered, func() {
+// 	// Creating resources required to do tests beforehand
+// 	BeforeAll(func() {
+// 		if testing.Short() {
+// 			Skip("skipping k8s based tests")
+// 		}
+// 		ctx := context.Background()
+// 		dbClaim := &persistancev1.DatabaseClaim{
+// 			TypeMeta: metav1.TypeMeta{
+// 				APIVersion: "persistance.atlas.infoblox.com/v1",
+// 				Kind:       "DatabaseClaim",
+// 			},
+// 			ObjectMeta: metav1.ObjectMeta{
+// 				Name:      "dbclaim",
+// 				Namespace: "default",
+// 			},
+// 			Spec: persistancev1.DatabaseClaimSpec{
+// 				AppID:         "sample-app",
+// 				DatabaseName:  "sample_app",
+// 				InstanceLabel: "sample-connection-3",
+// 				SecretName:    "sample-secret",
+// 				Username:      "sample_user",
+// 			},
+// 		}
+// 		Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
+// 		ctx2 := context.Background()
+// 		dbClaim2 := &persistancev1.DatabaseClaim{
+// 			TypeMeta: metav1.TypeMeta{
+// 				APIVersion: "persistance.atlas.infoblox.com/v1",
+// 				Kind:       "DatabaseClaim",
+// 			},
+// 			ObjectMeta: metav1.ObjectMeta{
+// 				Name:      "dbclaim-2",
+// 				Namespace: "default",
+// 			},
+// 			Spec: persistancev1.DatabaseClaimSpec{
+// 				AppID:         "sample-app",
+// 				DatabaseName:  "sample_app",
+// 				InstanceLabel: "sample-connection-3",
+// 				SecretName:    "sample-secret",
+// 				Username:      "sample_user",
+// 			},
+// 		}
+// 		Expect(e2e_k8sClient.Create(ctx2, dbClaim2)).Should(Succeed())
+// 	})
 
-	Context("Adding tags to DBClaim with empty InstanceLabel", func() {
-		It("Should  permite adding tags", func() {
-			ctx2 := context.Background()
-			dbClaim2 := &persistancev1.DatabaseClaim{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "persistance.atlas.infoblox.com/v1",
-					Kind:       "DatabaseClaim",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "dbclaim-2",
-					Namespace: "default",
-				},
-				Spec: persistancev1.DatabaseClaimSpec{
-					AppID:         "sample-app",
-					DatabaseName:  "sample_app",
-					InstanceLabel: "",
-					SecretName:    "sample-secret",
-					Username:      "sample_user",
-				},
-			}
-			mockReconciler := &controller.DatabaseClaimReconciler{}
-			mockReconciler.Client = e2e_k8sClient
-			check, err2 := databaseclaim.CanTagResources(ctx2, e2e_k8sClient, dbClaim2)
-			Expect(err2).ShouldNot(HaveOccurred())
-			Expect(check).To(BeTrue())
-		})
-	})
+// 	Context("Adding tags to DBClaim with empty InstanceLabel", func() {
+// 		It("Should  permite adding tags", func() {
+// 			ctx2 := context.Background()
+// 			dbClaim2 := &persistancev1.DatabaseClaim{
+// 				TypeMeta: metav1.TypeMeta{
+// 					APIVersion: "persistance.atlas.infoblox.com/v1",
+// 					Kind:       "DatabaseClaim",
+// 				},
+// 				ObjectMeta: metav1.ObjectMeta{
+// 					Name:      "dbclaim-2",
+// 					Namespace: "default",
+// 				},
+// 				Spec: persistancev1.DatabaseClaimSpec{
+// 					AppID:         "sample-app",
+// 					DatabaseName:  "sample_app",
+// 					InstanceLabel: "",
+// 					SecretName:    "sample-secret",
+// 					Username:      "sample_user",
+// 				},
+// 			}
+// 			mockReconciler := &controller.DatabaseClaimReconciler{}
+// 			mockReconciler.Client = k8sClient
+// 			check, err2 := databaseclaim.CanTagResources(ctx2, k8sClient, dbClaim2)
+// 			Expect(err2).ShouldNot(HaveOccurred())
+// 			Expect(check).To(BeTrue())
+// 		})
+// 	})
 
-	Context("Adding tags to DBClaim, When There are already more than one DBClaim exists with similar InstanceLabel", func() {
-		It("Should not permite adding tags", func() {
-			ctx2 := context.Background()
-			dbClaim2 := &persistancev1.DatabaseClaim{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "persistance.atlas.infoblox.com/v1",
-					Kind:       "DatabaseClaim",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "dbclaim-2",
-					Namespace: "default",
-				},
-				Spec: persistancev1.DatabaseClaimSpec{
-					AppID:         "sample-app",
-					DatabaseName:  "sample_app",
-					InstanceLabel: "sample-connection-3",
-					SecretName:    "sample-secret",
-					Username:      "sample_user",
-				},
-			}
-			mockReconciler := &controller.DatabaseClaimReconciler{}
-			mockReconciler.Client = e2e_k8sClient
-			check, err2 := databaseclaim.CanTagResources(ctx2, e2e_k8sClient, dbClaim2)
-			Expect(err2).Should(HaveOccurred())
-			Expect(check).To(BeFalse())
-		})
-	})
+// 	Context("Adding tags to DBClaim, When There are already more than one DBClaim exists with similar InstanceLabel", func() {
+// 		It("Should not permite adding tags", func() {
+// 			ctx2 := context.Background()
+// 			dbClaim2 := &persistancev1.DatabaseClaim{
+// 				TypeMeta: metav1.TypeMeta{
+// 					APIVersion: "persistance.atlas.infoblox.com/v1",
+// 					Kind:       "DatabaseClaim",
+// 				},
+// 				ObjectMeta: metav1.ObjectMeta{
+// 					Name:      "dbclaim-2",
+// 					Namespace: "default",
+// 				},
+// 				Spec: persistancev1.DatabaseClaimSpec{
+// 					AppID:         "sample-app",
+// 					DatabaseName:  "sample_app",
+// 					InstanceLabel: "sample-connection-3",
+// 					SecretName:    "sample-secret",
+// 					Username:      "sample_user",
+// 				},
+// 			}
+// 			mockReconciler := &controller.DatabaseClaimReconciler{}
+// 			mockReconciler.Client = k8sClient
+// 			check, err2 := databaseclaim.CanTagResources(ctx2, k8sClient, dbClaim2)
+// 			Expect(err2).Should(HaveOccurred())
+// 			Expect(check).To(BeFalse())
+// 		})
+// 	})
 
-})
+// })

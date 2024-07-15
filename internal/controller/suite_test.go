@@ -37,6 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/config"
+	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -52,12 +54,12 @@ var logger logr.Logger
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "Controller Suite", Label("FailFast"))
 
 	logger = funcr.New(func(prefix, args string) {
 		t.Log(prefix, args)
 	}, funcr.Options{
-		Verbosity: 1,
+		//Verbosity: 1,
 	})
 }
 
@@ -98,13 +100,33 @@ var _ = BeforeSuite(func() {
 	testdb, testDSN, cleanupTestDB = RunDB()
 	logger.Info("postgres_setup_took", "duration", time.Since(now))
 
+	// Setup controller
+	By("setting up the database controller")
+	configPath, err := filepath.Abs(filepath.Join("..", "..", "cmd", "config", "config.yaml"))
+	Expect(err).NotTo(HaveOccurred())
+
+	controllerReconciler = &DatabaseClaimReconciler{
+		Config: &databaseclaim.DatabaseClaimConfig{
+			Viper:     config.NewConfig(logger, configPath),
+			Namespace: "default",
+		},
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+	}
+	controllerReconciler.Setup()
+
+	// FIXME: make these actual properties on the reconciler struct
+	controllerReconciler.Config.Viper.Set("defaultMasterusername", "postgres")
+	controllerReconciler.Config.Viper.Set("defaultSslMode", "disable")
+
 })
 
 // Stand up postgres in a container
 var (
-	testdb        *sql.DB
-	testDSN       string
-	cleanupTestDB func()
+	testdb               *sql.DB
+	testDSN              string
+	cleanupTestDB        func()
+	controllerReconciler *DatabaseClaimReconciler
 )
 
 var _ = AfterSuite(func() {

@@ -297,7 +297,8 @@ type Status struct {
 	// The name of the label that was successfully matched against the fragment key names in the db-controller configMap
 	MatchedLabel string `json:"matchLabel,omitempty"`
 
-	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo"`
+	// The optional Connection information to the database.
+	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo,omitempty"`
 
 	// Version of the provisioned Database
 	DBVersion string `json:"dbversion,omitempty"`
@@ -382,6 +383,9 @@ func init() {
 }
 
 func (c *DatabaseClaimConnectionInfo) Uri() string {
+	if c == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
 		url.QueryEscape(c.Username), url.QueryEscape(c.Password), c.Host, c.Port, url.QueryEscape(c.DatabaseName), c.SSLMode)
 }

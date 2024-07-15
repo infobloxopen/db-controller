@@ -2,7 +2,6 @@ package hostparams
 
 import (
 	"bytes"
-	"flag"
 	"reflect"
 	"testing"
 
@@ -10,19 +9,6 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/spf13/viper"
 )
-
-// The following gingo struct and associted init() is required to run go test with ginkgo related flags
-// Since this test is not using ginkgo, this is a hack to get around the issue of go test complaining about
-// unknown flags.
-var ginkgo struct {
-	dry_run      string
-	label_filter string
-}
-
-func init() {
-	flag.StringVar(&ginkgo.dry_run, "ginkgo.dry-run", "", "Ignore this flag")
-	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
-}
 
 func TestHostParams_Hash(t *testing.T) {
 	type fields struct {

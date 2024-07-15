@@ -301,9 +301,16 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 	if err != nil {
 		return err
 	}
-	r.Input = &input{ManageCloudDB: manageCloudDB, SharedDBHost: sharedDBHost,
-		MasterConnInfo: connInfo, FragmentKey: fragmentKey,
-		DbType: string(dbClaim.Spec.Type), HostParams: *hostParams,
+
+	// FIXME: don't store request specific information in the
+	// reconciler struct itself
+	r.Input = &input{
+		ManageCloudDB:              manageCloudDB,
+		SharedDBHost:               sharedDBHost,
+		MasterConnInfo:             connInfo,
+		FragmentKey:                fragmentKey,
+		DbType:                     string(dbClaim.Spec.Type),
+		HostParams:                 *hostParams,
 		EnablePerfInsight:          enablePerfInsight,
 		EnableCloudwatchLogsExport: cloudwatchLogsExport,
 		BackupRetentionDays:        backupRetentionDays,
@@ -357,14 +364,14 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	logr.Info("object information", "uid", dbClaim.ObjectMeta.UID)
+	logr.Info("reconcile")
 
 	if dbClaim.Spec.Class == nil {
 		dbClaim.Spec.Class = ptr.To("default")
 	}
 
 	if permitted := isClassPermitted(r.Config.Class, *dbClaim.Spec.Class); !permitted {
-		logr.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbClaim.Spec.Class, "controllerClas", r.Config.Class)
+		logr.Info("ignoring this claim as this controller does not own this class", "spec", dbClaim.Spec, "controllerClass", r.Config.Class)
 		return ctrl.Result{}, nil
 	}
 
@@ -385,6 +392,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
+			logr.Info("clean_up_finalizer")
 			// check if the claim is in the middle of rds migration, if so, wait for it to complete
 			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
 				logr.Info("migration is in progress. object cannot be deleted")
@@ -402,7 +410,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				// so that it can be retried
 				return ctrl.Result{}, err
 			}
-
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&dbClaim, dbFinalizerName)
 			if err := r.Update(ctx, &dbClaim); err != nil {
@@ -427,7 +434,11 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			return ctrl.Result{}, err
 		}
 	}
-	return r.executeDbClaimRequest(ctx, &dbClaim)
+	res, err := r.executeDbClaimRequest(ctx, &dbClaim)
+	if err != nil {
+		return r.manageError(ctx, &dbClaim, err)
+	}
+	return res, nil
 }
 
 func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, dbClaim v1.DatabaseClaim) error {
@@ -440,6 +451,84 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
 	cfg.DatasourceFileName = dbClaim.Spec.DSNName
 	return exporter.Apply(ctx, r.Client, cfg)
+}
+
+func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+
+	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
+
+	logr.Info("post migration is in progress")
+
+	canTag, err := r.canTagResources(ctx, dbClaim)
+	if err != nil {
+		logr.Error(err, "error in checking  criteria post migration ")
+		return r.manageError(ctx, dbClaim, err)
+	}
+	if !canTag {
+		logr.Info("Skipping post migration actions due to DB being used by other entities")
+		dbClaim.Status.OldDB = v1.StatusForOldDB{}
+		dbClaim.Status.Error = ""
+		if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+			return r.manageError(ctx, dbClaim, err)
+		}
+		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+
+	// get name of DBInstance from connectionInfo
+	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
+
+	var dbParamGroupName string
+	// get name of DBParamGroup from connectionInfo
+	if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
+		dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+	} else {
+		dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+	}
+
+	TagsVerified, err := r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName)
+
+	// Even though we get error in updating tags, we log the error
+	// and go ahead with deleting resources
+	if err != nil || TagsVerified {
+
+		if err != nil {
+			logr.Error(err, "Failed updating or verifying operational tags")
+		}
+
+		if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
+			logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
+		}
+		if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
+			logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
+		}
+
+		dbClaim.Status.OldDB = v1.StatusForOldDB{}
+	} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
+		// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
+		logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
+
+		if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
+			logr.Error(err, "Could not delete crossplane  DBInstance/DBCLluster")
+		}
+		if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
+			logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
+		}
+
+		dbClaim.Status.OldDB = v1.StatusForOldDB{}
+	}
+
+	dbClaim.Status.Error = ""
+	if err = r.updateClientStatus(ctx, dbClaim); err != nil {
+		return r.manageError(ctx, dbClaim, err)
+	}
+	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		return ctrl.Result{Requeue: true}, nil
+	}
+	return ctrl.Result{RequeueAfter: time.Minute}, nil
 }
 
 // Create, migrate or upgrade database
@@ -457,78 +546,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 	// FIXME: why is a per request value being set in a global variable?
 	r.mode = r.getMode(ctx, dbClaim)
 	if r.mode == M_PostMigrationInProgress {
-		logr.Info("post migration is in progress")
-
-		if canTag, err := r.canTagResources(ctx, dbClaim); err != nil {
-			logr.Error(err, "error in checking  criteria post migration ")
-			return r.manageError(ctx, dbClaim, err)
-		} else if !canTag {
-			logr.Info("Skipping post migration actions due to DB being used by other entities")
-			dbClaim.Status.OldDB = v1.StatusForOldDB{}
-			dbClaim.Status.Error = ""
-			if err = r.updateClientStatus(ctx, dbClaim); err != nil {
-				return r.manageError(ctx, dbClaim, err)
-			}
-			if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-				return ctrl.Result{Requeue: true}, nil
-			} else {
-				return ctrl.Result{RequeueAfter: time.Minute}, nil
-			}
-		}
-
-		// get name of DBInstance from connectionInfo
-		dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
-
-		var dbParamGroupName string
-		// get name of DBParamGroup from connectionInfo
-		if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
-			dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
-		} else {
-			dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
-		}
-
-		TagsVerified, err := r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName)
-
-		// Even though we get error in updating tags, we log the error
-		// and go ahead with deleting resources
-		if err != nil || TagsVerified {
-
-			if err != nil {
-				logr.Error(err, "Failed updating or verifying operational tags")
-			}
-
-			if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
-				logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
-			}
-			if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
-				logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
-			}
-
-			dbClaim.Status.OldDB = v1.StatusForOldDB{}
-		} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
-			// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
-			logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
-
-			if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
-				logr.Error(err, "Could not delete crossplane  DBInstance/DBCLluster")
-			}
-			if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
-				logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
-			}
-
-			dbClaim.Status.OldDB = v1.StatusForOldDB{}
-		}
-
-		dbClaim.Status.Error = ""
-		if err = r.updateClientStatus(ctx, dbClaim); err != nil {
-			return r.manageError(ctx, dbClaim, err)
-		}
-		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-			return ctrl.Result{Requeue: true}, nil
-		} else {
-			return ctrl.Result{RequeueAfter: time.Minute}, nil
-		}
-
+		return r.postMigrationInProgress(ctx, dbClaim)
 	}
 	if r.mode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
@@ -574,6 +592,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 		return r.reconcileMigrationInProgress(ctx, dbClaim)
 	}
 	if r.mode == M_UseNewDB {
+
 		logr.Info("Use new DB")
 		result, err := r.reconcileNewDB(ctx, dbClaim)
 		if err != nil {
@@ -679,8 +698,10 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	if r.Input.ManageCloudDB {
 		isReady, err := r.manageCloudHost(ctx, dbClaim)
 		if err != nil {
+			logr.Error(err, "manage_cloud_host")
 			return ctrl.Result{}, err
 		}
+		// Clear existing error
 		if dbClaim.Status.Error != "" {
 			//resetting error
 			dbClaim.Status.Error = ""
@@ -688,10 +709,12 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 				return ctrl.Result{}, err
 			}
 		}
+
 		if !isReady {
 			logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
 			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
 		}
+
 		logr.Info("cloud instance ready. reading generated master secret")
 		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 		if err != nil {
@@ -704,12 +727,17 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 		r.Input.MasterConnInfo.Username = connInfo.Username
 
 	} else {
-		//was used only for local testing
-		password, err := r.readMasterPassword(ctx)
+
+		err := r.Input.HostParams.CheckEngineVersion()
 		if err != nil {
-			return r.manageError(ctx, dbClaim, err)
+			return ctrl.Result{}, err
 		}
-		// password := "postgres"
+
+		//was used only for local testing
+		password, err := r.readMasterPassword(ctx, dbClaim)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		r.Input.MasterConnInfo.Password = password
 	}
 
@@ -743,6 +771,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -1155,25 +1184,26 @@ func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Con
 	dbClaim *v1.DatabaseClaim) (string, error) {
 
 	secretKey := "password"
-	gs := &corev1.Secret{}
 
 	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
 	if ns == "" {
 		ns = dbClaim.Namespace
 	}
+
+	gs := corev1.Secret{}
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: ns,
 		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
-	}, gs)
+	}, &gs)
 	if err != nil {
 		return "", err
 	}
 
-	password := string(gs.Data[secretKey])
-	if password == "" {
-		return "", fmt.Errorf("invalid credentials (password)")
+	password, ok := gs.Data[secretKey]
+	if !ok {
+		return "", fmt.Errorf("invalid_credentials_password_missing")
 	}
-	return password, nil
+	return string(password), nil
 }
 
 func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
@@ -1227,10 +1257,7 @@ func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.D
 
 func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres",
-		r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password,
-		r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port,
-		"postgres", r.Input.MasterConnInfo.SSLMode)
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres", r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
 }
 
 func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
@@ -1442,19 +1469,6 @@ func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
 	return r.Config.Viper.GetInt("passwordconfig::minPasswordLength")
 }
 
-func (r *DatabaseClaimReconciler) getSecretRef(fragmentKey string) string {
-
-	return r.Config.Viper.GetString(fmt.Sprintf("%s::PasswordSecretRef", fragmentKey))
-}
-
-func (r *DatabaseClaimReconciler) getSecretKey(fragmentKey string) string {
-	return r.Config.Viper.GetString(fmt.Sprintf("%s::PasswordSecretKey", fragmentKey))
-}
-
-// func (r *DatabaseClaimReconciler) getAuthSource() string {
-// 	return r.Config.Viper.GetString("authSource")
-// }
-
 func (r *DatabaseClaimReconciler) getRegion() string {
 	return r.Config.Viper.GetString("region")
 }
@@ -1556,6 +1570,8 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secret
 	return connInfo, nil
 }
 
+// getDynamicHostName is used to name the crossplane
+// dbinstance CRs
 func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim) string {
 	var prefix string
 	suffix := "-" + r.Input.HostParams.Hash()
@@ -1616,7 +1632,7 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 	return firstInsReady && secondInsReady, nil
 }
 
-func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Clienter, status *v1.Status) error {
+func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Creater, status *v1.Status) error {
 	logr := log.FromContext(ctx)
 
 	dbName := r.Input.MasterConnInfo.DatabaseName
@@ -1843,78 +1859,81 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 		Name: dbHostName,
 	}, dbCluster)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
-			if validationError != nil {
-				return false, validationError
-			}
-			dbCluster = &crossplanerds.DBCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: dbHostName,
-					// TODO - Figure out the proper labels for resource
-					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-				},
-				Spec: crossplanerds.DBClusterSpec{
-					ForProvider: crossplanerds.DBClusterParameters{
-						Region:                r.getRegion(),
-						BackupRetentionPeriod: auroraBackupRetentionPeriod,
-						CustomDBClusterParameters: crossplanerds.CustomDBClusterParameters{
-							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
-							VPCSecurityGroupIDRefs: []xpv1.Reference{
-								{Name: r.getVpcSecurityGroupIDRefs()},
-							},
-							DBSubnetGroupNameRef: &xpv1.Reference{
-								Name: r.getDbSubnetGroupNameRef(),
-							},
-							AutogeneratePassword:        true,
-							MasterUserPasswordSecretRef: &dbMasterSecretCluster,
-							DBClusterParameterGroupNameRef: &xpv1.Reference{
-								Name: pgName,
-							},
-							EngineVersion: &params.EngineVersion,
-						},
-						// Items from Claim and fragmentKey
-						Engine: &params.Engine,
-						Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
-						// Items from Config
-						MasterUsername:                  &params.MasterUsername,
-						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-						StorageEncrypted:                &encryptStrg,
-						StorageType:                     &params.StorageType,
-						Port:                            &params.Port,
-						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
-						IOPS:                            nil,
-						PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
-					},
-					ResourceSpec: xpv1.ResourceSpec{
-						WriteConnectionSecretToReference: &dbSecretCluster,
-						ProviderConfigReference:          &providerConfigReference,
-						DeletionPolicy:                   params.DeletionPolicy,
-					},
-				},
-			}
-			if r.mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
-				snapshotID := dbClaim.Spec.RestoreFrom
-				dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom = &crossplanerds.RestoreDBClusterBackupConfiguration{
-					Snapshot: &crossplanerds.SnapshotRestoreBackupConfiguration{
-						SnapshotIdentifier: &snapshotID,
-					},
-					Source: &restoreFromSource,
-				}
-			}
-			//create master password secret, before calling create on DBInstance
-			err := r.manageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef)
-			if err != nil {
-				return false, err
-			}
-			logr.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
-			if err := r.Client.Create(ctx, dbCluster); err != nil {
-				return false, err
-			}
-
-		} else {
+		if client.IgnoreNotFound(err) != nil {
 			return false, err
 		}
+
+		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
+		validationError := params.CheckEngineVersion()
+		if validationError != nil {
+			logr.Error(validationError, "invalid_db_version")
+			return false, validationError
+		}
+		dbCluster = &crossplanerds.DBCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: dbHostName,
+				// TODO - Figure out the proper labels for resource
+				// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+			},
+			Spec: crossplanerds.DBClusterSpec{
+				ForProvider: crossplanerds.DBClusterParameters{
+					Region:                r.getRegion(),
+					BackupRetentionPeriod: auroraBackupRetentionPeriod,
+					CustomDBClusterParameters: crossplanerds.CustomDBClusterParameters{
+						SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
+						VPCSecurityGroupIDRefs: []xpv1.Reference{
+							{Name: r.getVpcSecurityGroupIDRefs()},
+						},
+						DBSubnetGroupNameRef: &xpv1.Reference{
+							Name: r.getDbSubnetGroupNameRef(),
+						},
+						AutogeneratePassword:        true,
+						MasterUserPasswordSecretRef: &dbMasterSecretCluster,
+						DBClusterParameterGroupNameRef: &xpv1.Reference{
+							Name: pgName,
+						},
+						EngineVersion: &params.EngineVersion,
+					},
+					// Items from Claim and fragmentKey
+					Engine: &params.Engine,
+					Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+					// Items from Config
+					MasterUsername:                  &params.MasterUsername,
+					EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
+					StorageEncrypted:                &encryptStrg,
+					StorageType:                     &params.StorageType,
+					Port:                            &params.Port,
+					EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
+					IOPS:                            nil,
+					PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
+				},
+				ResourceSpec: xpv1.ResourceSpec{
+					WriteConnectionSecretToReference: &dbSecretCluster,
+					ProviderConfigReference:          &providerConfigReference,
+					DeletionPolicy:                   params.DeletionPolicy,
+				},
+			},
+		}
+		if r.mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+			snapshotID := dbClaim.Spec.RestoreFrom
+			dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom = &crossplanerds.RestoreDBClusterBackupConfiguration{
+				Snapshot: &crossplanerds.SnapshotRestoreBackupConfiguration{
+					SnapshotIdentifier: &snapshotID,
+				},
+				Source: &restoreFromSource,
+			}
+		}
+		//create master password secret, before calling create on DBInstance
+		err := r.manageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef)
+		if err != nil {
+			return false, err
+		}
+		logr.Info("creating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
+		if err := r.Client.Create(ctx, dbCluster); err != nil {
+			logr.Error(err, "crossplane_dbcluster_create")
+			return false, err
+		}
+
 	}
 	if !dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
 		err = fmt.Errorf("can not create Cloud DB cluster %s it is being deleted", dbHostName)
@@ -2738,31 +2757,31 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	return r.Client.Update(ctx, exSecret)
 }
 
-func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context) (string, error) {
+// FIXME: remove this method. It's a bunch of custom logic that
+// only was written to make unit tests work. We should be testing
+// code that is actually used in production
+func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, claim *v1.DatabaseClaim) (string, error) {
 	gs := &corev1.Secret{}
-	secretName := r.getSecretRef(r.Input.FragmentKey)
-	// FIXME: remove this nonsense, only unit tests were using a special secret key. This is pointless
-	secretKey := r.getSecretKey(r.Input.FragmentKey)
-	if secretKey == "" {
-		secretKey = "password"
-	}
+
+	secretName := claim.Spec.SecretName
+
 	if secretName == "" {
 		return "", fmt.Errorf("an empty password secret reference")
 	}
-	namespace, err := r.getServiceNamespace()
-	if err != nil {
-		return "", err
-	}
 
-	err = r.Client.Get(ctx, client.ObjectKey{
-		Namespace: namespace,
+	if err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: claim.Namespace,
 		Name:      secretName,
-	}, gs)
-	if err != nil {
+	}, gs); err != nil {
 		return "", err
 	}
 
-	return string(gs.Data[secretKey]), nil
+	bsPass, ok := gs.Data["password"]
+	if !ok {
+		return "", fmt.Errorf("unable to find password text")
+	}
+
+	return string(bsPass), nil
 }
 
 // Load settings into the DBClaim (connection, config, controllerconfig...)
@@ -2785,58 +2804,6 @@ func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *v1.DatabaseClaim) 
 	dbClaim.Status.ActiveDB.MatchedLabel = m
 
 	return m, nil
-}
-
-func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (ctrl.Result, error) {
-
-	logr := log.FromContext(ctx)
-
-	dbClaim.Status.Error = inErr.Error()
-
-	err := r.Client.Status().Update(ctx, dbClaim)
-	if err != nil {
-		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
-			err = nil
-		}
-		return ctrl.Result{}, err
-	}
-	logr.Error(inErr, "error")
-	return ctrl.Result{}, inErr
-}
-
-func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
-	dbClaim.Status.Error = ""
-
-	err := r.Client.Status().Update(ctx, dbClaim)
-	if err != nil {
-		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
-			err = nil
-		}
-		return ctrl.Result{}, err
-	}
-	//if object is getting deleted then call requeue immediately
-	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-		return ctrl.Result{Requeue: true}, nil
-	} else if dbClaim.Status.OldDB.DbState == v1.PostMigrationInProgress {
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
-	} else {
-		return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
-	}
-}
-
-func (r *DatabaseClaimReconciler) updateClientStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
-
-	err := r.Client.Status().Update(ctx, dbClaim)
-	if err != nil {
-		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 func GetDBName(dbClaim *v1.DatabaseClaim) string {

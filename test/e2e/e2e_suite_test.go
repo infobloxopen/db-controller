@@ -57,7 +57,7 @@ var logger logr.Logger
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting E2E suite\n")
-	RunSpecs(t, "e2e suite")
+	RunSpecs(t, "e2e suite", Label("FailFast"))
 	logger = NewGinkgoLogger(t)
 }
 
@@ -89,6 +89,11 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(config.GetConfigOrDie(), client.Options{})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	if len(os.Getenv("NODEPLOY")) > 0 {
+		logger.Info("Skipping deployment")
+		return
+	}
 
 	By("Building image")
 	cmd := exec.Command("make", "build-images")

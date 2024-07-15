@@ -9,4 +9,3 @@ zapLogger:
   level: debug
 dbproxy:
   enabled: false
-env: box-3

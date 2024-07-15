@@ -61,24 +61,10 @@ func New(cfg Config) (Clienter, error) {
 	return newPostgresClient(context.TODO(), cfg)
 }
 
-// DBClientFactory, deprecated don't use
-// Unable to pass database name here, so database name is always "postgres"
-func DBClientFactory(log logr.Logger, dbType, host, port, user, password, sslmode string) (DBClient, error) {
-	log.Error(errors.New("db_client_factory"), "DBClientFactory is deprecated, use New() instead")
-	switch dbType {
-	case PostgresType:
-	}
-	return newPostgresClient(context.TODO(), Config{
-		Log: log,
-		DSN: PostgresConnectionString(host, port, user, password, "postgres", sslmode),
-	})
-}
-
 // creates postgres client
 func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 
 	authedDSN := cfg.DSN
-
 	if cfg.UseIAM {
 		var err error
 		authedDSN, err = awsAuthBuilder(ctx, cfg)
