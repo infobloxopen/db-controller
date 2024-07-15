@@ -190,6 +190,20 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			}
 
+			curUserRoles, err := dbClient.GetCurrentUserRoles(nextUser)
+			if err != nil {
+				metrics.UsersUpdated.Inc()
+				return ctrl.Result{}, err
+			}
+
+			//revoke access to all roles the user currently has access to, so it doesn't accumulate accesses
+			for _, userRole := range curUserRoles {
+				if err := dbClient.RevokeAccessToRole(nextUser, userRole); err != nil {
+					metrics.UsersUpdated.Inc()
+					return ctrl.Result{}, err
+				}
+			}
+
 			//assign user to schema and roles
 			for schemaName, role := range dbRoleClaim.Spec.SchemaRoleMap {
 				schemaName = strings.ToLower(schemaName)

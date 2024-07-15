@@ -942,6 +942,17 @@ FROM pg_namespace,
 	return schemas, nil
 }
 
+func (pc *client) RevokeAccessToRole(username, rolename string) error {
+
+	_, err := pc.DB.Exec(fmt.Sprintf("REVOKE %s FROM  %s", pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(username)))
+	if err != nil {
+		pc.log.Error(err, "could not revoke ["+rolename+"] role from ["+username+"]")
+		return err
+	}
+
+	return nil
+}
+
 func (pc *client) Close() error {
 	if pc.DB != nil {
 		return pc.DB.Close()

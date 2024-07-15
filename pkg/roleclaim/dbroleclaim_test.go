@@ -1,4 +1,4 @@
-package e2e
+package roleclaim
 
 import (
 	"context"
@@ -7,6 +7,10 @@ import (
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
+	"github.com/infobloxopen/db-controller/pkg/dbclient"
+
+	. "github.com/infobloxopen/db-controller/testutils"
+	_ "github.com/lib/pq"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -16,14 +20,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	. "github.com/infobloxopen/db-controller/internal/controller"
-	"github.com/infobloxopen/db-controller/pkg/roleclaim"
-	. "github.com/infobloxopen/db-controller/testutils"
-	_ "github.com/lib/pq"
 )
 
+var testDb *dbclient.TestDB
+
 var _ = Describe("DBRoleClaim Controller", func() {
+
+	BeforeAll(func() {
+		testDb, _ = dbclient.SetupSqlDB("mainUser", "masterpassword")
+	})
 
 	Context("Test With New Schemas Roles", func() {
 		It("Create schemas and roles", func() {
@@ -34,7 +39,7 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				Client             client.Client
 				Log                logr.Logger
 				Scheme             *runtime.Scheme
-				Config             *roleclaim.RoleConfig
+				Config             *RoleConfig
 				DbIdentifierPrefix string
 				Context            context.Context
 				Request            controllerruntime.Request
@@ -51,8 +56,8 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				{
 					"Get UserSchema claim 1",
 					reconciler{
-						Client: &MockClient{Port: strconv.Itoa(TestDb.Port)},
-						Config: &roleclaim.RoleConfig{
+						Client: &MockClient{Port: strconv.Itoa(testDb.Port)},
+						Config: &RoleConfig{
 							Viper: viperObj,
 							Class: "default",
 						},
@@ -71,17 +76,17 @@ var _ = Describe("DBRoleClaim Controller", func() {
 					Config: tt.rec.Config,
 				}
 
-				r.Reconciler = &roleclaim.DbRoleClaimReconciler{
-					Client: r.Client,
-					Config: r.Config,
-				}
+				// r.Reconciler = &DbRoleClaimReconciler{
+				// 	Client: r.Client,
+				// 	Config: r.Config,
+				// }
 
-				result, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
+				result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
 				Expect(err != nil != tt.wantErr).Should(BeFalse())
 
 				Expect(result.Requeue).Should(BeFalse())
 
-				existingDBConnInfo, err := persistancev1.ParseUri(TestDb.URL())
+				existingDBConnInfo, err := persistancev1.ParseUri(testDb.URL())
 				Expect(err).ShouldNot(HaveOccurred())
 
 				dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
@@ -145,7 +150,7 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				Client             client.Client
 				Log                logr.Logger
 				Scheme             *runtime.Scheme
-				Config             *roleclaim.RoleConfig
+				Config             *RoleConfig
 				DbIdentifierPrefix string
 				Context            context.Context
 				Request            controllerruntime.Request
@@ -162,8 +167,8 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				{
 					"Get UserSchema claim 2",
 					reconciler{
-						Client: &MockClient{Port: strconv.Itoa(TestDb.Port)},
-						Config: &roleclaim.RoleConfig{
+						Client: &MockClient{Port: strconv.Itoa(testDb.Port)},
+						Config: &RoleConfig{
 							Viper: viperObj,
 							Class: "default",
 						},
@@ -182,12 +187,12 @@ var _ = Describe("DBRoleClaim Controller", func() {
 					Config: tt.rec.Config,
 				}
 
-				r.Reconciler = &roleclaim.DbRoleClaimReconciler{
-					Client: r.Client,
-					Config: r.Config,
-				}
+				// r.Reconciler = &DbRoleClaimReconciler{
+				// 	Client: r.Client,
+				// 	Config: r.Config,
+				// }
 
-				existingDBConnInfo, err := persistancev1.ParseUri(TestDb.URL())
+				existingDBConnInfo, err := persistancev1.ParseUri(testDb.URL())
 				Expect(err).ShouldNot(HaveOccurred())
 
 				dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
@@ -198,7 +203,7 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema1_admin", "schema1")
 				dbClient.CreateUser("user2_b", "schema1_admin", "123")
 
-				result, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
+				result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
 				Expect((err != nil) != tt.wantErr).Should(BeFalse())
 
 				Expect(result.Requeue).Should(BeFalse())
@@ -248,5 +253,9 @@ var _ = Describe("DBRoleClaim Controller", func() {
 				Expect(err).Should(BeNil())
 			}
 		})
+	})
+
+	AfterAll(func() {
+		testDb.Close()
 	})
 })

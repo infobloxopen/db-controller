@@ -49,6 +49,7 @@ type Exister interface {
 
 type Remover interface {
 	DeleteUser(username, reassignToUser string) error
+	RevokeAccessToRole(username, rolename string) error
 }
 
 // DBClient is retired interface, use Client
