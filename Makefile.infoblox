@@ -106,3 +106,11 @@ undeploy:
 
 helm-test:
 	helm -n `cat .id` test `cat .id`
+
+manifests: test/crd
+
+test/crd: test/crd/rds.aws.crossplane.io_dbclusters.yaml test/crd/rds.aws.crossplane.io_dbclusterparametergroups.yaml test/crd/rds.aws.crossplane.io_dbinstances.yaml test/crd/rds.aws.crossplane.io_dbparametergroups.yaml
+
+test/crd/%.yaml:
+	mkdir -p test/crd
+	curl -sS -o $@ https://raw.githubusercontent.com/crossplane-contrib/provider-aws/v0.48.1/package/crds/$*.yaml
