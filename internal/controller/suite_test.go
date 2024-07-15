@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	// +kubebuilder:scaffold:imports
@@ -97,7 +98,12 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	now := time.Now()
-	testdb, testDSN, cleanupTestDB = RunDB()
+	testdb, testDSN, cleanupTestDB = dockerdb.Run(dockerdb.Config{
+		Database:  "postgres",
+		Username:  "postgres",
+		Password:  "postgres",
+		DockerTag: "15",
+	})
 	logger.Info("postgres_setup_took", "duration", time.Since(now))
 
 	// Setup controller
