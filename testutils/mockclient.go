@@ -35,6 +35,10 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			return fmt.Errorf("can't assert type")
 		}
 		sec.Data = map[string][]byte{
+			"host":     []byte("localhost"),
+			"port":     []byte(m.Port),
+			"database": []byte("postgres"),
+			"sslmode":  []byte("disable"),
 			"password": []byte("masterpassword"),
 			"username": []byte("mainUser"),
 		}
