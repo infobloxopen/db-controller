@@ -1279,25 +1279,17 @@ func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
 }
 
 func (r *DatabaseClaimReconciler) canTagResources(ctx context.Context, dbClaim *v1.DatabaseClaim) (bool, error) {
-	return CanTagResources(ctx, r.Client, dbClaim)
-}
 
-// CanTagResources checks if there's claims matching the instance
-// label of the dbClaim. If there's only one claim, it can tag
-func CanTagResources(ctx context.Context, cli client.Client, dbClaim *v1.DatabaseClaim) (bool, error) {
-
-	if dbClaim.Spec.InstanceLabel == "" {
-		return true, nil
+	if dbClaim == nil {
+		return false, fmt.Errorf("nil dbclaim")
 	}
+
 	var dbClaimList v1.DatabaseClaimList
-	if err := cli.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+	if err := r.Client.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
 		return false, err
 	}
 
-	if len(dbClaimList.Items) == 1 {
-		return true, nil
-	}
-	return false, nil
+	return CanTagResources(ctx, dbClaimList, *dbClaim)
 }
 
 func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
