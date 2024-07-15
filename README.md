@@ -115,13 +115,22 @@ limitations under the License.
 
 ### Run integration tests
 
-1. Integration tests run against server box-3. Before running your tests, you'll have to build and deploy to make sure you are running against the latest version.
+1. Integration tests can only be run on box-3.
 
-2. Update file '.id' in the root folder, with a class name of your own (let's say your username). That will be used to create a namespace and the CRDs under it.
-Then run:
-    make docker-build
-    make deploy
+2. If `.id` files causes issues, update it manually. Then, run:
 
-3. if you want to run a single test at a time replace It() by Fit() in the test class, this is a focused test and only this test will run (output shows failure, but this is intended, not to fool you that everything ran successfully)
+    make test-e2e
 
-4. in case the tests failed in the middle, sometimes the resources are not deleted from the AWS account (actually it might takes a long time sometimes). So you can go in there and delete the RDSs that were created. They can be searched for by using the namespace you set in step 2.
+3. If you want to run specific suites, use ginkgo cli:
+
+    cd test/e2e/
+    NAMESPACE=$(cat .id) go test -ginkgo.vv -ginkgo.focus 'AWS'
+
+To run tests without rebuilding the images, and redeploying the chart. Pass NODEPLOY
+
+    cd test/e2e/
+    NODEPLOY=1 NAMESPACE=$(cat .id) go test -ginkgo.vv -ginkgo.focus 'AWS'
+
+4. If you want to run a single test at a time replace It() by Fit() in the test class, this is a focused test and only this test will run (output shows failure, but this is intended, not to fool you that everything ran successfully)
+
+5. in case the tests failed in the middle, sometimes the resources are not deleted from the AWS account (actually it might takes a long time sometimes). So you can go in there and delete the RDSs that were created. They can be searched for by using the namespace you set in step 2.

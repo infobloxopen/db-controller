@@ -85,7 +85,7 @@ build-images: docker-build docker-build-dbproxy docker-build-dsnexec
 # FIXME: remove for a single image
 push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 
-.deploy-$(GIT_COMMIT): .id
+.deploy-$(GIT_COMMIT): .id .env
 	@./scripts/check-context.sh
 	helm upgrade --install `cat .id` \
 		db-controller-${CHART_VERSION}.tgz \
@@ -93,6 +93,7 @@ push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 		--create-namespace \
 		-f helm/db-controller/minikube.yaml \
 		--set dbController.class=`cat .id` \
+		--set env=`cat .env` \
 		${HELM_SETFLAGS}
 	# Consider removing this, since we dont actually no
 	# helm upgrade is applied in the cluster

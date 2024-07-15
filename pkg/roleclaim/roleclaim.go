@@ -68,7 +68,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if permitted := basefun.IsClassPermitted(r.Config.Class, *dbRoleClaim.Spec.Class); !permitted {
-		log.Info("ignoring this claim as this controller does not own this class", "claimClass", *dbRoleClaim.Spec.Class, "controllerClass", r.Config.Class)
+		log.Info("ignoring this claim as this controller does not own this class", "claimclass", *dbRoleClaim.Spec.Class, "ctrlclass", r.Config.Class)
 		return ctrl.Result{}, nil
 	}
 

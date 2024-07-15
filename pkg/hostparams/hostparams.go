@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"log"
 	"strconv"
 	"strings"
 
@@ -141,6 +142,8 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 		port = dbClaim.Spec.Port
 		hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
 	} else {
+		// change this to a panic after verifying all fragmentKey references are removed
+		log.Println("FIXME: remove all fragment key references")
 		hostParams.MasterUsername = config.GetString(fmt.Sprintf("%s::masterUsername", fragmentKey))
 		hostParams.Engine = config.GetString(fmt.Sprintf("%s::Engine", fragmentKey))
 		hostParams.EngineVersion = config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))

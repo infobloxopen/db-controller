@@ -294,6 +294,7 @@ spec:
                     description: DbState of the DB. inprogress, "", ready
                     type: string
                   connectionInfo:
+                    description: The optional Connection information to the database.
                     properties:
                       databaseName:
                         type: string
@@ -420,8 +421,6 @@ spec:
                     description: Time the user/password was updated/created
                     format: date-time
                     type: string
-                required:
-                - connectionInfo
                 type: object
               error:
                 description: Any errors related to provisioning this claim.
@@ -438,6 +437,7 @@ spec:
                     description: DbState of the DB. inprogress, "", ready
                     type: string
                   connectionInfo:
+                    description: The optional Connection information to the database.
                     properties:
                       databaseName:
                         type: string
@@ -564,8 +564,6 @@ spec:
                     description: Time the user/password was updated/created
                     format: date-time
                     type: string
-                required:
-                - connectionInfo
                 type: object
               oldDB:
                 description: tracks the DB which is migrated and not more operational

@@ -84,7 +84,7 @@ func RunDB() (*sql.DB, string, func()) {
 		_ = os.Remove(f.Name())
 		cmd := exec.Command("docker", "rm", "-f", container)
 		cmd.Stderr = os.Stderr
-		// cmd.Stdout = os.Stdout
-		_ = cmd.Run()
+		// Don't wait for it to complete, docker will take 10secs to send a SIGKILL
+		_ = cmd.Start()
 	}
 }
