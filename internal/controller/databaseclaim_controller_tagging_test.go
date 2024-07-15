@@ -1,9 +1,8 @@
-package e2e
+package controller
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
@@ -15,67 +14,12 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/internal/controller"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 )
 
 var hasOperationalTag = databaseclaim.HasOperationalTag
 
-var _ = Describe("db-controller", func() {
-
-	// Define utility constants for object names and testing timeouts/durations and intervals.
-	const (
-		BDClaimName = "test-dbclaim"
-	)
-
-	Context("When updating DB Claim Status", func() {
-		It("Should update DB Claim status", func() {
-			By("By creating a new DB Claim")
-			ctx := context.Background()
-			Expect(namespace).NotTo(Equal(""), "you must set the namespace")
-			dbClaim := &persistancev1.DatabaseClaim{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "persistance.atlas.infoblox.com/v1",
-					Kind:       "DatabaseClaim",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      BDClaimName,
-					Namespace: namespace,
-				},
-				Spec: persistancev1.DatabaseClaimSpec{
-					Class:                 ptr.To(""),
-					AppID:                 "sample-app",
-					DatabaseName:          "sample_app",
-					InstanceLabel:         "sample-connection",
-					SecretName:            "sample-secret",
-					Username:              "sample_user",
-					EnableSuperUser:       ptr.To(false),
-					EnableReplicationRole: ptr.To(false),
-					UseExistingSource:     ptr.To(false),
-				},
-			}
-			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
-
-			Eventually(func() bool {
-				dbClaim := &persistancev1.DatabaseClaim{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: BDClaimName, Namespace: namespace}, dbClaim)
-				if err != nil {
-					return false
-				}
-
-				return dbClaim.Status.Error == "can't find any instance label matching fragment keys"
-
-			}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
-
-			Expect(k8sClient.Delete(ctx, dbClaim)).Should(Succeed())
-
-		})
-	})
-})
-
-// FIXME: these are not integration tests, move to databaseclaim_controller_test.go
-var _ = Describe("ManageTagging", Ordered, func() {
+var _ = Describe("Tagging", Ordered, func() {
 
 	// define and create objects in the test cluster
 
@@ -196,6 +140,7 @@ var _ = Describe("ManageTagging", Ordered, func() {
 
 	AfterAll(func() {
 
+		ctx := context.Background()
 		By("Deleting objects of DBClsuerParameterGroup, DBCluster, DBParameterGroup and DBInstance")
 		Expect(k8sClient.Delete(ctx, dbCluster)).Should(Succeed())
 		Expect(k8sClient.Delete(ctx, dbClusterParam)).Should(Succeed())
@@ -211,7 +156,7 @@ var _ = Describe("ManageTagging", Ordered, func() {
 	Context("Now, try adding tags to resources which does not exists, while multiAZ is enabled", func() {
 		It("Should not add tags to any other already existing resources", func() {
 
-			mockReconciler := &controller.DatabaseClaimReconciler{
+			mockReconciler := &DatabaseClaimReconciler{
 				Client: k8sClient,
 				Config: &databaseclaim.DatabaseClaimConfig{
 					Viper: viper.New(),
@@ -268,7 +213,7 @@ var _ = Describe("ManageTagging", Ordered, func() {
 	Context("Now, try Adding tags to resources, with multiAZ  disabled", func() {
 		It("Should add tags to all valid resources. Should skip instance-2 as multiAZ is disabled", func() {
 
-			mockReconciler := &controller.DatabaseClaimReconciler{
+			mockReconciler := &DatabaseClaimReconciler{
 				Client: k8sClient,
 				Config: &databaseclaim.DatabaseClaimConfig{
 					Viper: viper.New(),
@@ -325,7 +270,7 @@ var _ = Describe("ManageTagging", Ordered, func() {
 	Context("Adding tags to resources, while multiAZ is enabled", func() {
 		It("Should add tags to all valid resources if exists. Should NOT skip instance-2 as multiAZ is enabled", func() {
 
-			mockReconciler := &controller.DatabaseClaimReconciler{
+			mockReconciler := &DatabaseClaimReconciler{
 				Client: k8sClient,
 				Config: &databaseclaim.DatabaseClaimConfig{
 					Viper: viper.New(),
@@ -365,7 +310,7 @@ var _ = Describe("ManageTagging", Ordered, func() {
 	Context("When tags get successfully updated, They are reflected at .status.AtProvider for DBInstance", func() {
 		It("manageOperationalTagging() Should return true without any error", func() {
 
-			mockReconciler := &controller.DatabaseClaimReconciler{
+			mockReconciler := &DatabaseClaimReconciler{
 				Client: k8sClient,
 				Config: &databaseclaim.DatabaseClaimConfig{
 					Viper: viper.New(),
@@ -420,107 +365,3 @@ func checkInstanceStatus(k8sClient client.Client, name string, expected bool) {
 	Expect(hasOperationalTag(dnInstance1.Status.AtProvider.TagList)).To(Equal(expected))
 
 }
-
-// var _ = Describe("canTagResources", Ordered, func() {
-// 	// Creating resources required to do tests beforehand
-// 	BeforeAll(func() {
-// 		if testing.Short() {
-// 			Skip("skipping k8s based tests")
-// 		}
-// 		ctx := context.Background()
-// 		dbClaim := &persistancev1.DatabaseClaim{
-// 			TypeMeta: metav1.TypeMeta{
-// 				APIVersion: "persistance.atlas.infoblox.com/v1",
-// 				Kind:       "DatabaseClaim",
-// 			},
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:      "dbclaim",
-// 				Namespace: "default",
-// 			},
-// 			Spec: persistancev1.DatabaseClaimSpec{
-// 				AppID:         "sample-app",
-// 				DatabaseName:  "sample_app",
-// 				InstanceLabel: "sample-connection-3",
-// 				SecretName:    "sample-secret",
-// 				Username:      "sample_user",
-// 			},
-// 		}
-// 		Expect(e2e_k8sClient.Create(ctx, dbClaim)).Should(Succeed())
-// 		ctx2 := context.Background()
-// 		dbClaim2 := &persistancev1.DatabaseClaim{
-// 			TypeMeta: metav1.TypeMeta{
-// 				APIVersion: "persistance.atlas.infoblox.com/v1",
-// 				Kind:       "DatabaseClaim",
-// 			},
-// 			ObjectMeta: metav1.ObjectMeta{
-// 				Name:      "dbclaim-2",
-// 				Namespace: "default",
-// 			},
-// 			Spec: persistancev1.DatabaseClaimSpec{
-// 				AppID:         "sample-app",
-// 				DatabaseName:  "sample_app",
-// 				InstanceLabel: "sample-connection-3",
-// 				SecretName:    "sample-secret",
-// 				Username:      "sample_user",
-// 			},
-// 		}
-// 		Expect(e2e_k8sClient.Create(ctx2, dbClaim2)).Should(Succeed())
-// 	})
-
-// 	Context("Adding tags to DBClaim with empty InstanceLabel", func() {
-// 		It("Should  permite adding tags", func() {
-// 			ctx2 := context.Background()
-// 			dbClaim2 := &persistancev1.DatabaseClaim{
-// 				TypeMeta: metav1.TypeMeta{
-// 					APIVersion: "persistance.atlas.infoblox.com/v1",
-// 					Kind:       "DatabaseClaim",
-// 				},
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Name:      "dbclaim-2",
-// 					Namespace: "default",
-// 				},
-// 				Spec: persistancev1.DatabaseClaimSpec{
-// 					AppID:         "sample-app",
-// 					DatabaseName:  "sample_app",
-// 					InstanceLabel: "",
-// 					SecretName:    "sample-secret",
-// 					Username:      "sample_user",
-// 				},
-// 			}
-// 			mockReconciler := &controller.DatabaseClaimReconciler{}
-// 			mockReconciler.Client = k8sClient
-// 			check, err2 := databaseclaim.CanTagResources(ctx2, k8sClient, dbClaim2)
-// 			Expect(err2).ShouldNot(HaveOccurred())
-// 			Expect(check).To(BeTrue())
-// 		})
-// 	})
-
-// 	Context("Adding tags to DBClaim, When There are already more than one DBClaim exists with similar InstanceLabel", func() {
-// 		It("Should not permite adding tags", func() {
-// 			ctx2 := context.Background()
-// 			dbClaim2 := &persistancev1.DatabaseClaim{
-// 				TypeMeta: metav1.TypeMeta{
-// 					APIVersion: "persistance.atlas.infoblox.com/v1",
-// 					Kind:       "DatabaseClaim",
-// 				},
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Name:      "dbclaim-2",
-// 					Namespace: "default",
-// 				},
-// 				Spec: persistancev1.DatabaseClaimSpec{
-// 					AppID:         "sample-app",
-// 					DatabaseName:  "sample_app",
-// 					InstanceLabel: "sample-connection-3",
-// 					SecretName:    "sample-secret",
-// 					Username:      "sample_user",
-// 				},
-// 			}
-// 			mockReconciler := &controller.DatabaseClaimReconciler{}
-// 			mockReconciler.Client = k8sClient
-// 			check, err2 := databaseclaim.CanTagResources(ctx2, k8sClient, dbClaim2)
-// 			Expect(err2).Should(HaveOccurred())
-// 			Expect(check).To(BeFalse())
-// 		})
-// 	})
-
-// })
