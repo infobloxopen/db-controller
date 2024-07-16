@@ -13,6 +13,8 @@ type Clienter interface {
 	ManageSuperUserRole(username string, enableSuperUser bool) error
 	ManageCreateRole(username string, enableCreateRole bool) error
 	ManageSystemFunctions(dbName string, functions map[string]string) error
+
+	GetUserRoles(username string) ([]string, error)
 }
 
 type Creater interface {
@@ -47,6 +49,7 @@ type Exister interface {
 
 type Remover interface {
 	DeleteUser(username, reassignToUser string) error
+	RevokeAccessToRole(username, rolename string) error
 }
 
 // DBClient is retired interface, use Client

@@ -116,10 +116,14 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 
 		//get db conn details
-		existingDBConnInfo := sourceDbClaim.Status.ActiveDB.ConnectionInfo
-
-		// retrieve dB master password
-		existingDBConnInfo.Password = string(sourceSecret.Data["password"])
+		existingDBConnInfo := &v1.DatabaseClaimConnectionInfo{
+			Host:         string(sourceSecret.Data["host"]),
+			Port:         string(sourceSecret.Data["port"]),
+			DatabaseName: string(sourceSecret.Data["database"]),
+			Username:     string(sourceSecret.Data["username"]),
+			Password:     string(sourceSecret.Data["password"]),
+			SSLMode:      string(sourceSecret.Data["sslmode"]),
+		}
 
 		// get client to DB
 		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &log)
@@ -182,6 +186,20 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			//existing user, so update password
 			if !created {
 				if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
+			curUserRoles, err := dbClient.GetUserRoles(nextUser)
+			if err != nil {
+				metrics.UsersUpdated.Inc()
+				return ctrl.Result{}, err
+			}
+
+			//revoke access to all roles the user currently has access to, so it doesn't accumulate accesses
+			for _, userRole := range curUserRoles {
+				if err := dbClient.RevokeAccessToRole(nextUser, userRole); err != nil {
+					metrics.UsersUpdated.Inc()
 					return ctrl.Result{}, err
 				}
 			}
@@ -401,10 +419,14 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	// #endregion find secret
 
 	//get db conn details
-	existingDBConnInfo := sourceDbClaim.Status.ActiveDB.ConnectionInfo
-
-	// retrieve dB master password
-	existingDBConnInfo.Password = string(sourceSecret.Data["password"])
+	existingDBConnInfo := &v1.DatabaseClaimConnectionInfo{
+		Host:         string(sourceSecret.Data["host"]),
+		Port:         string(sourceSecret.Data["port"]),
+		DatabaseName: string(sourceSecret.Data["database"]),
+		Username:     string(sourceSecret.Data["username"]),
+		Password:     string(sourceSecret.Data["password"]),
+		SSLMode:      string(sourceSecret.Data["sslmode"]),
+	}
 
 	// get client to DB
 	dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, log)

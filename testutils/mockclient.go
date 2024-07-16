@@ -35,6 +35,10 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			return fmt.Errorf("can't assert type")
 		}
 		sec.Data = map[string][]byte{
+			"host":     []byte("localhost"),
+			"port":     []byte(m.Port),
+			"database": []byte("postgres"),
+			"sslmode":  []byte("disable"),
 			"password": []byte("masterpassword"),
 			"username": []byte("mainUser"),
 		}
@@ -81,7 +85,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			sec.Spec.SchemaRoleMap["public"] = persistancev1.Admin
 			sec.Spec.SchemaRoleMap["schema4"] = persistancev1.Admin
 
-		} else if key.Name == "schema-user-claim-2" { //DBRoleClaim - EXISTING USER
+		} else if key.Name == "schema-user-claim-2" || key.Name == "schema-user-claim-3" { //DBRoleClaim - EXISTING USER
 
 			sec, ok := obj.(*persistancev1.DbRoleClaim)
 			if !ok {
@@ -95,11 +99,19 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 			sec.Name = "testclaim"
 			sec.Namespace = "schema-user-test"
 
-			sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
-			sec.Spec.SchemaRoleMap["schema2"] = persistancev1.Admin
-			sec.Spec.SchemaRoleMap["schema3"] = persistancev1.ReadOnly
-			sec.Status.SchemasRolesUpdatedAt = &time8DaysAgo
-			sec.Status.Username = "user2_a"
+			if key.Name == "schema-user-claim-2" {
+				sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
+				sec.Spec.SchemaRoleMap["schema2"] = persistancev1.Admin
+				sec.Spec.SchemaRoleMap["schema3"] = persistancev1.ReadOnly
+				sec.Status.SchemasRolesUpdatedAt = &time8DaysAgo
+			}
+			if key.Name == "schema-user-claim-3" {
+				sec.Spec.SchemaRoleMap["schema4"] = persistancev1.Admin
+			}
+
+			if key.Name == "schema-user-claim-2" {
+				sec.Status.Username = "testclaim_user_a"
+			}
 
 		} else { //DBRoleClaim - invalid: schema without role
 

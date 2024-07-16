@@ -909,6 +909,41 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 	return nil
 }
 
+func (pc *client) GetUserRoles(username string) ([]string, error) {
+
+	rows, err := pc.DB.Query(`SELECT rolname as schema FROM pg_roles WHERE
+   pg_has_role( $1, oid, 'member') and rolname != $1;`, username)
+
+	if err != nil {
+		pc.log.Error(err, "could not query for roles from user  "+username)
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var schemas []string = make([]string, 0)
+	for rows.Next() {
+		var schema string
+		if err = rows.Scan(&schema); err != nil {
+			return nil, err
+		}
+		schemas = append(schemas, schema)
+	}
+
+	return schemas, nil
+}
+
+func (pc *client) RevokeAccessToRole(username, rolename string) error {
+
+	_, err := pc.DB.Exec(fmt.Sprintf("REVOKE %s FROM  %s", pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(username)))
+	if err != nil {
+		pc.log.Error(err, "could not revoke ["+rolename+"] role from ["+username+"]")
+		return err
+	}
+
+	return nil
+}
+
 func (pc *client) Close() error {
 	if pc.DB != nil {
 		return pc.DB.Close()
