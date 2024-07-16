@@ -911,17 +911,8 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 
 func (pc *client) GetCurrentUserRoles(username string) ([]string, error) {
 
-	rows, err := pc.DB.Query(`WITH users AS (select rolname, oid
-               from pg_roles
-               union
-               select 'PUBLIC', 0)
-SELECT distinct nspname as schema
-FROM pg_namespace,
-     aclexplode(nspacl) AS a
-     JOIN users AS e
-          ON a.grantee = e.oid
-     JOIN users AS r
-          ON a.grantor = r.oid WHERE e.rolname = $1;`, pq.QuoteIdentifier(username))
+	rows, err := pc.DB.Query(`SELECT rolname as schema FROM pg_roles WHERE
+   pg_has_role( $1, oid, 'member') and rolname != $1;`, username)
 
 	if err != nil {
 		pc.log.Error(err, "could not query for roles from user  "+username)

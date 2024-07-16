@@ -23,7 +23,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestDBRoleClaimController(t *testing.T) {
+type reconciler struct {
+	Client             client.Client
+	Log                logr.Logger
+	Scheme             *runtime.Scheme
+	Config             *RoleConfig
+	DbIdentifierPrefix string
+	Context            context.Context
+	Request            controllerruntime.Request
+}
+
+var viperObj = viper.New()
+
+func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 	var testDb *dbclient.TestDB
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 	RegisterFailHandler(Fail)
@@ -33,17 +45,6 @@ func TestDBRoleClaimController(t *testing.T) {
 		t.Error(err)
 	}
 
-	type reconciler struct {
-		Client             client.Client
-		Log                logr.Logger
-		Scheme             *runtime.Scheme
-		Config             *RoleConfig
-		DbIdentifierPrefix string
-		Context            context.Context
-		Request            controllerruntime.Request
-	}
-
-	viperObj := viper.New()
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
 	tests := []struct {
@@ -136,11 +137,22 @@ func TestDBRoleClaimController(t *testing.T) {
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
 	}
+	testDb.Close()
+}
 
-	viperObj = viper.New()
+func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
+	var testDb *dbclient.TestDB
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	RegisterFailHandler(Fail)
+
+	testDb, err := dbclient.SetupSqlDB("mainUser", "masterpassword")
+	if err != nil {
+		t.Error(err)
+	}
+
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
-	tests = []struct {
+	tests := []struct {
 		name    string
 		rec     reconciler
 		wantErr bool
@@ -177,7 +189,7 @@ func TestDBRoleClaimController(t *testing.T) {
 		//seed database to simulate existing user
 		dbClient.CreateSchema("schema1")
 		dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema1_admin", "schema1")
-		dbClient.CreateUser("user2_b", "schema1_admin", "123")
+		dbClient.CreateUser("testclaim_user_a", "schema1_admin", "123")
 
 		result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
 		Expect((err != nil) != tt.wantErr).Should(BeFalse())
@@ -225,6 +237,109 @@ func TestDBRoleClaimController(t *testing.T) {
 		Expect(err).Should(BeNil())
 
 		exists, err = dbClient.RoleExists("schema3_readonly")
+		Expect(exists).Should(BeTrue())
+		Expect(err).Should(BeNil())
+	}
+	testDb.Close()
+}
+
+func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
+	var testDb *dbclient.TestDB
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	RegisterFailHandler(Fail)
+
+	testDb, err := dbclient.SetupSqlDB("mainUser", "masterpassword")
+	if err != nil {
+		t.Error(err)
+	}
+
+	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
+
+	tests := []struct {
+		name    string
+		rec     reconciler
+		wantErr bool
+	}{
+		{
+			"Get UserSchema claim 3",
+			reconciler{
+				Client: &MockClient{Port: strconv.Itoa(testDb.Port)},
+				Config: &RoleConfig{
+					Viper: viperObj,
+					Class: "default",
+				},
+				Request: controllerruntime.Request{
+					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-3"},
+				},
+				Log: zap.New(zap.UseDevMode(true)),
+			},
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		r := &DbRoleClaimReconciler{
+			Client: tt.rec.Client,
+			Config: tt.rec.Config,
+		}
+
+		existingDBConnInfo, err := persistancev1.ParseUri(testDb.URL())
+		Expect(err).ShouldNot(HaveOccurred())
+
+		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		//seed database to simulate existing user with access to 3 roles
+		_, err = dbClient.CreateSchema("schema1")
+		Expect(err).Should(BeNil())
+		_, err = dbClient.CreateSchema("schema2")
+		Expect(err).Should(BeNil())
+		_, err = dbClient.CreateSchema("schema3")
+		Expect(err).Should(BeNil())
+		_, err = dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema1_regular", "schema1")
+		Expect(err).Should(BeNil())
+		_, err = dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema2_admin", "schema2")
+		Expect(err).Should(BeNil())
+		_, err = dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema3_readonly", "schema3")
+		Expect(err).Should(BeNil())
+		_, err = dbClient.CreateUser("testclaim_user_a", "", "123")
+		Expect(err).Should(BeNil())
+		err = dbClient.AssignRoleToUser("testclaim_user_a", "schema1_regular")
+		Expect(err).Should(BeNil())
+		err = dbClient.AssignRoleToUser("testclaim_user_a", "schema2_admin")
+		Expect(err).Should(BeNil())
+		err = dbClient.AssignRoleToUser("testclaim_user_a", "schema3_readonly")
+		Expect(err).Should(BeNil())
+
+		result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
+		Expect((err != nil) != tt.wantErr).Should(BeFalse())
+
+		Expect(result.Requeue).Should(BeFalse())
+
+		var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
+		Expect(responseUpdate).Should(Not(BeNil()))
+		var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
+		Expect(schemaUserClaimStatus).Should(Not(BeNil()))
+		Expect(schemaUserClaimStatus.Error).Should(BeEmpty())
+		Expect(schemaUserClaimStatus.Username).Should(Equal("testclaim_user_a"))
+		Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus).Should(HaveLen(1))
+
+		Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus["schema4"]).Should(Equal("valid"))
+
+		Expect(schemaUserClaimStatus.SchemaRoleStatus.RoleStatus["schema4_admin"]).Should(Equal("valid"))
+
+		//-----------------
+		//VERIFY THAT USER MUST HAVE ACCESS TO ONLY 1 ROLE AFTER RECONCILE
+		userRoles, err := dbClient.GetCurrentUserRoles("testclaim_user_a")
+		Expect(err).Should(BeNil())
+		Expect(userRoles).Should(HaveLen(1))
+		Expect(userRoles).Should(ContainElement("schema4_admin"))
+		//-----------------
+		exists, err := dbClient.SchemaExists("schema4")
+		Expect(exists).Should(BeTrue())
+		Expect(err).Should(BeNil())
+
+		exists, err = dbClient.RoleExists("schema4_admin")
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
 	}
