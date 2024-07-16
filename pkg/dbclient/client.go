@@ -909,7 +909,7 @@ func (pc *client) ManageReplicationRole(username string, enableReplicationRole b
 	return nil
 }
 
-func (pc *client) GetCurrentUserRoles(username string) ([]string, error) {
+func (pc *client) GetUserRoles(username string) ([]string, error) {
 
 	rows, err := pc.DB.Query(`SELECT rolname as schema FROM pg_roles WHERE
    pg_has_role( $1, oid, 'member') and rolname != $1;`, username)

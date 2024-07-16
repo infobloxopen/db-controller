@@ -190,7 +190,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			}
 
-			curUserRoles, err := dbClient.GetCurrentUserRoles(nextUser)
+			curUserRoles, err := dbClient.GetUserRoles(nextUser)
 			if err != nil {
 				metrics.UsersUpdated.Inc()
 				return ctrl.Result{}, err

@@ -330,7 +330,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 
 		//-----------------
 		//VERIFY THAT USER MUST HAVE ACCESS TO ONLY 1 ROLE AFTER RECONCILE
-		userRoles, err := dbClient.GetCurrentUserRoles("testclaim_user_a")
+		userRoles, err := dbClient.GetUserRoles("testclaim_user_a")
 		Expect(err).Should(BeNil())
 		Expect(userRoles).Should(HaveLen(1))
 		Expect(userRoles).Should(ContainElement("schema4_admin"))

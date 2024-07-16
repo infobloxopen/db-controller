@@ -14,7 +14,7 @@ type Clienter interface {
 	ManageCreateRole(username string, enableCreateRole bool) error
 	ManageSystemFunctions(dbName string, functions map[string]string) error
 
-	GetCurrentUserRoles(username string) ([]string, error)
+	GetUserRoles(username string) ([]string, error)
 }
 
 type Creater interface {
