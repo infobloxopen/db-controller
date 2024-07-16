@@ -253,7 +253,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 
 	err = RetryFn(nil, func() error {
 		return conn.Ping()
-	}, 100*time.Millisecond, 10*time.Second)
+	}, 100*time.Millisecond, 20*time.Second)
 
 	if err != nil {
 		logger.Error(err, "failed to connect to database")
@@ -264,8 +264,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		if err != nil {
 			logger.Error(err, "failed to get logs")
 		}
-		logger.V(1).Info(string(out))
-
+		logger.Info(string(out))
 		os.Exit(1)
 	}
 
@@ -281,8 +280,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 			logger.Error(err, "failed to remove temp file")
 		}
 
-		cmd = exec.Command("docker", "rm", "-f", container)
-		cmd.Stderr = os.Stderr
+		cmd := exec.Command("docker", "rm", "-f", container)
 		// This take 10 seconds to run, and we don't care if
 		// it was successful. So use Start() to not wait for
 		// it to finish.

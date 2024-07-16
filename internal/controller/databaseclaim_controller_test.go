@@ -34,64 +34,6 @@ import (
 )
 
 var _ = Describe("DatabaseClaim Controller", func() {
-	Context("When reconciling a resource", func() {
-		/*
-			const resourceName = "test-resource"
-
-			ctx := context.Background()
-
-			typeNamespacedName := types.NamespacedName{
-				Name:      resourceName,
-				Namespace: "default", // TODO(user):Modify as needed
-			}
-			databaseclaim := &persistancev1.DatabaseClaim{}
-
-			BeforeEach(func() {
-				By("creating the custom resource for the Kind DatabaseClaim")
-				err := k8sClient.Get(ctx, typeNamespacedName, databaseclaim)
-				if err != nil && errors.IsNotFound(err) {
-					resource := &persistancev1.DatabaseClaim{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      resourceName,
-							Namespace: "default",
-						},
-						// TODO(user): Specify other spec details if needed.
-					}
-					Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-				}
-			})
-
-			AfterEach(func() {
-				// TODO(user): Cleanup logic after each test, like removing the resource instance.
-				resource := &persistancev1.DatabaseClaim{}
-				err := k8sClient.Get(ctx, typeNamespacedName, resource)
-				Expect(err).NotTo(HaveOccurred())
-
-				By("Cleanup the specific resource instance DatabaseClaim")
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			})
-			It("should successfully reconcile the resource", func() {
-				By("Reconciling the created resource")
-				controllerReconciler := &DatabaseClaimReconciler{
-					Client: k8sClient,
-					Scheme: k8sClient.Scheme(),
-				}
-
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				_ = err
-				// FIXME: make this a valid test
-				// Expect(err).NotTo(HaveOccurred())
-				// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-				// Example: If you expect a certain status condition after reconciliation, verify it here.
-			})
-		*/
-	})
-
-})
-
-var _ = Describe("DatabaseClaim Controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 

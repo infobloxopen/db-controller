@@ -8,6 +8,7 @@
 /bin
 /manager
 /db-controller
+/test/crd
 
 # Test binary, build with `go test -c`
 *.test
