@@ -254,9 +254,10 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		panic(err)
 	}
 
+	now := time.Now()
 	err = RetryFn(nil, func() error {
 		return conn.Ping()
-	}, 100*time.Millisecond, 20*time.Second)
+	}, 10*time.Millisecond, 30*time.Second)
 
 	if err != nil {
 		logger.Error(err, "failed to connect to database")
@@ -270,6 +271,8 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		logger.Info(string(out))
 		os.Exit(1)
 	}
+	// TODO: change this to debug logging, just timing jenkins for now
+	logger.Info("db_connected", "duration", time.Since(now))
 
 	return conn, dsn, func() {
 		// Cleanup container on close, dont exit without trying all steps first
