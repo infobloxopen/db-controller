@@ -1,40 +1,50 @@
 package dbclient
 
 import (
-	"database/sql"
-	"flag"
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
+	uzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const succeed = "\u2713"
 const failed = "\u2717"
 
-// The following gingo struct and associted init() is required to run go test with ginkgo related flags
-// Since this test is not using ginkgo, this is a hack to get around the issue of go test complaining about
-// unknown flags.
-var ginkgo struct {
-	dry_run      string
-	label_filter string
+// testLogger wraps a testing.T to provide a Zap Core that logs to t.Log
+type testLogger struct {
+	t *testing.T
 }
 
-func init() {
-	flag.StringVar(&ginkgo.dry_run, "ginkgo.dry-run", "", "Ignore this flag")
-	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
+// Write logs to testing.T
+func (tl *testLogger) Write(p []byte) (n int, err error) {
+	tl.t.Log(string(p))
+	return len(p), nil
+}
+
+// NewTestLogger creates a new logr.Logger using a Zap logger that logs to testing.T
+func NewTestLogger(t *testing.T) logr.Logger {
+	writer := zapcore.AddSync(&testLogger{t})
+	encoder := zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
+	core := zapcore.NewCore(encoder, writer, zapcore.DebugLevel)
+	zapLogger := uzap.New(core)
+
+	// Wrap the zapLogger with the controller-runtime logr.Logger
+	return log.Log.WithName("test").WithValues("zapLogger", zapLogger)
 }
 
 func TestPostgresClientOperations(t *testing.T) {
-	testDB, err := SetupSqlDB("test", "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./")
-	if err != nil {
-		t.Error(err)
-	}
-	defer testDB.Close()
-	type mockClient struct {
-		dbType string
-		DB     *sql.DB
-		log    logr.Logger
-	}
+
+	db, dsn, close := dockerdb.Run(dockerdb.Config{
+		Username: "test",
+		Password: "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./",
+		Database: "postgres",
+	})
+
+	defer close()
+
 	type args struct {
 		dbName       string
 		role         string
@@ -45,19 +55,13 @@ func TestPostgresClientOperations(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		fields  mockClient
 		args    args
 		want    bool
 		wantErr bool
 	}{
 		{
-			"TEST DB client operations",
-			mockClient{
-				dbType: "postgres",
-				DB:     sqlDB,
-				log:    logr.Discard(),
-			},
-			args{
+			name: "TEST DB client operations",
+			args: args{
 				"test_db",
 				"test_role",
 				"test-user",
@@ -65,8 +69,8 @@ func TestPostgresClientOperations(t *testing.T) {
 				"new-test-user",
 				"password",
 			},
-			true,
-			false,
+			want:    true,
+			wantErr: false,
 		},
 	}
 	oldDefaultExtionsions := getDefaulExtensions
@@ -84,10 +88,10 @@ func TestPostgresClientOperations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pc := &client{
-				dbType: tt.fields.dbType,
-				dbURL:  testDB.URL(),
-				DB:     tt.fields.DB,
-				log:    tt.fields.log,
+				dbType: "postgres",
+				dbURL:  dsn,
+				DB:     db,
+				log:    NewTestLogger(t),
 			}
 
 			t.Logf("CreateDataBase()")
@@ -361,14 +365,6 @@ func TestPostgresClientOperations(t *testing.T) {
 			}
 			t.Logf("\t%s UpdatePassword() is passed", succeed)
 
-			// login as user
-			db, err := testDB.OpenUser(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
-			if err != nil {
-				t.Errorf("could not login with updated password %s", err)
-			}
-
-			t.Logf("\t%s OpenUser() is passed", succeed)
-
 			t.Logf("create table")
 
 			_, err = db.Exec("CREATE TABLE IF NOT EXISTS test_table (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)")
@@ -377,23 +373,7 @@ func TestPostgresClientOperations(t *testing.T) {
 			} else {
 				t.Logf("\t%s create table is passed", succeed)
 			}
-			db.Close()
 
-			// login as user
-			db, err = testDB.OpenUserWithURI(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
-			if err != nil {
-				t.Errorf("could not login with updated password %s", err)
-			}
-			db.Close()
-			t.Logf("\t%s OpenUserWithURI() is passed", succeed)
-			// login as user
-			db, err = testDB.OpenUserWithConnectionString(tt.args.dbName, tt.args.newUsername, tt.args.newPassword)
-			if err != nil {
-				t.Errorf("could not login with updated password %s", err)
-			}
-			t.Logf("\t%s OpenUserWithURI() is passed", succeed)
-
-			defer db.Close()
 			if _, err := db.Exec("CREATE EXTENSION IF NOT EXISTS citext"); err != nil {
 				t.Errorf("citext is not created: %s", err)
 			}

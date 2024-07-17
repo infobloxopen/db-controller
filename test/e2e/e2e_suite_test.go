@@ -27,7 +27,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	. "github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/test/utils"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +41,6 @@ import (
 var (
 	namespace string
 	k8sClient client.Client
-	TestDb    *TestDB
 )
 
 func init() {
@@ -122,8 +120,6 @@ var _ = BeforeSuite(func() {
 	}
 	EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
 
-	TestDb, _ = SetupSqlDB("mainUser", "masterpassword")
-
 })
 
 var _ = AfterSuite(func() {
@@ -133,5 +129,4 @@ var _ = AfterSuite(func() {
 	// _, err := utils.Run(cmd)
 	// Expect(err).NotTo(HaveOccurred())
 
-	TestDb.Close()
 })

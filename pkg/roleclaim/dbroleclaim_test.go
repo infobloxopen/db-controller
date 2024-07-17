@@ -2,23 +2,20 @@ package roleclaim
 
 import (
 	"context"
-	"strconv"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
-	"github.com/infobloxopen/db-controller/pkg/dbclient"
-
-	. "github.com/infobloxopen/db-controller/testutils"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -36,14 +33,15 @@ type reconciler struct {
 var viperObj = viper.New()
 
 func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
-	var testDb *dbclient.TestDB
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 	RegisterFailHandler(Fail)
 
-	testDb, err := dbclient.SetupSqlDB("mainUser", "masterpassword")
-	if err != nil {
-		t.Error(err)
-	}
+	_, dsn, close := dockerdb.Run(dockerdb.Config{
+		Username: "mainUser",
+		Password: "masterpassword",
+		Database: "postgres",
+	})
+	defer close()
 
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
@@ -55,7 +53,7 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 		{
 			"Get UserSchema claim 1",
 			reconciler{
-				Client: &MockClient{Port: strconv.Itoa(testDb.Port)},
+				Client: &mockClient{dsn: dsn},
 				Config: &RoleConfig{
 					Viper: viperObj,
 					Class: "default",
@@ -80,13 +78,13 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 
 		Expect(result.Requeue).Should(BeFalse())
 
-		existingDBConnInfo, err := persistancev1.ParseUri(testDb.URL())
+		existingDBConnInfo, err := persistancev1.ParseUri(dsn)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
+		var responseUpdate = r.Client.(*mockClient).GetResponseUpdate()
 		Expect(responseUpdate).Should(Not(BeNil()))
 		var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 		Expect(schemaUserClaimStatus).Should(Not(BeNil()))
@@ -137,18 +135,18 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
 	}
-	testDb.Close()
 }
 
 func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
-	var testDb *dbclient.TestDB
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 	RegisterFailHandler(Fail)
 
-	testDb, err := dbclient.SetupSqlDB("mainUser", "masterpassword")
-	if err != nil {
-		t.Error(err)
-	}
+	_, dsn, close := dockerdb.Run(dockerdb.Config{
+		Username: "mainUser",
+		Password: "masterpassword",
+		Database: "postgres",
+	})
+	defer close()
 
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
@@ -160,7 +158,7 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 		{
 			"Get UserSchema claim 2",
 			reconciler{
-				Client: &MockClient{Port: strconv.Itoa(testDb.Port)},
+				Client: &mockClient{dsn: dsn},
 				Config: &RoleConfig{
 					Viper: viperObj,
 					Class: "default",
@@ -180,7 +178,7 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 			Config: tt.rec.Config,
 		}
 
-		existingDBConnInfo, err := persistancev1.ParseUri(testDb.URL())
+		existingDBConnInfo, err := persistancev1.ParseUri(dsn)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
@@ -196,7 +194,7 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 
 		Expect(result.Requeue).Should(BeFalse())
 
-		var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
+		var responseUpdate = r.Client.(*mockClient).GetResponseUpdate()
 		Expect(responseUpdate).Should(Not(BeNil()))
 		var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 		Expect(schemaUserClaimStatus).Should(Not(BeNil()))
@@ -240,18 +238,18 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
 	}
-	testDb.Close()
 }
 
 func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
-	var testDb *dbclient.TestDB
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 	RegisterFailHandler(Fail)
 
-	testDb, err := dbclient.SetupSqlDB("mainUser", "masterpassword")
-	if err != nil {
-		t.Error(err)
-	}
+	_, dsn, close := dockerdb.Run(dockerdb.Config{
+		Username: "mainUser",
+		Password: "masterpassword",
+		Database: "postgres",
+	})
+	defer close()
 
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
@@ -263,7 +261,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 		{
 			"Get UserSchema claim 3",
 			reconciler{
-				Client: &MockClient{Port: strconv.Itoa(testDb.Port)},
+				Client: &mockClient{dsn: dsn},
 				Config: &RoleConfig{
 					Viper: viperObj,
 					Class: "default",
@@ -283,7 +281,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 			Config: tt.rec.Config,
 		}
 
-		existingDBConnInfo, err := persistancev1.ParseUri(testDb.URL())
+		existingDBConnInfo, err := persistancev1.ParseUri(dsn)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
@@ -316,7 +314,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 
 		Expect(result.Requeue).Should(BeFalse())
 
-		var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
+		var responseUpdate = r.Client.(*mockClient).GetResponseUpdate()
 		Expect(responseUpdate).Should(Not(BeNil()))
 		var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 		Expect(schemaUserClaimStatus).Should(Not(BeNil()))
@@ -343,5 +341,4 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
 	}
-	testDb.Close()
 }
