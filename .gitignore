@@ -1,13 +1,5 @@
 /*.tgz
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
 /bin
-/manager
-/db-controller
 /test/crd
 
 # Test binary, build with `go test -c`
@@ -17,8 +9,7 @@
 *.out
 
 # Kubernetes Generated files - skip generated files, except for vendored files
-vendor
-!vendor/**/zz_generated.*
+/vendor
 
 # editor and IDE paraphernalia
 .idea
@@ -29,8 +20,12 @@ vendor
 # Platform exclusions
 .DS_Store
 
-.id
-
 .vscode
-/.*
+# except github
 /*.properties
+
+# cache files
+/.image*
+/.helms3
+/.env
+/.id
