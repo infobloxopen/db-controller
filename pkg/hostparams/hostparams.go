@@ -60,12 +60,22 @@ type HostParams struct {
 }
 
 func (p *HostParams) String() string {
-	return fmt.Sprintf("%s-%s-%s", p.Engine, p.InstanceClass, p.EngineVersion)
+	index := 0 // TODO: this should comes from somewhere else.
+	return fmt.Sprintf("%s-%d", p.InstanceClass, index)
 }
 
 func (p *HostParams) Hash() string {
 	crc32q := crc32.MakeTable(0xD5828281)
 	return fmt.Sprintf("%08x", crc32.Checksum([]byte(p.String()), crc32q))
+}
+
+func (p *HostParams) OldString() string {
+	return fmt.Sprintf("%s-%s-%s", p.Engine, p.InstanceClass, p.EngineVersion)
+}
+
+func (p *HostParams) OldHash() string {
+	crc32q := crc32.MakeTable(0xD5828281)
+	return fmt.Sprintf("%08x", crc32.Checksum([]byte(p.OldString()), crc32q))
 }
 
 func (p *HostParams) HasShapeChanged(activeShape string) bool {
