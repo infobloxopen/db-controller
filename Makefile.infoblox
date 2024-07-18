@@ -45,7 +45,10 @@ HELM_VERSION ?= v3.15.2
 .PHONY: helm
 helm: $(HELM) ## Download golangci-lint locally if necessary.
 $(HELM): localbin
-	@test -s $(LOCALBIN)/helm || { curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH=${PATH}:$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; }
+	@if [ ! -s $(LOCALBIN)/helm ]; then \
+        curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | \
+        PATH=$(PATH):$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; \
+    fi
 	@ln -sf $(LOCALBIN)/helm-$(HELM_VERSION) $(LOCALBIN)/helm
 
 .PHONY: helms3
