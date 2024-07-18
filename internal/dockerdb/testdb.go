@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -25,7 +26,7 @@ func init() {
 	opts := zap.Options{
 		Development: true,
 		// Enable this to debug this code
-		// Level: zapcore.DebugLevel,
+		//Level: zapcore.DebugLevel,
 		Level: zapcore.InfoLevel,
 	}
 
@@ -225,6 +226,8 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 	out, err := cmd.Output()
 	if err != nil {
 		logger.Error(err, "failed to run docker container")
+		logger.Info(cmd.String())
+		logger.Info("stderr", stderr.String())
 		os.Exit(1)
 	}
 	logger.V(1).Info(string(out))
@@ -232,7 +235,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 
 	// Exercise hotload
 	//hotload.RegisterSQLDriver("pgx", stdlib.GetDefaultDriver())
-	dsn := fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", cfg.Username, cfg.Password, port, cfg.Database)
+	dsn := fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", url.QueryEscape(cfg.Username), url.QueryEscape(cfg.Password), port, cfg.Database)
 	logger.V(1).Info(dsn)
 	f, err := os.CreateTemp("", "dsn.txt")
 	if err != nil {
@@ -251,9 +254,10 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		panic(err)
 	}
 
+	now := time.Now()
 	err = RetryFn(nil, func() error {
 		return conn.Ping()
-	}, 100*time.Millisecond, 20*time.Second)
+	}, 10*time.Millisecond, 30*time.Second)
 
 	if err != nil {
 		logger.Error(err, "failed to connect to database")
@@ -267,6 +271,8 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		logger.Info(string(out))
 		os.Exit(1)
 	}
+	// TODO: change this to debug logging, just timing jenkins for now
+	logger.Info("db_connected", "duration", time.Since(now))
 
 	return conn, dsn, func() {
 		// Cleanup container on close, dont exit without trying all steps first

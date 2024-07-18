@@ -19,29 +19,28 @@ package controller
 import (
 	"context"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"github.com/aws/smithy-go/ptr"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
-	. "github.com/infobloxopen/db-controller/testutils"
-	_ "github.com/lib/pq"
-	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() {
+var _ = Describe("RoleClaim Controller", Ordered, func() {
 
 	const resourceName = "test-resource"
 
@@ -60,11 +59,13 @@ var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() 
 		Namespace: "default",
 	}
 
-	dbroleclaim := &persistancev1.DbRoleClaim{}
+	typeNamespacedNameInvalidParam := types.NamespacedName{Namespace: "default", Name: "missing-parameter"}
+
 	viperObj := viper.New()
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
 	BeforeEach(func() {
+		dbroleclaim := &persistancev1.DbRoleClaim{}
 		By("creating the custom resource for the Kind DbRoleClaim")
 		err := k8sClient.Get(ctx, typeNamespacedName, dbroleclaim)
 		if err != nil && errors.IsNotFound(err) {
@@ -80,6 +81,30 @@ var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() 
 					},
 					SecretName: "copy-secret",
 					Class:      ptr.String("default"),
+				},
+				Status: persistancev1.DbRoleClaimStatus{},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		}
+
+		By("creating an invalid DBRoleClaim")
+		err = k8sClient.Get(ctx, typeNamespacedNameInvalidParam, dbroleclaim)
+		if err != nil && errors.IsNotFound(err) {
+			resource := &persistancev1.DbRoleClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      typeNamespacedNameInvalidParam.Name,
+					Namespace: typeNamespacedNameInvalidParam.Namespace,
+				},
+				Spec: persistancev1.DbRoleClaimSpec{
+					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+						Namespace: "schema-user-test",
+						Name:      "testclaim",
+					},
+					SecretName: "copy-secret",
+					Class:      ptr.String("default"),
+					SchemaRoleMap: map[string]persistancev1.RoleType{
+						"schema0": "",
+					},
 				},
 				Status: persistancev1.DbRoleClaimStatus{},
 			}
@@ -122,6 +147,21 @@ var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() 
 		}
 	})
 
+	AfterEach(func() {
+		resource := &persistancev1.DbRoleClaim{}
+		err := k8sClient.Get(ctx, typeNamespacedName, resource)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Cleanup the specific resource instance DbRoleClaim")
+		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+		err = k8sClient.Get(ctx, typeNamespacedNameInvalidParam, resource)
+		Expect(err).NotTo(HaveOccurred())
+		By("Cleanup the specific resource instance DbRoleClaim")
+		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+	})
+
 	It("should successfully reconcile the resource", func() {
 		By("Reconciling the created resource")
 
@@ -152,70 +192,59 @@ var _ = Describe("TestReconcileDbRoleClaim_CopyExistingSecret", Ordered, func() 
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	AfterEach(func() {
-		resource := &persistancev1.DbRoleClaim{}
-		err := k8sClient.Get(ctx, typeNamespacedName, resource)
-		Expect(err).NotTo(HaveOccurred())
+	It("should fail to reconcile the resource", func() {
+		RegisterFailHandler(Fail)
+		logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-		By("Cleanup the specific resource instance DbRoleClaim")
-		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-	})
-})
+		type reconciler struct {
+			Log                logr.Logger
+			Scheme             *runtime.Scheme
+			Config             *roleclaim.RoleConfig
+			DbIdentifierPrefix string
+			Request            controllerruntime.Request
+		}
 
-var _ = Describe("TestSchemaUserClaimReconcile_WithNewUserSchemasRoles_MissingParameter", Ordered, func() {
-	RegisterFailHandler(Fail)
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+		viperObj := viper.New()
+		viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
 
-	type reconciler struct {
-		Client             client.Client
-		Log                logr.Logger
-		Scheme             *runtime.Scheme
-		Config             *roleclaim.RoleConfig
-		DbIdentifierPrefix string
-		Context            context.Context
-		Request            controllerruntime.Request
-	}
-
-	viperObj := viper.New()
-	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
-
-	tests := []struct {
-		name    string
-		rec     reconciler
-		wantErr bool
-	}{
-		{
-			"Get UserSchema claim 1",
-			reconciler{
-				Client: &MockClient{},
-				Config: &roleclaim.RoleConfig{
-					Viper: viperObj,
-					Class: "default",
+		tests := []struct {
+			name    string
+			rec     reconciler
+			wantErr bool
+		}{
+			{
+				"Get UserSchema claim 1",
+				reconciler{
+					Config: &roleclaim.RoleConfig{
+						Viper: viperObj,
+						Class: "default",
+					},
+					Request: controllerruntime.Request{
+						NamespacedName: typeNamespacedNameInvalidParam,
+					},
+					Log: zap.New(zap.UseDevMode(true)),
 				},
-				Request: controllerruntime.Request{
-					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "missing_parameter"},
-				},
-				Log: zap.New(zap.UseDevMode(true)),
+				true,
 			},
-			true,
-		},
-	}
-
-	for _, tt := range tests {
-		r := &DbRoleClaimReconciler{
-			Client: tt.rec.Client,
-			Config: tt.rec.Config,
 		}
 
-		r.Reconciler = &roleclaim.DbRoleClaimReconciler{
-			Client: r.Client,
-			Config: r.Config,
-		}
+		for _, tt := range tests {
+			r := &DbRoleClaimReconciler{
+				Client: k8sClient,
+				Config: tt.rec.Config,
+			}
 
-		_, err := r.Reconciler.Reconcile(tt.rec.Context, tt.rec.Request)
-		if (err != nil) != tt.wantErr {
-			Expect(err).ToNot(BeNil())
-			return
+			r.Reconciler = &roleclaim.DbRoleClaimReconciler{
+				Client: r.Client,
+				Config: r.Config,
+			}
+
+			_, err := r.Reconciler.Reconcile(context.Background(), tt.rec.Request)
+			if (err != nil) != tt.wantErr {
+				Expect(err).ToNot(BeNil())
+				return
+			}
 		}
-	}
+	})
+
 })

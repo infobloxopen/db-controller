@@ -1,33 +1,46 @@
-package testutils
+package roleclaim
 
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/aws/smithy-go/ptr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type MockClient struct {
+type mockClient struct {
 	client.Client
-	Port string
+	// port is derived from the DSN
+	dsn string
 }
 
 var responseUpdate interface{}
 
-func (m MockClient) GetResponseUpdate() interface{} {
+func (m *mockClient) GetResponseUpdate() interface{} {
 	return responseUpdate
 }
 
-func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (m *mockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	return nil
+}
+
+func (m *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+
+	parsedDSN, err := url.Parse(m.dsn)
+	if err != nil {
+		return err
+	}
+	port := parsedDSN.Port()
+
 	_ = ctx
-	var time8DaysAgo = v1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
+	var time8DaysAgo = metav1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
 	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest" || key.Namespace == "schema-user-test") &&
 		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test") {
 		sec, ok := obj.(*corev1.Secret)
@@ -36,7 +49,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		}
 		sec.Data = map[string][]byte{
 			"host":     []byte("localhost"),
-			"port":     []byte(m.Port),
+			"port":     []byte(port),
 			"database": []byte("postgres"),
 			"sslmode":  []byte("disable"),
 			"password": []byte("masterpassword"),
@@ -59,7 +72,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 					ConnectionInfo: &persistancev1.DatabaseClaimConnectionInfo{
 						DatabaseName: "postgres",
 						Host:         "localhost",
-						Port:         m.Port,
+						Port:         port,
 						Username:     "mainUser",
 						SSLMode:      "disable",
 					},
@@ -132,7 +145,7 @@ func (m MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 	return errors.NewNotFound(schema.GroupResource{Group: "core", Resource: "secret"}, key.Name)
 }
 
-func (m MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (m *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	_ = ctx
 	if (obj.GetNamespace() == "testNamespace" || obj.GetNamespace() == "schema-user-test") &&
 		(obj.GetName() == "create-master-secret" || obj.GetName() == "sample-master-secret") {
@@ -149,19 +162,15 @@ func (m MockClient) Create(ctx context.Context, obj client.Object, opts ...clien
 	return fmt.Errorf("can't create object")
 }
 
+func (m *mockClient) Status() client.StatusWriter {
+	return &MockStatusWriter{}
+}
+
 type MockStatusWriter struct {
 	client.StatusWriter
 }
 
-func (m MockClient) Status() client.StatusWriter {
-	return &MockStatusWriter{}
-}
-
 func (m MockStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	responseUpdate = obj
-	return nil
-}
-
-func (m MockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	return nil
 }
