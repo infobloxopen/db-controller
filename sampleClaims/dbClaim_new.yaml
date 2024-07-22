@@ -7,14 +7,14 @@ spec:
   appId: sample-app
   class: default
   databaseName: sample_app
-  dbVersion: ''
+  dbVersion: '15.7'
   dsnName: sample-postgres-dsn
   enableReplicationRole: false
   enableSuperUser: false
-  instanceLabel: sample-connection
-  minStorageGB: 0
+  instanceLabel: ""
+  minStorageGB: 10
   secretName: databaseclaim-sample
-  shape: ''
+  shape: 'db.t3.medium'
   type: postgres
   useExistingSource: false
   userName: sample_user

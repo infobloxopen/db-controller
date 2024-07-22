@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armon/go-radix"
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
@@ -23,6 +24,7 @@ import (
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	"github.com/infobloxopen/db-controller/pkg/dbuser"
+	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 
@@ -34,17 +36,34 @@ type RoleConfig struct {
 	MasterAuth         *rdsauth.MasterAuth
 	DbIdentifierPrefix string
 	Class              string
+	Namespace          string
 }
 
 const (
-	dbClaimField  = ".spec.sourceDatabaseClaim.name"
-	finalizerName = "dbroleclaims.persistance.atlas.infoblox.com/finalizer"
+	dbClaimField           = ".spec.sourceDatabaseClaim.name"
+	finalizerName          = "dbroleclaims.persistance.atlas.infoblox.com/finalizer"
+	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
+	// InfoLevel is used to set V level to 0 as suggested by official docs
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+	InfoLevel = 0
+	// DebugLevel is used to set V level to 1 as suggested by official docs
+	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+	DebugLevel = 1
 )
+
+type input struct {
+	FragmentKey      string
+	HostParams       hostparams.HostParams
+	MasterConnInfo   v1.DatabaseClaimConnectionInfo
+	DbHostIdentifier string
+	ManageCloudDB    bool
+}
 
 // RoleReconciler reconciles a DatabaseClaim object
 type DbRoleClaimReconciler struct {
 	client.Client
 	Config *RoleConfig
+	Input  *input
 }
 
 func Reconcile(r *DbRoleClaimReconciler, ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -91,6 +110,10 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
 	}
+	err = r.setDbClaimReqInfo(sourceDbClaim)
+	if err != nil {
+		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("setting dbclaim required info: %s", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
+	}
 	// #endregion
 
 	// #region find secret linked to DBClaim: sourceSecret
@@ -115,18 +138,16 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, errors.New("schema and role are mandatory when one of these fields are provided")
 		}
 
-		//get db conn details
-		existingDBConnInfo := &v1.DatabaseClaimConnectionInfo{
-			Host:         string(sourceSecret.Data["host"]),
-			Port:         string(sourceSecret.Data["port"]),
-			DatabaseName: string(sourceSecret.Data["database"]),
-			Username:     string(sourceSecret.Data["username"]),
-			Password:     string(sourceSecret.Data["password"]),
-			SSLMode:      string(sourceSecret.Data["sslmode"]),
+		existingDBConnInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
+		if err != nil {
+			log.Error(err, "reading resource secret")
+			return ctrl.Result{}, errors.New("reading resource secret")
 		}
 
+		log.V(DebugLevel).Info("Full URI: " + existingDBConnInfo.Uri())
+
 		// get client to DB
-		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &log)
+		dbClient, err := basefun.GetClientForExistingDB(&existingDBConnInfo, &log)
 		if err != nil {
 			log.Error(err, "creating database client error.")
 			return ctrl.Result{}, err
@@ -160,7 +181,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				//create role
 				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
 				// check if role exists, if not: create it
-				if err = createRole(roleName, dbClient, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
+				if err = createRole(dbClient, roleName, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
 					return ctrl.Result{}, err
 				}
 				//update role status
@@ -257,6 +278,183 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 }
 
+func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, secretName string) (v1.DatabaseClaimConnectionInfo, error) {
+	rs := &corev1.Secret{}
+	connInfo := v1.DatabaseClaimConnectionInfo{}
+
+	serviceNS, _ := r.getServiceNamespace()
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: serviceNS,
+		Name:      secretName,
+	}, rs)
+
+	if err != nil {
+		return connInfo, err
+	}
+
+	connInfo.DatabaseName = r.Input.MasterConnInfo.DatabaseName
+	connInfo.SSLMode = r.Input.MasterConnInfo.SSLMode
+
+	connInfo.Host = string(rs.Data["endpoint"])
+	connInfo.Port = string(rs.Data["port"])
+	connInfo.Username = string(rs.Data["username"])
+	connInfo.Password = string(rs.Data["password"])
+
+	if connInfo.Host == "" ||
+		connInfo.Port == "" ||
+		connInfo.Username == "" ||
+		connInfo.Password == "" {
+		return connInfo, fmt.Errorf("generated secret is incomplete")
+	}
+
+	return connInfo, nil
+}
+
+func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.DatabaseClaimConnectionInfo {
+	connInfo := v1.DatabaseClaimConnectionInfo{}
+
+	connInfo.Host = r.getMasterHost(dbClaim)
+	connInfo.Port = r.getMasterPort(dbClaim)
+	connInfo.Username = r.getMasterUser()
+	connInfo.SSLMode = r.getSSLMode()
+	connInfo.DatabaseName = GetDBName(dbClaim)
+	return connInfo
+}
+
+func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) string {
+	// If config host is overridden by db claims host
+	if dbClaim.Spec.Host != "" {
+		return dbClaim.Spec.Host
+	}
+	return r.Config.Viper.GetString(fmt.Sprintf("%s::Host", r.Input.FragmentKey))
+}
+
+func (r *DbRoleClaimReconciler) getMasterUser() string {
+
+	u := r.Config.Viper.GetString(fmt.Sprintf("%s::masterUsername", r.Input.FragmentKey))
+	if u != "" {
+		return u
+	}
+	return r.Config.Viper.GetString("defaultMasterUsername")
+}
+
+func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
+
+	if dbClaim.Spec.Port != "" {
+		return dbClaim.Spec.Port
+	}
+
+	p := r.Config.Viper.GetString(fmt.Sprintf("%s::Port", r.Input.FragmentKey))
+	if p != "" {
+		return p
+	}
+
+	return r.Config.Viper.GetString("defaultMasterPort")
+}
+
+func (r *DbRoleClaimReconciler) getSSLMode() string {
+
+	s := r.Config.Viper.GetString(fmt.Sprintf("%s::sslMode", r.Input.FragmentKey))
+	if s != "" {
+		return s
+	}
+
+	return r.Config.Viper.GetString("defaultSslMode")
+}
+
+func GetDBName(dbClaim *v1.DatabaseClaim) string {
+	if dbClaim.Spec.DBNameOverride != "" {
+		return dbClaim.Spec.DBNameOverride
+	}
+
+	return dbClaim.Spec.DatabaseName
+}
+
+func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) error {
+	r.Input = &input{}
+	var (
+		fragmentKey   string
+		err           error
+		manageCloudDB bool
+	)
+
+	if dbClaim.Spec.InstanceLabel != "" {
+		fragmentKey, err = r.matchInstanceLabel(dbClaim)
+		if err != nil {
+			return err
+		}
+	}
+
+	r.Input.FragmentKey = fragmentKey
+	connInfo := r.getClientConn(dbClaim)
+
+	if connInfo.Host == "" {
+		manageCloudDB = true
+	}
+
+	hostParams, err := hostparams.New(r.Config.Viper, fragmentKey, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	r.Input = &input{
+		ManageCloudDB:  manageCloudDB,
+		MasterConnInfo: connInfo,
+		FragmentKey:    fragmentKey,
+		HostParams:     *hostParams,
+	}
+
+	if manageCloudDB {
+		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
+	}
+	return nil
+}
+
+// Load settings into the DBClaim (connection, config, controllerconfig...)
+func (r *DbRoleClaimReconciler) matchInstanceLabel(dbClaim *v1.DatabaseClaim) (string, error) {
+	settingsMap := r.Config.Viper.AllSettings()
+
+	rTree := radix.New()
+	for k := range settingsMap {
+		if k != "passwordconfig" {
+			rTree.Insert(k, true)
+		}
+	}
+
+	// Find the longest prefix match
+	m, _, ok := rTree.LongestPrefix(dbClaim.Spec.InstanceLabel)
+	if !ok {
+		return "", fmt.Errorf("can't find any instance label matching fragment keys")
+	}
+
+	dbClaim.Status.ActiveDB.MatchedLabel = m
+
+	return m, nil
+}
+
+func (r *DbRoleClaimReconciler) getServiceNamespace() (string, error) {
+	if r.Config.Namespace == "" {
+		return "", fmt.Errorf("service namespace env %s must be set", serviceNamespaceEnvVar)
+	}
+
+	return r.Config.Namespace, nil
+}
+
+func (r *DbRoleClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim) string {
+	var prefix string
+	suffix := "-" + r.Input.HostParams.Hash()
+
+	if r.Config.DbIdentifierPrefix != "" {
+		prefix = r.Config.DbIdentifierPrefix + "-"
+	}
+	if r.Input.FragmentKey == "" {
+		return prefix + dbClaim.Name + suffix
+	}
+
+	return prefix + r.Input.FragmentKey + suffix
+}
+
 func (r *DbRoleClaimReconciler) getSourceSecret(ctx context.Context, secretName string, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (*corev1.Secret, error) {
 	sourceSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: dbRoleClaim.Spec.SourceDatabaseClaim.Namespace}, sourceSecret); err != nil {
@@ -306,6 +504,7 @@ func initStatusValues(dbRoleClaim *v1.DbRoleClaim) {
 }
 
 func createSchema(dbClient dbclient.Clienter, schemaName string, log logr.Logger) error {
+	log.Info("creating schema: " + schemaName)
 	schemaExists, err := dbClient.SchemaExists(schemaName)
 	if err != nil {
 		log.Error(err, "checking if schema ["+schemaName+"] exists error.")
@@ -318,10 +517,12 @@ func createSchema(dbClient dbclient.Clienter, schemaName string, log logr.Logger
 			return err
 		}
 	}
+	log.Info("schema [" + schemaName + "] created.")
 	return nil
 }
 
-func createRole(roleName string, dbClient dbclient.Clienter, log *logr.Logger, databaseName string, schemaName string) error {
+func createRole(dbClient dbclient.Clienter, roleName string, log *logr.Logger, databaseName string, schemaName string) error {
+	log.Info("creating role: " + roleName)
 	roleExists, err := dbClient.RoleExists(roleName)
 	if err != nil {
 		log.Error(err, "checking if role ["+roleName+"] exists error.")
@@ -343,6 +544,7 @@ func createRole(roleName string, dbClient dbclient.Clienter, log *logr.Logger, d
 			log.Error(err, "creating role ["+roleName+"] error.")
 			return err
 		}
+		log.Info("role [" + roleName + "] created.")
 
 	}
 	return nil

@@ -42,13 +42,14 @@ func (m *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 	_ = ctx
 	var time8DaysAgo = metav1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
 	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest" || key.Namespace == "schema-user-test") &&
-		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test") {
+		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test" || key.Name == "testclaim-bbb818c0") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")
 		}
 		sec.Data = map[string][]byte{
-			"host":     []byte("localhost"),
+			"hostname": []byte("localhost"),
+			"endpoint": []byte("localhost"), //specific to roleClaim
 			"port":     []byte(port),
 			"database": []byte("postgres"),
 			"sslmode":  []byte("disable"),
@@ -66,6 +67,7 @@ func (m *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 			sec.Spec.Class = ptr.String("default")
 			sec.Spec.SecretName = "sample-master-secret"
 			sec.Name = "testclaim"
+			sec.Spec.DatabaseName = "postgres"
 			sec.Namespace = "schema-user-test"
 			sec.Status = persistancev1.DatabaseClaimStatus{
 				ActiveDB: persistancev1.Status{

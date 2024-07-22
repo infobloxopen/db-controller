@@ -22,9 +22,9 @@ import (
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
-	hosterrors "github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,6 +34,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/utils/ptr"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -58,6 +60,7 @@ var _ = Describe("AWS", Ordered, func() {
 		dbIdentifierPrefix string
 		db1                string
 		dbinstance1        string
+		dbroleclaim1       string
 	)
 
 	BeforeAll(func() {
@@ -74,6 +77,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 		dbIdentifierPrefix = env
 
+		dbroleclaim1 = namespace + "-dbrc-1"
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
@@ -152,7 +156,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(createdDbClaim.Spec.DBVersion).To(BeEmpty())
 
 				return createdDbClaim.Status.Error, nil
-			}, 50*time.Second, 100*time.Millisecond).Should(Equal(hosterrors.ErrEngineVersionNotSpecified.Error()))
+			}, 50*time.Second, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
 		})
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
@@ -225,12 +229,98 @@ var _ = Describe("AWS", Ordered, func() {
 		})
 	})
 
+	//update db_1 - create new schema
+	Context("Create new schemas and roles", func() {
+		It("should create new user, schemas and roles", func() {
+			By("creating a new DBRoleClaim")
+			secretName := "dbroleclaim-secret"
+
+			key := types.NamespacedName{
+				Name:      dbroleclaim1,
+				Namespace: namespace,
+			}
+			dbRoleClaim := &persistancev1.DbRoleClaim{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "persistance.atlas.infoblox.com/v1",
+					Kind:       "DatabaseClaim",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: persistancev1.DbRoleClaimSpec{
+					Class:      &class,
+					SecretName: secretName,
+					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+						Namespace: namespace,
+						Name:      db1,
+					},
+					SchemaRoleMap: map[string]persistancev1.RoleType{
+						"schemaapp111": persistancev1.ReadOnly,
+						"schemaapp222": persistancev1.Regular,
+						"schemaapp333": persistancev1.Admin,
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, dbRoleClaim)).Should(Succeed())
+			By("checking if the secret is created: " + namespace + "." + secretName)
+			secret := &corev1.Secret{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+			}, timeout_e2e, interval_e2e).Should(BeNil())
+			connString := string(secret.Data["uri_dsn"])
+
+			By("Connect to DB to check roles were created.")
+			existingDBConnInfo, err := persistancev1.ParseUri(connString)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
+			Expect(err).ShouldNot(BeNil())
+			Expect(dbClient).ShouldNot(BeNil())
+			Expect(dbClient.RoleExists("schemaapp111_readonly")).Should(BeTrue())
+			Expect(dbClient.RoleExists("schemaapp222_regular")).Should(BeTrue())
+			Expect(dbClient.RoleExists("schemaapp333_admin")).Should(BeTrue())
+
+			By("Connect to DB to check schemas were created")
+			Expect(dbClient.SchemaExists("schemaapp111")).Should(BeTrue())
+			Expect(dbClient.SchemaExists("schemaapp222")).Should(BeTrue())
+			Expect(dbClient.SchemaExists("schemaapp333")).Should(BeTrue())
+
+			By("Connect to DB to check user was created")
+			Expect(dbClient.UserExists(secretName)).Should(BeTrue())
+		})
+	})
+
 	//deletes db_1
 	Context("Delete RDS", func() {
 		It("should delete dbinstances.crds", func() {
 			By("deleting the dbc and associated dbinstances.crd")
 
 			key := types.NamespacedName{
+				Name:      dbroleclaim1,
+				Namespace: namespace,
+			}
+			prevDbRoleClaim := &persistancev1.DatabaseClaim{}
+			By("Getting the prev dbroleclaim")
+			Expect(k8sClient.Get(ctx, key, prevDbRoleClaim)).Should(Succeed())
+			By("Deleting the dbroleclaim")
+			Expect(k8sClient.Delete(ctx, prevDbRoleClaim)).Should(Succeed())
+			// time.Sleep(time.Minute * 5)
+			By("checking dbroleclaim does not exists")
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, key, prevDbRoleClaim)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				} else {
+					return fmt.Errorf("dbroleclaim still exists")
+				}
+			}, timeout_e2e, time.Second*5).Should(Succeed())
+
+			key = types.NamespacedName{
 				Name:      db1,
 				Namespace: namespace,
 			}

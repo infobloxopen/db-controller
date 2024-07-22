@@ -44,6 +44,11 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 	defer close()
 
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
+	viperObj.Set("defaultMasterUsername", "root")
+	viperObj.Set("defaultMasterPort", "5432")
+	viperObj.Set("defaultSslMode", "require")
+	viperObj.Set("defaultMinStorageGB", "10")
+	viperObj.Set("defaultSslMode", "disable")
 
 	tests := []struct {
 		name    string
@@ -55,8 +60,9 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 			reconciler{
 				Client: &mockClient{dsn: dsn},
 				Config: &RoleConfig{
-					Viper: viperObj,
-					Class: "default",
+					Viper:     viperObj,
+					Class:     "default",
+					Namespace: "testNamespace",
 				},
 				Request: controllerruntime.Request{
 					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-1"},

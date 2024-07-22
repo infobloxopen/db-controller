@@ -548,6 +548,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 	if r.mode == M_PostMigrationInProgress {
 		return r.postMigrationInProgress(ctx, dbClaim)
 	}
+	//when using an existing db, this is the first status, then it moves to M_MigrateExistingToNewDB and falls into the condition below
 	if r.mode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
 		err := r.reconcileUseExistingDB(ctx, dbClaim)
@@ -1233,6 +1234,8 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, db
 	}
 	updateHostPortStatus(&dbClaim.Status.NewDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
+	log.Log.V(DebugLevel).Info("GET CLIENT FOR EXISTING DB> Full URI: " + connInfo.Uri())
+
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: connInfo.Uri()})
 }
 
@@ -1250,14 +1253,14 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
-	logr.V(DebugLevel).Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
+	logr.V(DebugLevel).Info("==============GET DBCLIENT============", "DSN", r.getMasterDefaultDsn())
 	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: r.getMasterDefaultDsn()})
 }
 
 func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres", r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
 }
 
 func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
@@ -1769,6 +1772,7 @@ func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tag
 	}
 	return tags
 }
+
 func (r *DatabaseClaimReconciler) manageMasterPassword(ctx context.Context, secret *xpv1.SecretKeySelector) error {
 	logr := log.FromContext(ctx).WithValues("func", "manageMasterPassword")
 	masterSecret := &corev1.Secret{}
