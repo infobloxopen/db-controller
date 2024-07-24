@@ -623,7 +623,7 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 		return errors.New("reading resource secret")
 	}
 
-	log.V(DebugLevel).Info("Full URI DELETE EXTERNAL RES: " + masterUserDBConnInfo.Uri())
+	//log.V(DebugLevel).Info("Full URI DELETE EXTERNAL RES: " + masterUserDBConnInfo.Uri())
 
 	// get client to DB
 	dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, log)
@@ -637,12 +637,6 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 		dbcBaseConfig.EnableSuperUser = *sourceDbClaim.Spec.EnableSuperUser
 	}
 
-	//enable super user to be able to reassign objects before deleting users below
-	// if err = dbClient.ManageSuperUserRole(masterUserDBConnInfo.Username, true); err != nil {
-	// 	log.Error(err, "enabling superuser for root user")
-	// 	return err
-	// }
-
 	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixA)
 	//delete users linked to this DBRoleClaim
 	if err = dbClient.DeleteUser(masterUserDBConnInfo.DatabaseName, dbRoleClaim.Name+"_user"+dbuser.SuffixA, masterUserDBConnInfo.Username); err != nil {
@@ -655,12 +649,6 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
 		return err
 	}
-
-	//revert superuser if that's the case
-	// if err = dbClient.ManageSuperUserRole(masterUserDBConnInfo.Username, dbcBaseConfig.EnableSuperUser); err != nil {
-	// 	log.Error(err, "disabling superuser for root user")
-	// 	return err
-	// }
 
 	return nil
 }
