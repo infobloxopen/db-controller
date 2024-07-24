@@ -471,48 +471,65 @@ var _ = Describe("AWS", Ordered, func() {
 
 	var _ = AfterAll(func() {
 
-		// keyRoleClaim := types.NamespacedName{
-		// 	Name:      dbroleclaim1,
-		// 	Namespace: namespace,
-		// }
+		keyRoleClaim := types.NamespacedName{
+			Name:      dbroleclaim1,
+			Namespace: namespace,
+		}
 
-		// roleClaim := &persistancev1.DbRoleClaim{}
-		// if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
-		// 	By("Deleting dbRoleClaim1")
-		// 	Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
-		// }
+		roleClaim := &persistancev1.DbRoleClaim{}
+		if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
+			By("Deleting dbRoleClaim1")
+			Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		}
 
-		// keyRoleClaim.Name = dbroleclaim2
-		// roleClaim = &persistancev1.DbRoleClaim{}
-		// if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
-		// 	By("Deleting dbRoleClaim2")
-		// 	Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
-		// }
+		keyRoleClaim.Name = dbroleclaim2
+		roleClaim = &persistancev1.DbRoleClaim{}
+		if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
+			By("Deleting dbRoleClaim2")
+			Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		}
 
-		// key := types.NamespacedName{
-		// 	Name:      db2,
-		// 	Namespace: namespace,
-		// }
+		key := types.NamespacedName{
+			Name:      db2,
+			Namespace: namespace,
+		}
 
-		// claim := &persistancev1.DatabaseClaim{}
-		// if err := k8sClient.Get(ctx, key, claim); err == nil {
-		// 	By("Deleting db1")
-		// 	Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		// }
+		claim := &persistancev1.DatabaseClaim{}
+		if err := k8sClient.Get(ctx, key, claim); err == nil {
+			By("Deleting db1")
+			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		}
 
-		// key.Name = db1
-		// claim = &persistancev1.DatabaseClaim{}
-		// if err := k8sClient.Get(ctx, key, claim); err == nil {
-		// 	By("Deleting db2")
-		// 	Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		// }
+		key.Name = db1
+		claim = &persistancev1.DatabaseClaim{}
+		if err := k8sClient.Get(ctx, key, claim); err == nil {
+			By("Deleting db2")
+			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		}
 
-		// var dbinst crossplanerds.DBInstance
+		var dbinst crossplanerds.DBInstance
 
-		// if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
-		// 	By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
-		// 	Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
-		// }
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
+			By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
+			Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
+		}
+
+		//delete master secret if it exists
+		By("deleting the master secret")
+		k8sClient.Delete(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      newdbcMasterSecretName,
+				Namespace: "db-controller",
+			},
+		})
+
+		//delete the namespace
+		By("deleting the namespace")
+		k8sClient.Delete(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		})
 
 	})
 })
@@ -537,9 +554,7 @@ func MigratePostgresToAuroraRDS() {
 	Expect(k8sClient.Get(ctx, key, db2Claim)).Should(Succeed())
 	By("Updating type from postgres to aurora-postgresql in the claim")
 	db2Claim.Spec.Type = "aurora-postgresql"
-	// db2Claim.Spec.DeletionPolicy = "delete"
 	Expect(k8sClient.Update(ctx, db2Claim)).Should(Succeed())
-	// time.Sleep(time.Minute * 5)
 	createdDbClaim := &persistancev1.DatabaseClaim{}
 	By("checking dbclaim status is ready")
 	By("checking dbclaim status type is aurora-postgresql")
@@ -557,7 +572,6 @@ func MigratePostgresToAuroraRDS() {
 	}, time.Minute*20, interval_e2e).Should(Equal(expectedState))
 	//check if eventually the secret sample-secret is created
 	By("checking if the secret is created")
-	//box-3-bjeevan-e2e-db-2-bb1e7196
 	Eventually(func() (string, error) {
 		secret := &corev1.Secret{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret", Namespace: namespace}, secret)
@@ -682,37 +696,4 @@ func setupMasterSecretForExistingRDS() {
 	}
 
 	Expect(k8sClient.Create(ctx, existingDBMasterSecret)).Should(Succeed())
-}
-
-func cleanupdb(db string) {
-	key := types.NamespacedName{
-		Name:      db,
-		Namespace: namespace,
-	}
-	dbClaim := &persistancev1.DatabaseClaim{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "persistance.atlas.infoblox.com/v1",
-			Kind:       "DatabaseClaim",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      key.Name,
-			Namespace: key.Namespace,
-		},
-		Spec: persistancev1.DatabaseClaimSpec{
-			Class:                 &class,
-			AppID:                 "sample-app",
-			DatabaseName:          "sample_db",
-			SecretName:            "newdb-secret",
-			Username:              "sample_user",
-			Type:                  "postgres",
-			DSNName:               "dsn",
-			EnableReplicationRole: ptr.To(false),
-			UseExistingSource:     ptr.To(false),
-			DBVersion:             "15.5",
-			DeletionPolicy:        "delete",
-		},
-	}
-	k8sClient.Create(ctx, dbClaim)
-	time.Sleep(time.Minute * 1)
-	k8sClient.Delete(ctx, dbClaim)
 }
