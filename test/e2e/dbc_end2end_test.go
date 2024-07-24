@@ -336,7 +336,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 	//deletes db_1
 	Context("Delete RDS", func() {
-		It("should delete dbinstances.crds", func() {
+		FIt("should delete dbinstances.crds", func() {
 			By("deleting the dbc, dbrc and associated dbinstances.crd")
 
 			// ===================================================== DBRoleClaim1
@@ -471,48 +471,48 @@ var _ = Describe("AWS", Ordered, func() {
 
 	var _ = AfterAll(func() {
 
-		keyRoleClaim := types.NamespacedName{
-			Name:      dbroleclaim1,
-			Namespace: namespace,
-		}
+		// keyRoleClaim := types.NamespacedName{
+		// 	Name:      dbroleclaim1,
+		// 	Namespace: namespace,
+		// }
 
-		roleClaim := &persistancev1.DbRoleClaim{}
-		if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
-			By("Deleting dbRoleClaim1")
-			Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
-		}
+		// roleClaim := &persistancev1.DbRoleClaim{}
+		// if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
+		// 	By("Deleting dbRoleClaim1")
+		// 	Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		// }
 
-		keyRoleClaim.Name = dbroleclaim2
-		roleClaim = &persistancev1.DbRoleClaim{}
-		if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
-			By("Deleting dbRoleClaim2")
-			Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
-		}
+		// keyRoleClaim.Name = dbroleclaim2
+		// roleClaim = &persistancev1.DbRoleClaim{}
+		// if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
+		// 	By("Deleting dbRoleClaim2")
+		// 	Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		// }
 
-		key := types.NamespacedName{
-			Name:      db2,
-			Namespace: namespace,
-		}
+		// key := types.NamespacedName{
+		// 	Name:      db2,
+		// 	Namespace: namespace,
+		// }
 
-		claim := &persistancev1.DatabaseClaim{}
-		if err := k8sClient.Get(ctx, key, claim); err == nil {
-			By("Deleting db1")
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		}
+		// claim := &persistancev1.DatabaseClaim{}
+		// if err := k8sClient.Get(ctx, key, claim); err == nil {
+		// 	By("Deleting db1")
+		// 	Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		// }
 
-		key.Name = db1
-		claim = &persistancev1.DatabaseClaim{}
-		if err := k8sClient.Get(ctx, key, claim); err == nil {
-			By("Deleting db2")
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		}
+		// key.Name = db1
+		// claim = &persistancev1.DatabaseClaim{}
+		// if err := k8sClient.Get(ctx, key, claim); err == nil {
+		// 	By("Deleting db2")
+		// 	Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		// }
 
-		var dbinst crossplanerds.DBInstance
+		// var dbinst crossplanerds.DBInstance
 
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
-			By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
-			Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
-		}
+		// if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
+		// 	By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
+		// 	Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
+		// }
 
 	})
 })

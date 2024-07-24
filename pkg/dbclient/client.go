@@ -575,45 +575,34 @@ func (pc *client) DeleteUser(dbName, username, reassignToUser string) error {
 		return err
 	}
 
-	pc.log.Info("GRANT x TO y", "user:", username)
-	_, err := pc.DB.Exec(fmt.Sprintf(
-		"GRANT %s TO %s;",
-		pq.QuoteIdentifier(username),
-		pq.QuoteIdentifier(reassignToUser)))
-	if err != nil {
-		pc.log.Error(err, "could not GRANT x TO y: "+username)
-		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
-	}
+	var exists bool
 
-	pc.log.Info("REASSIGN OWNED BY x TO y", "user:", username)
-	_, err = pc.DB.Exec(fmt.Sprintf(
-		"REASSIGN OWNED BY %s TO %s;",
-		pq.QuoteIdentifier(username),
-		pq.QuoteIdentifier(reassignToUser)))
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
 	if err != nil {
-		pc.log.Error(err, "could not REASSIGN OWNED BY x TO y "+username)
-		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
-	}
-
-	pc.log.Info("REVOKE ALL ON DATABASE x FROM y", "user:", username)
-	_, err = pc.DB.Exec(fmt.Sprintf(
-		"REVOKE ALL ON DATABASE %s FROM %s;",
-		pq.QuoteIdentifier(dbName),
-		pq.QuoteIdentifier(username)))
-	if err != nil {
-		pc.log.Error(err, "could not REVOKE ALL ON DATABASE x FROM y "+username)
-		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
-	}
-
-	pc.log.Info("DROP ROLE IF EXISTS ", "user:", username)
-	_, err = pc.DB.Exec(fmt.Sprintf(
-		"DROP ROLE IF EXISTS %s;",
-		pq.QuoteIdentifier(username)))
-	if err != nil {
-		pc.log.Error(err, "could not DROP ROLE IF EXISTS "+username)
-		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+		pc.log.Error(err, "could not query for user name")
 		return err
 	}
+
+	if !exists {
+		pc.log.Info("user [" + username + "] does not exist.")
+		return nil
+	}
+
+	pc.log.Info("delete user", "user:", username)
+	_, err = pc.DB.Exec(fmt.Sprintf(
+		"GRANT %s TO %s;REASSIGN OWNED BY %s TO %s;REVOKE ALL ON DATABASE %s FROM %s;DROP ROLE IF EXISTS %s;",
+		pq.QuoteIdentifier(username),
+		pq.QuoteIdentifier(reassignToUser),
+		pq.QuoteIdentifier(username),
+		pq.QuoteIdentifier(reassignToUser),
+		pq.QuoteIdentifier(dbName),
+		pq.QuoteIdentifier(username),
+		pq.QuoteIdentifier(username)))
+	if err != nil {
+		pc.log.Error(err, "could not delete user: "+username)
+		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+	}
+
 	metrics.UsersDeleted.Inc()
 
 	return nil
