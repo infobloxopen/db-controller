@@ -336,7 +336,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 	//deletes db_1
 	Context("Delete RDS", func() {
-		FIt("should delete dbinstances.crds", func() {
+		It("should delete dbinstances.crds", func() {
 			By("deleting the dbc, dbrc and associated dbinstances.crd")
 
 			// ===================================================== DBRoleClaim1
