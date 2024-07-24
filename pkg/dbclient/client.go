@@ -575,18 +575,42 @@ func (pc *client) DeleteUser(dbName, username, reassignToUser string) error {
 		return err
 	}
 
-	pc.log.Info("drop user", "user:", username)
+	pc.log.Info("GRANT x TO y", "user:", username)
 	_, err := pc.DB.Exec(fmt.Sprintf(
-		"GRANT %s TO %s; REASSIGN OWNED BY %s TO %s; REVOKE ALL ON DATABASE %s FROM %s; DROP USER IF EXISTS %s;",
+		"GRANT %s TO %s;",
 		pq.QuoteIdentifier(username),
-		pq.QuoteIdentifier(reassignToUser),
+		pq.QuoteIdentifier(reassignToUser)))
+	if err != nil {
+		pc.log.Error(err, "could not GRANT x TO y: "+username)
+		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+	}
+
+	pc.log.Info("REASSIGN OWNED BY x TO y", "user:", username)
+	_, err = pc.DB.Exec(fmt.Sprintf(
+		"REASSIGN OWNED BY %s TO %s;",
 		pq.QuoteIdentifier(username),
-		pq.QuoteIdentifier(reassignToUser),
+		pq.QuoteIdentifier(reassignToUser)))
+	if err != nil {
+		pc.log.Error(err, "could not REASSIGN OWNED BY x TO y "+username)
+		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+	}
+
+	pc.log.Info("REVOKE ALL ON DATABASE x FROM y", "user:", username)
+	_, err = pc.DB.Exec(fmt.Sprintf(
+		"REVOKE ALL ON DATABASE %s FROM %s;",
 		pq.QuoteIdentifier(dbName),
-		pq.QuoteIdentifier(username),
 		pq.QuoteIdentifier(username)))
 	if err != nil {
-		pc.log.Error(err, "could not drop user "+username)
+		pc.log.Error(err, "could not REVOKE ALL ON DATABASE x FROM y "+username)
+		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+	}
+
+	pc.log.Info("DROP ROLE IF EXISTS ", "user:", username)
+	_, err = pc.DB.Exec(fmt.Sprintf(
+		"DROP ROLE IF EXISTS %s;",
+		pq.QuoteIdentifier(username)))
+	if err != nil {
+		pc.log.Error(err, "could not DROP ROLE IF EXISTS "+username)
 		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
 		return err
 	}

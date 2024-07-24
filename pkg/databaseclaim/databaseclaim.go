@@ -372,7 +372,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if permitted := isClassPermitted(r.Config.Class, *dbClaim.Spec.Class); !permitted {
 		logr.Info("ignoring this claim as this controller does not own this class", "spec", dbClaim.Spec, "controllerClass", r.Config.Class)
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: false}, nil
 	}
 
 	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {

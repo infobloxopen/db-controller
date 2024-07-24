@@ -89,7 +89,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if permitted := basefun.IsClassPermitted(r.Config.Class, *dbRoleClaim.Spec.Class); !permitted {
 		log.Info("ignoring this claim as this controller does not own this class", "claimclass", *dbRoleClaim.Spec.Class, "ctrlclass", r.Config.Class)
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: false}, nil
 	}
 
 	isObjectDeleted, err := r.deleteWorkflow(ctx, &dbRoleClaim, &log)
