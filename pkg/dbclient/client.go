@@ -741,6 +741,7 @@ func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) err
 		return err
 	}
 	if hasSuperUser {
+		pc.log.Info("######## [" + username + "] is already a superuser ########")
 		if !enableSuperUser {
 			// remove superuser role
 			_, err = pc.DB.Exec(fmt.Sprintf("REVOKE %s FROM  %s", RDSSuperUserRole, pq.QuoteIdentifier(username)))
