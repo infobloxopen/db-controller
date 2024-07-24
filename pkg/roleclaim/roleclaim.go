@@ -637,7 +637,6 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 		dbcBaseConfig.EnableSuperUser = *sourceDbClaim.Spec.EnableSuperUser
 	}
 
-	log.Info("######## CALL enabling superuser to [" + masterUserDBConnInfo.Username + "] user ########")
 	//enable super user to be able to reassign objects before deleting users below
 	if err = dbClient.ManageSuperUserRole(masterUserDBConnInfo.Username, true); err != nil {
 		log.Error(err, "enabling superuser for root user")
@@ -646,18 +645,17 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 
 	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixA)
 	//delete users linked to this DBRoleClaim
-	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, masterUserDBConnInfo.Username); err != nil {
+	if err = dbClient.DeleteUser(masterUserDBConnInfo.DatabaseName, dbRoleClaim.Name+"_user"+dbuser.SuffixA, masterUserDBConnInfo.Username); err != nil {
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixA)
 		return err
 	}
 
 	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixB)
-	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, masterUserDBConnInfo.Username); err != nil {
+	if err = dbClient.DeleteUser(masterUserDBConnInfo.DatabaseName, dbRoleClaim.Name+"_user"+dbuser.SuffixB, masterUserDBConnInfo.Username); err != nil {
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
 		return err
 	}
 
-	log.Info("########CALL disabling superuser to [" + masterUserDBConnInfo.Username + "] user ########")
 	//revert superuser if that's the case
 	if err = dbClient.ManageSuperUserRole(masterUserDBConnInfo.Username, dbcBaseConfig.EnableSuperUser); err != nil {
 		log.Error(err, "disabling superuser for root user")
