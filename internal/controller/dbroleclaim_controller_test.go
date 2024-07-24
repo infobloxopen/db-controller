@@ -63,6 +63,11 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 
 	viperObj := viper.New()
 	viperObj.Set("passwordconfig::passwordRotationPeriod", 60)
+	viperObj.Set("defaultMasterUsername", "root")
+	viperObj.Set("defaultMasterPort", "5432")
+	viperObj.Set("defaultSslMode", "require")
+	viperObj.Set("defaultMinStorageGB", "10")
+	viperObj.Set("defaultSslMode", "disable")
 
 	BeforeEach(func() {
 		dbroleclaim := &persistancev1.DbRoleClaim{}
@@ -168,7 +173,8 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 		controllerReconciler := &DbRoleClaimReconciler{
 			Client: k8sClient,
 			Config: &roleclaim.RoleConfig{
-				Viper: viperObj,
+				Viper:     viperObj,
+				Namespace: "default",
 			},
 		}
 
@@ -216,8 +222,9 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 				"Get UserSchema claim 1",
 				reconciler{
 					Config: &roleclaim.RoleConfig{
-						Viper: viperObj,
-						Class: "default",
+						Viper:     viperObj,
+						Class:     "default",
+						Namespace: "default",
 					},
 					Request: controllerruntime.Request{
 						NamespacedName: typeNamespacedNameInvalidParam,

@@ -751,6 +751,7 @@ func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) err
 		}
 	} else {
 		if enableSuperUser {
+			pc.log.Info("######## enabling superuser to [" + username + "] user ########")
 			// add superuser role
 			// _, err = pc.DB.Exec(`GRANT $1 TO $2`, pq.QuoteIdentifier(RDSSuperUserRole), pq.QuoteIdentifier(username))
 			_, err = pc.DB.Exec(fmt.Sprintf("GRANT %s TO  %s", RDSSuperUserRole, pq.QuoteIdentifier(username)))

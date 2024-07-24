@@ -51,19 +51,20 @@ const (
 	DebugLevel = 1
 )
 
-type input struct {
+type dbcBaseConfig struct {
 	FragmentKey      string
 	HostParams       hostparams.HostParams
 	MasterConnInfo   v1.DatabaseClaimConnectionInfo
 	DbHostIdentifier string
 	ManageCloudDB    bool
+	EnableSuperUser  bool
 }
 
 // RoleReconciler reconciles a DatabaseClaim object
 type DbRoleClaimReconciler struct {
 	client.Client
 	Config *RoleConfig
-	Input  *input
+	//Input  *input
 }
 
 func Reconcile(r *DbRoleClaimReconciler, ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -110,7 +111,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
 	}
-	err = r.setDbClaimReqInfo(sourceDbClaim)
+	dbcBaseConfig, err := r.setDbClaimReqInfo(sourceDbClaim)
 	if err != nil {
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("setting dbclaim required info: %s", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
 	}
@@ -138,16 +139,16 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, errors.New("schema and role are mandatory when one of these fields are provided")
 		}
 
-		existingDBConnInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
+		masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig)
 		if err != nil {
 			log.Error(err, "reading resource secret")
 			return ctrl.Result{}, errors.New("reading resource secret")
 		}
 
-		log.V(DebugLevel).Info("Full URI: " + existingDBConnInfo.Uri())
+		//log.V(DebugLevel).Info("Full URI: " + masterUserDBConnInfo.Uri())
 
 		// get client to DB
-		dbClient, err := basefun.GetClientForExistingDB(&existingDBConnInfo, &log)
+		dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, &log)
 		if err != nil {
 			log.Error(err, "creating database client error.")
 			return ctrl.Result{}, err
@@ -181,7 +182,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				//create role
 				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
 				// check if role exists, if not: create it
-				if err = createRole(dbClient, roleName, &log, existingDBConnInfo.DatabaseName, schemaName); err != nil {
+				if err = createRole(dbClient, roleName, &log, masterUserDBConnInfo.DatabaseName, schemaName); err != nil {
 					return ctrl.Result{}, err
 				}
 				//update role status
@@ -278,7 +279,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 }
 
-func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, secretName string) (v1.DatabaseClaimConnectionInfo, error) {
+func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseConfig *dbcBaseConfig) (v1.DatabaseClaimConnectionInfo, error) {
 	rs := &corev1.Secret{}
 	connInfo := v1.DatabaseClaimConnectionInfo{}
 
@@ -286,15 +287,15 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, secretNa
 
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: serviceNS,
-		Name:      secretName,
+		Name:      dbcBaseConfig.DbHostIdentifier,
 	}, rs)
 
 	if err != nil {
 		return connInfo, err
 	}
 
-	connInfo.DatabaseName = r.Input.MasterConnInfo.DatabaseName
-	connInfo.SSLMode = r.Input.MasterConnInfo.SSLMode
+	connInfo.DatabaseName = dbcBaseConfig.MasterConnInfo.DatabaseName
+	connInfo.SSLMode = dbcBaseConfig.MasterConnInfo.SSLMode
 
 	connInfo.Host = string(rs.Data["endpoint"])
 	connInfo.Port = string(rs.Data["port"])
@@ -311,41 +312,41 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, secretNa
 	return connInfo, nil
 }
 
-func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.DatabaseClaimConnectionInfo {
+func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) v1.DatabaseClaimConnectionInfo {
 	connInfo := v1.DatabaseClaimConnectionInfo{}
 
-	connInfo.Host = r.getMasterHost(dbClaim)
-	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = r.getMasterUser()
-	connInfo.SSLMode = r.getSSLMode()
+	connInfo.Host = r.getMasterHost(dbClaim, dbcBaseConfig)
+	connInfo.Port = r.getMasterPort(dbClaim, dbcBaseConfig)
+	connInfo.Username = r.getMasterUser(dbcBaseConfig)
+	connInfo.SSLMode = r.getSSLMode(dbcBaseConfig)
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
 
-func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) string {
+func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) string {
 	// If config host is overridden by db claims host
 	if dbClaim.Spec.Host != "" {
 		return dbClaim.Spec.Host
 	}
-	return r.Config.Viper.GetString(fmt.Sprintf("%s::Host", r.Input.FragmentKey))
+	return r.Config.Viper.GetString(fmt.Sprintf("%s::Host", dbcBaseConfig.FragmentKey))
 }
 
-func (r *DbRoleClaimReconciler) getMasterUser() string {
+func (r *DbRoleClaimReconciler) getMasterUser(dbcBaseConfig *dbcBaseConfig) string {
 
-	u := r.Config.Viper.GetString(fmt.Sprintf("%s::masterUsername", r.Input.FragmentKey))
+	u := r.Config.Viper.GetString(fmt.Sprintf("%s::masterUsername", dbcBaseConfig.FragmentKey))
 	if u != "" {
 		return u
 	}
 	return r.Config.Viper.GetString("defaultMasterUsername")
 }
 
-func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
+func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) string {
 
 	if dbClaim.Spec.Port != "" {
 		return dbClaim.Spec.Port
 	}
 
-	p := r.Config.Viper.GetString(fmt.Sprintf("%s::Port", r.Input.FragmentKey))
+	p := r.Config.Viper.GetString(fmt.Sprintf("%s::Port", dbcBaseConfig.FragmentKey))
 	if p != "" {
 		return p
 	}
@@ -353,9 +354,9 @@ func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string 
 	return r.Config.Viper.GetString("defaultMasterPort")
 }
 
-func (r *DbRoleClaimReconciler) getSSLMode() string {
+func (r *DbRoleClaimReconciler) getSSLMode(dbcBaseConfig *dbcBaseConfig) string {
 
-	s := r.Config.Viper.GetString(fmt.Sprintf("%s::sslMode", r.Input.FragmentKey))
+	s := r.Config.Viper.GetString(fmt.Sprintf("%s::sslMode", dbcBaseConfig.FragmentKey))
 	if s != "" {
 		return s
 	}
@@ -371,8 +372,7 @@ func GetDBName(dbClaim *v1.DatabaseClaim) string {
 	return dbClaim.Spec.DatabaseName
 }
 
-func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) error {
-	r.Input = &input{}
+func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*dbcBaseConfig, error) {
 	var (
 		fragmentKey   string
 		err           error
@@ -382,12 +382,13 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) err
 	if dbClaim.Spec.InstanceLabel != "" {
 		fragmentKey, err = r.matchInstanceLabel(dbClaim)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-
-	r.Input.FragmentKey = fragmentKey
-	connInfo := r.getClientConn(dbClaim)
+	dbcBaseConf := dbcBaseConfig{
+		FragmentKey: fragmentKey,
+	}
+	connInfo := r.getClientConn(dbClaim, &dbcBaseConf)
 
 	if connInfo.Host == "" {
 		manageCloudDB = true
@@ -395,20 +396,19 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) err
 
 	hostParams, err := hostparams.New(r.Config.Viper, fragmentKey, dbClaim)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	r.Input = &input{
-		ManageCloudDB:  manageCloudDB,
-		MasterConnInfo: connInfo,
-		FragmentKey:    fragmentKey,
-		HostParams:     *hostParams,
+	if r.Config.Viper.GetBool("supportSuperUserElevation") {
+		dbcBaseConf.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
+	dbcBaseConf.ManageCloudDB = manageCloudDB
+	dbcBaseConf.MasterConnInfo = connInfo
+	dbcBaseConf.HostParams = *hostParams
 
 	if manageCloudDB {
-		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
+		dbcBaseConf.DbHostIdentifier = r.getDynamicHostName(dbClaim, &dbcBaseConf)
 	}
-	return nil
+	return &dbcBaseConf, nil
 }
 
 // Load settings into the DBClaim (connection, config, controllerconfig...)
@@ -441,18 +441,18 @@ func (r *DbRoleClaimReconciler) getServiceNamespace() (string, error) {
 	return r.Config.Namespace, nil
 }
 
-func (r *DbRoleClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim) string {
+func (r *DbRoleClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim, dbcBaseConf *dbcBaseConfig) string {
 	var prefix string
-	suffix := "-" + r.Input.HostParams.Hash()
+	suffix := "-" + dbcBaseConf.HostParams.Hash()
 
 	if r.Config.DbIdentifierPrefix != "" {
 		prefix = r.Config.DbIdentifierPrefix + "-"
 	}
-	if r.Input.FragmentKey == "" {
+	if dbcBaseConf.FragmentKey == "" {
 		return prefix + dbClaim.Name + suffix
 	}
 
-	return prefix + r.Input.FragmentKey + suffix
+	return prefix + dbcBaseConf.FragmentKey + suffix
 }
 
 func (r *DbRoleClaimReconciler) getSourceSecret(ctx context.Context, secretName string, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (*corev1.Secret, error) {
@@ -613,39 +613,54 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	}
 	// #endregion
 
-	// #region find secret linked to DBClaim: sourceSecret
-	sourceSecret, err := r.getSourceSecret(ctx, sourceDbClaim.Spec.SecretName, dbRoleClaim, log)
+	dbcBaseConfig, err := r.setDbClaimReqInfo(sourceDbClaim)
 	if err != nil {
 		return err
 	}
-	// #endregion find secret
-
-	//get db conn details
-	existingDBConnInfo := &v1.DatabaseClaimConnectionInfo{
-		Host:         string(sourceSecret.Data["host"]),
-		Port:         string(sourceSecret.Data["port"]),
-		DatabaseName: string(sourceSecret.Data["database"]),
-		Username:     string(sourceSecret.Data["username"]),
-		Password:     string(sourceSecret.Data["password"]),
-		SSLMode:      string(sourceSecret.Data["sslmode"]),
+	masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig)
+	if err != nil {
+		log.Error(err, "reading resource secret")
+		return errors.New("reading resource secret")
 	}
 
+	log.V(DebugLevel).Info("Full URI DELETE EXTERNAL RES: " + masterUserDBConnInfo.Uri())
+
 	// get client to DB
-	dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, log)
+	dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, log)
 	if err != nil {
 		log.Error(err, "creating database client error.")
 		return err
 	}
 	defer dbClient.Close()
 
+	if r.Config.Viper.GetBool("supportSuperUserElevation") {
+		dbcBaseConfig.EnableSuperUser = *sourceDbClaim.Spec.EnableSuperUser
+	}
+
+	log.Info("######## CALL enabling superuser to [" + masterUserDBConnInfo.Username + "] user ########")
+	//enable super user to be able to reassign objects before deleting users below
+	if err = dbClient.ManageSuperUserRole(masterUserDBConnInfo.Username, true); err != nil {
+		log.Error(err, "enabling superuser for root user")
+		return err
+	}
+
+	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixA)
 	//delete users linked to this DBRoleClaim
-	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, existingDBConnInfo.Username); err != nil {
+	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixA, masterUserDBConnInfo.Username); err != nil {
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixA)
 		return err
 	}
 
-	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, existingDBConnInfo.Username); err != nil {
+	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixB)
+	if err = dbClient.DeleteUser(dbRoleClaim.Name+"_user"+dbuser.SuffixB, masterUserDBConnInfo.Username); err != nil {
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
+		return err
+	}
+
+	log.Info("########CALL disabling superuser to [" + masterUserDBConnInfo.Username + "] user ########")
+	//revert superuser if that's the case
+	if err = dbClient.ManageSuperUserRole(masterUserDBConnInfo.Username, dbcBaseConfig.EnableSuperUser); err != nil {
+		log.Error(err, "disabling superuser for root user")
 		return err
 	}
 

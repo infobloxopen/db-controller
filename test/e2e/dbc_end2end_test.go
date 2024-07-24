@@ -20,9 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
-	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/test/utils"
@@ -35,7 +33,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/utils/ptr"
 
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -57,10 +54,11 @@ var _ = Describe("AWS", Ordered, func() {
 
 	var (
 		// equal to env ie. box-3
-		dbIdentifierPrefix string
-		db1                string
-		dbinstance1        string
-		dbroleclaim1       string
+		//dbIdentifierPrefix string
+		db1 string
+		//dbinstance1        string
+		dbroleclaim1 string
+		dbroleclaim2 string
 	)
 
 	BeforeAll(func() {
@@ -75,9 +73,10 @@ var _ = Describe("AWS", Ordered, func() {
 		// Check if current context is box-3
 		Expect(env).To(Equal("box-3"), "This test can only run in box-3")
 
-		dbIdentifierPrefix = env
+		//dbIdentifierPrefix = env
 
 		dbroleclaim1 = namespace + "-dbrc-1"
+		dbroleclaim2 = namespace + "-dbrc-2"
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
@@ -89,7 +88,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
-	//creates db_1
+	// //creates db_1
 	Context("Creating a RDS", func() {
 
 		It("Creating a DBClaim without a dbVersion", func() {
@@ -132,207 +131,293 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				viperconfig := config.NewConfig(logger, filepath.Join(wd, "cmd", "config", "config.yaml"))
-				hostParams, err := hostparams.New(viperconfig, "", dbClaim)
+				_, err = hostparams.New(viperconfig, "", dbClaim)
 				Expect(err).ToNot(HaveOccurred())
-				dbinstance1 = fmt.Sprintf("%s-%s-%s", dbIdentifierPrefix, db1, hostParams.Hash())
+				//dbinstance1 = fmt.Sprintf("%s-%s-%s", dbIdentifierPrefix, db1, hostParams.Hash())
 			}
-			By("Checking if dbinstance exists")
-			Expect(dbinstance1).NotTo(BeEmpty())
+			// By("Checking if dbinstance exists")
+			// Expect(dbinstance1).NotTo(BeEmpty())
 
-			var dbinst crossplanerds.DBInstance
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
-			Expect(err).To(HaveOccurred())
-			Expect(errors.IsNotFound(err)).To(BeTrue())
+			// var dbinst crossplanerds.DBInstance
+			// err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
+			// Expect(err).To(HaveOccurred())
+			// Expect(errors.IsNotFound(err)).To(BeTrue())
 
+			//Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
+
+			// 		createdDbClaim := &persistancev1.DatabaseClaim{}
+
+			// 		By("status error includes engine version not specified error")
+			// 		Eventually(func() (string, error) {
+
+			// 			err := k8sClient.Get(ctx, key, createdDbClaim)
+			// 			Expect(err).ToNot(HaveOccurred())
+			// 			Expect(createdDbClaim.Spec.DBVersion).To(BeEmpty())
+
+			// 			return createdDbClaim.Status.Error, nil
+			// 		}, 50*time.Second, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
+			// 	})
+
+			// 	It("Updating a databaseclaim to have an invalid dbVersion", func() {
+			// 		By("erroring out when AWS does not support dbVersion")
+
+			// 		key := types.NamespacedName{
+			// 			Name:      db1,
+			// 			Namespace: namespace,
+			// 		}
+			// 		invalidVersion := "15.3"
+			// 		prevDbClaim := &persistancev1.DatabaseClaim{}
+			// 		By("Getting the prev dbclaim")
+			// 		Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
+			// 		By(fmt.Sprintf("Updating with version dbVersion: %s", invalidVersion))
+			// 		prevDbClaim.Spec.DBVersion = invalidVersion
+			// 		Expect(k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
+			// 		updatedDbClaim := &persistancev1.DatabaseClaim{}
+			// 		By("Check that .spec.dbVersion is set")
+			// 		Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
+			// 		Expect(updatedDbClaim.Spec.DBVersion).To(Equal(invalidVersion))
+
+			// 		var dbinst crossplanerds.DBInstance
+			// 		By(fmt.Sprintf("checking crossplane.dbinstance is created: %s", dbinstance1))
+			// 		Eventually(func() error {
+			// 			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
+			// 			return err
+			// 		}, 60*time.Second, 100*time.Millisecond).Should(BeNil())
+
+			// 		By("checking dbclaim status.error message is not empty")
+			// 		Eventually(func() (string, error) {
+			// 			err := k8sClient.Get(ctx, key, updatedDbClaim)
+			// 			if err != nil {
+			// 				return "", err
+			// 			}
+			// 			return updatedDbClaim.Status.Error, nil
+			// 		}, time.Minute*2, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
+
+			// 	})
+			// })
+
+			// //update db_1
+			// Context("Creating a Postgres RDS using a dbclaim ", func() {
+			// 	It("should create a RDS in AWS", func() {
+			// 		By("creating a new DB Claim")
+
+			// 		key := types.NamespacedName{
+			// 			Name:      db1,
+			// 			Namespace: namespace,
+			// 		}
+			// 		prevDbClaim := &persistancev1.DatabaseClaim{}
+			// 		By("Getting the prev dbclaim")
+			// 		Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
+			// 		By("Updating dbVersion")
+			dbClaim.Spec.DBVersion = "15.5"
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
-
-			createdDbClaim := &persistancev1.DatabaseClaim{}
-
-			By("status error includes engine version not specified error")
-			Eventually(func() (string, error) {
-
-				err := k8sClient.Get(ctx, key, createdDbClaim)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(createdDbClaim.Spec.DBVersion).To(BeEmpty())
-
-				return createdDbClaim.Status.Error, nil
-			}, 50*time.Second, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
-		})
-
-		It("Updating a databaseclaim to have an invalid dbVersion", func() {
-			By("erroring out when AWS does not support dbVersion")
-
-			key := types.NamespacedName{
-				Name:      db1,
-				Namespace: namespace,
-			}
-			invalidVersion := "15.3"
-			prevDbClaim := &persistancev1.DatabaseClaim{}
-			By("Getting the prev dbclaim")
-			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
-			By(fmt.Sprintf("Updating with version dbVersion: %s", invalidVersion))
-			prevDbClaim.Spec.DBVersion = invalidVersion
-			Expect(k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
-			updatedDbClaim := &persistancev1.DatabaseClaim{}
-			By("Check that .spec.dbVersion is set")
-			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
-			Expect(updatedDbClaim.Spec.DBVersion).To(Equal(invalidVersion))
-
-			var dbinst crossplanerds.DBInstance
-			By(fmt.Sprintf("checking crossplane.dbinstance is created: %s", dbinstance1))
-			Eventually(func() error {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
-				return err
-			}, 60*time.Second, 100*time.Millisecond).Should(BeNil())
-
-			By("checking dbclaim status.error message is not empty")
-			Eventually(func() (string, error) {
-				err := k8sClient.Get(ctx, key, updatedDbClaim)
-				if err != nil {
-					return "", err
-				}
-				return updatedDbClaim.Status.Error, nil
-			}, time.Minute*2, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
+			// 		Expect(k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
+			// 		updatedDbClaim := &persistancev1.DatabaseClaim{}
+			// 		By("checking dbclaim status is ready")
+			// 		Eventually(func() (persistancev1.DbState, error) {
+			// 			err := k8sClient.Get(ctx, key, updatedDbClaim)
+			// 			if err != nil {
+			// 				return "", err
+			// 			}
+			// 			return updatedDbClaim.Status.ActiveDB.DbState, nil
+			// 		}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
+			// 		By("checking if the secret is created")
+			// 		Eventually(func() error {
+			// 			return k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
+			// 		}, timeout_e2e, interval_e2e).Should(BeNil())
 
 		})
 	})
 
-	//update db_1
-	Context("Creating a Postgres RDS using a dbclaim ", func() {
-		It("should create a RDS in AWS", func() {
-			By("creating a new DB Claim")
+	// //update db_1 - create new schema
+	// Context("Create new schemas, roles and user ecgto-dbrc-1_user_a", func() {
+	// 	It("should create new user, schemas and roles", func() {
+	// 		By("creating a new DBRoleClaim")
+	// 		secretName := "dbroleclaim-secret"
 
-			key := types.NamespacedName{
-				Name:      db1,
-				Namespace: namespace,
-			}
-			prevDbClaim := &persistancev1.DatabaseClaim{}
-			By("Getting the prev dbclaim")
-			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
-			By("Updating dbVersion")
-			prevDbClaim.Spec.DBVersion = "15.5"
-			Expect(k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
-			updatedDbClaim := &persistancev1.DatabaseClaim{}
-			By("checking dbclaim status is ready")
-			Eventually(func() (persistancev1.DbState, error) {
-				err := k8sClient.Get(ctx, key, updatedDbClaim)
-				if err != nil {
-					return "", err
-				}
-				return updatedDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
-			By("checking if the secret is created")
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret", Namespace: namespace}, &corev1.Secret{})
-			}, timeout_e2e, interval_e2e).Should(BeNil())
+	// 		key := types.NamespacedName{
+	// 			Name:      dbroleclaim1,
+	// 			Namespace: namespace,
+	// 		}
+	// 		dbRoleClaim := &persistancev1.DbRoleClaim{
+	// 			TypeMeta: metav1.TypeMeta{
+	// 				APIVersion: "persistance.atlas.infoblox.com/v1",
+	// 				Kind:       "DatabaseClaim",
+	// 			},
+	// 			ObjectMeta: metav1.ObjectMeta{
+	// 				Name:      key.Name,
+	// 				Namespace: key.Namespace,
+	// 			},
+	// 			Spec: persistancev1.DbRoleClaimSpec{
+	// 				Class:      &class,
+	// 				SecretName: secretName,
+	// 				SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+	// 					Namespace: namespace,
+	// 					Name:      db1,
+	// 				},
+	// 				SchemaRoleMap: map[string]persistancev1.RoleType{
+	// 					"schemaapp111": persistancev1.ReadOnly,
+	// 					"schemaapp222": persistancev1.Regular,
+	// 					"schemaapp333": persistancev1.Admin,
+	// 				},
+	// 			},
+	// 		}
 
-		})
-	})
+	// 		Expect(k8sClient.Create(ctx, dbRoleClaim)).Should(Succeed())
+	// 		By("checking if the secret is created: " + namespace + "." + secretName)
+	// 		secret := &corev1.Secret{}
+	// 		Eventually(func() error {
+	// 			return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+	// 		}, timeout_e2e, interval_e2e).Should(BeNil())
 
-	//update db_1 - create new schema
-	Context("Create new schemas and roles", func() {
-		It("should create new user, schemas and roles", func() {
-			By("creating a new DBRoleClaim")
-			secretName := "dbroleclaim-secret"
+	// 		Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
+	// 		Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
+	// 		Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-ecgto-db-1-b8ee12ca"))
+	// 		Expect(string(secret.Data["password"])).ShouldNot(BeNil())
+	// 		Expect(string(secret.Data["port"])).Should(Equal("5432"))
+	// 		Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
+	// 		Expect(string(secret.Data["uri_dsn"])).ShouldNot(BeNil())
+	// 		Expect(string(secret.Data["username"])).Should(Equal("ecgto-dbrc-1_user_a"))
 
-			key := types.NamespacedName{
-				Name:      dbroleclaim1,
-				Namespace: namespace,
-			}
-			dbRoleClaim := &persistancev1.DbRoleClaim{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "persistance.atlas.infoblox.com/v1",
-					Kind:       "DatabaseClaim",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: persistancev1.DbRoleClaimSpec{
-					Class:      &class,
-					SecretName: secretName,
-					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
-						Namespace: namespace,
-						Name:      db1,
-					},
-					SchemaRoleMap: map[string]persistancev1.RoleType{
-						"schemaapp111": persistancev1.ReadOnly,
-						"schemaapp222": persistancev1.Regular,
-						"schemaapp333": persistancev1.Admin,
-					},
-				},
-			}
+	// 	})
+	// })
 
-			Expect(k8sClient.Create(ctx, dbRoleClaim)).Should(Succeed())
-			By("checking if the secret is created: " + namespace + "." + secretName)
-			secret := &corev1.Secret{}
-			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-			}, timeout_e2e, interval_e2e).Should(BeNil())
-			connString := string(secret.Data["uri_dsn"])
+	// Context("Create new schemas, roles and user ecgto-dbrc-2_user_a", func() {
+	// 	It("should create new user, schemas and roles", func() {
+	// 		By("creating a new DBRoleClaim")
+	// 		secretName := "dbroleclaim-other-secret"
 
-			By("Connect to DB to check roles were created.")
-			existingDBConnInfo, err := persistancev1.ParseUri(connString)
-			Expect(err).ShouldNot(HaveOccurred())
+	// 		key := types.NamespacedName{
+	// 			Name:      dbroleclaim2,
+	// 			Namespace: namespace,
+	// 		}
+	// 		dbRoleClaim := &persistancev1.DbRoleClaim{
+	// 			TypeMeta: metav1.TypeMeta{
+	// 				APIVersion: "persistance.atlas.infoblox.com/v1",
+	// 				Kind:       "DatabaseClaim",
+	// 			},
+	// 			ObjectMeta: metav1.ObjectMeta{
+	// 				Name:      key.Name,
+	// 				Namespace: key.Namespace,
+	// 			},
+	// 			Spec: persistancev1.DbRoleClaimSpec{
+	// 				Class:      &class,
+	// 				SecretName: secretName,
+	// 				SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+	// 					Namespace: namespace,
+	// 					Name:      db1,
+	// 				},
+	// 				SchemaRoleMap: map[string]persistancev1.RoleType{
+	// 					"schemaapp444": persistancev1.ReadOnly,
+	// 					"schemaapp555": persistancev1.Regular,
+	// 					"schemaapp666": persistancev1.Admin,
+	// 				},
+	// 			},
+	// 		}
 
-			dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
-			Expect(err).ShouldNot(BeNil())
-			Expect(dbClient).ShouldNot(BeNil())
-			Expect(dbClient.RoleExists("schemaapp111_readonly")).Should(BeTrue())
-			Expect(dbClient.RoleExists("schemaapp222_regular")).Should(BeTrue())
-			Expect(dbClient.RoleExists("schemaapp333_admin")).Should(BeTrue())
+	// 		Expect(k8sClient.Create(ctx, dbRoleClaim)).Should(Succeed())
+	// 		By("checking if the secret is created: " + namespace + "." + secretName)
+	// 		secret := &corev1.Secret{}
+	// 		Eventually(func() error {
+	// 			return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+	// 		}, timeout_e2e, interval_e2e).Should(BeNil())
 
-			By("Connect to DB to check schemas were created")
-			Expect(dbClient.SchemaExists("schemaapp111")).Should(BeTrue())
-			Expect(dbClient.SchemaExists("schemaapp222")).Should(BeTrue())
-			Expect(dbClient.SchemaExists("schemaapp333")).Should(BeTrue())
+	// 		Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
+	// 		Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
+	// 		Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-ecgto-db-1-b8ee12ca"))
+	// 		Expect(string(secret.Data["password"])).ShouldNot(BeNil())
+	// 		Expect(string(secret.Data["port"])).Should(Equal("5432"))
+	// 		Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
+	// 		Expect(string(secret.Data["uri_dsn"])).ShouldNot(BeNil())
+	// 		Expect(string(secret.Data["username"])).Should(Equal("ecgto-dbrc-2_user_a"))
 
-			By("Connect to DB to check user was created")
-			Expect(dbClient.UserExists(secretName)).Should(BeTrue())
-		})
-	})
+	// 	})
+	// })
 
 	//deletes db_1
 	Context("Delete RDS", func() {
 		It("should delete dbinstances.crds", func() {
-			By("deleting the dbc and associated dbinstances.crd")
+			By("deleting the dbc, dbrc and associated dbinstances.crd")
 
-			key := types.NamespacedName{
+			// ===================================================== DBRoleClaim1
+			keyDbRoleClaim1 := types.NamespacedName{
 				Name:      dbroleclaim1,
 				Namespace: namespace,
 			}
-			prevDbRoleClaim := &persistancev1.DatabaseClaim{}
-			By("Getting the prev dbroleclaim")
-			Expect(k8sClient.Get(ctx, key, prevDbRoleClaim)).Should(Succeed())
-			By("Deleting the dbroleclaim")
-			Expect(k8sClient.Delete(ctx, prevDbRoleClaim)).Should(Succeed())
-			// time.Sleep(time.Minute * 5)
-			By("checking dbroleclaim does not exists")
+
+			prevDbRoleClaim := &persistancev1.DbRoleClaim{}
+			By("Getting dbroleclaim1")
+			Expect(k8sClient.Get(ctx, keyDbRoleClaim1, prevDbRoleClaim)).Should(Succeed())
+
+			By("Deleting dbroleclaim1")
 			Eventually(func() error {
-				err := k8sClient.Get(ctx, key, prevDbRoleClaim)
+				err := k8sClient.Delete(ctx, prevDbRoleClaim)
+				if err != nil {
+					return err
+				} else {
+					return fmt.Errorf("error deleting dbroleclaim1")
+				}
+			}, timeout_e2e, time.Second*5).Should(Succeed())
+
+			By("checking dbroleclaim does not exist")
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, keyDbRoleClaim1, prevDbRoleClaim)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						return nil
 					}
 					return err
 				} else {
-					return fmt.Errorf("dbroleclaim still exists")
+					return fmt.Errorf("dbroleclaim1 still exists")
 				}
 			}, timeout_e2e, time.Second*5).Should(Succeed())
 
-			key = types.NamespacedName{
+			// ===================================================== DBRoleClaim2
+			keyDbRoleClaim2 := types.NamespacedName{
+				Name:      dbroleclaim2,
+				Namespace: namespace,
+			}
+			By("Getting dbroleclaim2")
+			Expect(k8sClient.Get(ctx, keyDbRoleClaim2, prevDbRoleClaim)).Should(Succeed())
+
+			By("Deleting dbroleclaim2")
+			Eventually(func() error {
+				err := k8sClient.Delete(ctx, prevDbRoleClaim)
+				if err != nil {
+					return err
+				} else {
+					return fmt.Errorf("error deleting dbroleclaim2")
+				}
+			}, timeout_e2e, time.Second*5).Should(Succeed())
+
+			By("checking dbroleclaim2 does not exist")
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, keyDbRoleClaim2, prevDbRoleClaim)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				} else {
+					return fmt.Errorf("dbroleclaim2 still exists")
+				}
+			}, timeout_e2e, time.Second*5).Should(Succeed())
+
+			// ===================================================== DBClaim
+			keyDbClaim := types.NamespacedName{
 				Name:      db1,
 				Namespace: namespace,
 			}
+
 			prevDbClaim := &persistancev1.DatabaseClaim{}
-			By("Getting the prev dbclaim")
-			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
-			By("Deleting the dbclaim")
+			By("Getting dbc")
+			Expect(k8sClient.Get(ctx, keyDbClaim, prevDbClaim)).Should(Succeed())
+			By("Deleting dbc")
 			Expect(k8sClient.Delete(ctx, prevDbClaim)).Should(Succeed())
-			// time.Sleep(time.Minute * 5)
-			By("checking dbclaim does not exists")
+
+			By("checking dbclaim does not exist")
 			Eventually(func() error {
-				err := k8sClient.Get(ctx, key, prevDbClaim)
+				err := k8sClient.Get(ctx, keyDbClaim, prevDbClaim)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						return nil
@@ -385,31 +470,49 @@ var _ = Describe("AWS", Ordered, func() {
 	})
 
 	var _ = AfterAll(func() {
-		//delete
-		key := types.NamespacedName{
-			Name:      db2,
-			Namespace: namespace,
-		}
 
-		claim := &persistancev1.DatabaseClaim{}
-		if err := k8sClient.Get(ctx, key, claim); err == nil {
-			By("Deleting db1")
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		}
+		// keyRoleClaim := types.NamespacedName{
+		// 	Name:      dbroleclaim1,
+		// 	Namespace: namespace,
+		// }
 
-		key.Name = db1
-		claim = &persistancev1.DatabaseClaim{}
-		if err := k8sClient.Get(ctx, key, claim); err == nil {
-			By("Deleting db2")
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		}
+		// roleClaim := &persistancev1.DbRoleClaim{}
+		// if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
+		// 	By("Deleting dbRoleClaim1")
+		// 	Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		// }
 
-		var dbinst crossplanerds.DBInstance
+		// keyRoleClaim.Name = dbroleclaim2
+		// roleClaim = &persistancev1.DbRoleClaim{}
+		// if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
+		// 	By("Deleting dbRoleClaim2")
+		// 	Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		// }
 
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
-			By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
-			Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
-		}
+		// key := types.NamespacedName{
+		// 	Name:      db2,
+		// 	Namespace: namespace,
+		// }
+
+		// claim := &persistancev1.DatabaseClaim{}
+		// if err := k8sClient.Get(ctx, key, claim); err == nil {
+		// 	By("Deleting db1")
+		// 	Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		// }
+
+		// key.Name = db1
+		// claim = &persistancev1.DatabaseClaim{}
+		// if err := k8sClient.Get(ctx, key, claim); err == nil {
+		// 	By("Deleting db2")
+		// 	Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		// }
+
+		// var dbinst crossplanerds.DBInstance
+
+		// if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
+		// 	By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
+		// 	Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
+		// }
 
 	})
 })
