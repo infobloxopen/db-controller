@@ -268,7 +268,7 @@ var _ = Describe("AWS", Ordered, func() {
 			secret := &corev1.Secret{}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-			}, timeout_e2e, interval_e2e).Should(BeNil())
+			}, timeout_e2e, time.Second*5).Should(BeNil())
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
@@ -320,7 +320,7 @@ var _ = Describe("AWS", Ordered, func() {
 			secret := &corev1.Secret{}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-			}, timeout_e2e, interval_e2e).Should(BeNil())
+			}, timeout_e2e, time.Second*5).Should(BeNil())
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
@@ -355,11 +355,11 @@ var _ = Describe("AWS", Ordered, func() {
 				if err != nil {
 					return err
 				} else {
-					return fmt.Errorf("error deleting dbroleclaim1")
+					return nil
 				}
 			}, timeout_e2e, time.Second*5).Should(Succeed())
 
-			By("checking dbroleclaim does not exist")
+			By("checking dbroleclaim1 does not exist")
 			Eventually(func() error {
 				err := k8sClient.Get(ctx, keyDbRoleClaim1, prevDbRoleClaim)
 				if err != nil {
@@ -386,7 +386,7 @@ var _ = Describe("AWS", Ordered, func() {
 				if err != nil {
 					return err
 				} else {
-					return fmt.Errorf("error deleting dbroleclaim2")
+					return nil
 				}
 			}, timeout_e2e, time.Second*5).Should(Succeed())
 
