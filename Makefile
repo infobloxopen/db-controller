@@ -72,7 +72,7 @@ test-e2e: NS?=$(shell cat .id)
 test-e2e: ENV?=$(shell cat .env)
 test-e2e: .id .env
 test-e2e:
-	NAMESPACE=$(NS) ENV=$(ENV) go test ./test/e2e/ -v -ginkgo.v --ginkgo.timeout=24h
+	NAMESPACE=$(NS) ENV=$(ENV) go test ./test/e2e/ -v -ginkgo.v --ginkgo.timeout=24h -timeout=1h
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
