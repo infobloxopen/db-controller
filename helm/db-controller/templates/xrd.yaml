@@ -1,0 +1,60 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xnetworkrecords.persistance.infoblox.com
+spec:
+  group: persistance.infoblox.com
+  names:
+    kind: XNetworkRecord
+    plural: xnetworkrecords
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            status:
+              type: object
+              properties:
+                address:
+                  type: string
+                addressID:
+                  type: string
+                managedZoneRef:
+                  type: string
+            spec:
+              type: object
+              properties:
+                parameters:
+                  type: object
+                  required:
+                    - network
+                    - pscDNSName
+                    - region
+                    - subnetwork
+                    - serviceAttachmentLink
+                  properties:
+                    network:
+                      description: 'Network is the VPC network to provision IP addresses for PSC
+                        ie. projects/gcp-eng-ddiaas-dev/global/networks/alloydb-psc-network
+                      '
+                      type: string
+                    pscDNSName:
+                      description: 'PSCDNSName is the DNS name of the PSC
+                        ie. 30f6af49-74c7-4058-9b00-8a29cff777c9.3f031303-8e9c-4941-8b77-1aafad235014.us-east1.alloydb-psc.goog.'
+                      type: string
+                    region:
+                      description: 'Region is the region of the PSC
+                        ie. us-east1'
+                      type: string
+                    serviceAttachmentLink:
+                      description: 'ServiceAttachmentLink is the URL of the service attachment
+                        ie. https://www.googleapis.com/compute/v1/projects/gcp-eng-ddiaas-dev/regions/us-east1/serviceAttachments/alloydb-psc-network-sx9s5'
+                      type: string
+                    subnetwork:
+                      description: 'Subnetwork is the subnet to provision IP addresses for PSC
+                        ie. projects/gcp-eng-ddiaas-dev/regions/us-east1/subnetworks/private-service-connect'
+                      type: string
+---
