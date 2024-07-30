@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	PGDump              = "pg_dump"
-	PGDumpOpts          = []string{}
+	PGDump              = "pg_dumpall"
+	PGDumpOpts          = []string{"--globals-only"}
 	PGDumpDefaultFormat = "p"
 )
 

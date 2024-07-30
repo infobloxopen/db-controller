@@ -565,13 +565,14 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 		logr.Info("migrate to new  db reconcile started")
 		//check if existingDB has been already reconciled, else reconcileUseExisitngDB
 		existing_db_conn, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
+		logr.V(DebugLevel).Info("DSN", "M_MigrateExistingToNewDB", dbClaim.Spec.SourceDataFrom.Database.DSN)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
 		if (dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName != existing_db_conn.DatabaseName) ||
 			(dbClaim.Status.ActiveDB.ConnectionInfo.Host != existing_db_conn.Host) {
 
-			logr.Info("existing db was not reconciled, calling reconcileUseExisitngDB before reconcileUseExisitngDB")
+			logr.Info("existing db was not reconciled, calling reconcileUseExistingDB before reconcileUseExistingDB")
 
 			err := r.reconcileUseExistingDB(ctx, dbClaim)
 			if err != nil {
@@ -2726,7 +2727,7 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 			"sslmode":        []byte(connInfo.SSLMode),
 		},
 	}
-	logr.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
+	logr.Info("creating connection info SECRET: "+secret.Name, "secret", secret.Name, "namespace", secret.Namespace)
 
 	return r.Client.Create(ctx, secret)
 }
@@ -2735,7 +2736,6 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 
 	logr := log.FromContext(ctx)
 
-	// FIXME: move this to validation logic
 	if dsnName == "" {
 		dsnName = "dsn.txt"
 	}
@@ -2748,7 +2748,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	exSecret.Data["username"] = []byte(connInfo.Username)
 	exSecret.Data["password"] = []byte(connInfo.Password)
 	exSecret.Data["sslmode"] = []byte(connInfo.SSLMode)
-	logr.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
+	logr.Info("updating connection info SECRET: "+exSecret.Name, "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
 }
