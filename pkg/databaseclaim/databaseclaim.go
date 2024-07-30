@@ -811,7 +811,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 
 	migrationState := dbClaim.Status.MigrationState
 
-	logr.Info("Migration is progress", "state", migrationState)
+	logr.Info("Migration in progress", "state", migrationState)
 
 	logr.Info("cloud instance ready. reading generated master secret")
 	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
