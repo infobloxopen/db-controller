@@ -1,0 +1,62 @@
+# apiVersion: v1
+# stringData:
+#   example-key: 6\Bnn0Ur?V|m4x<L
+# kind: Secret
+# metadata:
+#   name: example-secret
+# type: Opaque
+---
+apiVersion: alloydb.gcp.upbound.io/v1beta2
+kind: Cluster
+metadata:
+  annotations:
+    meta.upbound.io/example-id: alloydb/v1beta1/instance
+  labels:
+    testing.upbound.io/example-name: alloydb-test
+  name: alloydb-test
+spec:
+  providerConfigRef:
+    name: dwells
+  writeConnectionSecretToRef:
+    name: alloydb-creds-cluster
+    namespace: dwells
+  # Doesn't appear to work
+  # publishConnectionDetailsTo:
+  #   name: publish-alloydb-creds-cluster
+  forProvider:
+    # initialUser:
+    #   passwordSecretRef:
+    #     key: example-key
+    #     name: example-secret
+    #     namespace: dwells
+    location: us-central1
+    network: "projects/gcp-eng-shared-services-prod/global/networks/shared-services-prod-vpc"
+    networkConfig:
+      allocatedIpRange: alloydb-private-services
+      network: "projects/gcp-eng-shared-services-prod/global/networks/shared-services-prod-vpc"
+---
+apiVersion: alloydb.gcp.upbound.io/v1beta2
+kind: Instance
+metadata:
+  annotations:
+    meta.upbound.io/example-id: alloydb/v1beta2/instance
+  labels:
+    testing.upbound.io/example-name: alloydb-test
+  name: alloydb-test
+spec:
+  providerConfigRef:
+    name: dwells
+  writeConnectionSecretToRef:
+    name: alloydb-creds-instance
+    namespace: dwells
+  forProvider:
+    clusterSelector:
+      matchLabels:
+        testing.upbound.io/example-name: alloydb-test
+    # How to set this to basic? https://cloud.google.com/alloydb/docs/overview?authuser=3#instances
+    instanceType: PRIMARY
+    machineConfig:
+      cpuCount: 2
+  # publishConnectionDetailsTo:
+  #   name: publish-alloydb-creds-instance
+---
