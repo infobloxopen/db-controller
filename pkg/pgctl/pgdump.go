@@ -105,7 +105,7 @@ func (x *Dump) dumpOptions() []string {
 	options := x.Options
 	var url, _ = pq.ParseURL(x.DsnUri)
 	fmt.Println("DSN URI: " + url)
-	options = append(options, url)
+	options = append(options, "-d "+url)
 
 	// if x.Format != nil {
 	// 	options = append(options, fmt.Sprintf(`-F%v`, *x.Format))
