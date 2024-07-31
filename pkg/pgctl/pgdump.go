@@ -102,13 +102,13 @@ func (x *Dump) newFileName() string {
 
 func (x *Dump) dumpOptions() []string {
 	options := x.Options
-	options = append(options, x.DsnUri)
+	options = append(options, "-d "+x.DsnUri)
 
-	if x.Format != nil {
-		options = append(options, fmt.Sprintf(`-F%v`, *x.Format))
-	} else {
-		options = append(options, fmt.Sprintf(`-F%v`, PGDumpDefaultFormat))
-	}
+	// if x.Format != nil {
+	// 	options = append(options, fmt.Sprintf(`-F%v`, *x.Format))
+	// } else {
+	// 	options = append(options, fmt.Sprintf(`-F%v`, PGDumpDefaultFormat))
+	// }
 	if x.Verbose {
 		options = append(options, "-v")
 	}
