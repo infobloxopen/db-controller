@@ -372,7 +372,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if permitted := isClassPermitted(r.Config.Class, *dbClaim.Spec.Class); !permitted {
 		logr.Info("ignoring this claim as this controller does not own this class", "spec", dbClaim.Spec, "controllerClass", r.Config.Class)
-		return ctrl.Result{Requeue: false}, nil
+		return ctrl.Result{RequeueAfter: time.Hour * 2}, nil
 	}
 
 	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
@@ -563,7 +563,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 	}
 	if r.mode == M_MigrateExistingToNewDB {
 		logr.Info("migrate to new  db reconcile started")
-		//check if existingDB has been already reconciled, else reconcileUseExisitngDB
+		//check if existingDB has been already reconciled, else reconcileUseExistingDB
 		existing_db_conn, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
 		logr.V(DebugLevel).Info("DSN", "M_MigrateExistingToNewDB", dbClaim.Spec.SourceDataFrom.Database.DSN)
 		if err != nil {
@@ -629,7 +629,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 }
 
 func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExisitngDB")
+	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExistingDB")
 
 	existingDBConnInfo, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
 	if err != nil {
