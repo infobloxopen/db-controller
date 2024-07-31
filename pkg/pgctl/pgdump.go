@@ -96,13 +96,16 @@ func (x *Dump) SetPath(path string) {
 }
 
 func (x *Dump) newFileName() string {
-	fmt.Println(pq.ParseURL(x.DsnUri))
+	var url, _ = pq.ParseURL(x.DsnUri)
+	fmt.Println("DSN URI: " + url)
 	return fmt.Sprintf(`%v_%v.sql`, "pub", time.Now().Unix())
 }
 
 func (x *Dump) dumpOptions() []string {
 	options := x.Options
-	options = append(options, "-d "+x.DsnUri)
+	var url, _ = pq.ParseURL(x.DsnUri)
+	fmt.Println("DSN URI: " + url)
+	options = append(options, "-d "+url)
 
 	// if x.Format != nil {
 	// 	options = append(options, fmt.Sprintf(`-F%v`, *x.Format))
