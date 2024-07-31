@@ -343,7 +343,8 @@ func (s *copy_schema_state) Execute() (State, error) {
 		"--no-subscriptions",
 		"--no-privileges",
 		"--no-owner",
-		"--exclude-schema=ib",
+		"--no-role-passwords",
+		//"--exclude-schema=ib",
 	})
 
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
