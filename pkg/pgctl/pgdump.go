@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	PGDump              = "pg_dumpall"
-	PGDumpOpts          = []string{"--globals-only"}
+	PGDump              = "pg_dump"
+	PGDumpOpts          = []string{}
 	PGDumpDefaultFormat = "p"
 )
 
@@ -105,13 +105,13 @@ func (x *Dump) dumpOptions() []string {
 	options := x.Options
 	var url, _ = pq.ParseURL(x.DsnUri)
 	fmt.Println("DSN URI: " + url)
-	options = append(options, "-d "+url)
+	options = append(options, x.DsnUri)
 
-	// if x.Format != nil {
-	// 	options = append(options, fmt.Sprintf(`-F%v`, *x.Format))
-	// } else {
-	// 	options = append(options, fmt.Sprintf(`-F%v`, PGDumpDefaultFormat))
-	// }
+	if x.Format != nil {
+		options = append(options, fmt.Sprintf(`-F%v`, *x.Format))
+	} else {
+		options = append(options, fmt.Sprintf(`-F%v`, PGDumpDefaultFormat))
+	}
 	if x.Verbose {
 		options = append(options, "-v")
 	}
