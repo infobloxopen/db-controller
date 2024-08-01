@@ -796,7 +796,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	if result.RequeueAfter > 0 {
 		return result, nil
 	}
-	//store a temp secret to beused by migration process
+	//store a temp secret to be used by migration process
 	//removing the practice of storing the secret in status
 	if r.Input.TempSecret != "" {
 		r.setTargetPasswordInTempSecret(ctx, r.Input.TempSecret, dbClaim)
@@ -805,8 +805,8 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	return r.reconcileMigrationInProgress(ctx, dbClaim)
 }
 
-func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context,
-	dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileMigrationInProgress")
 
 	migrationState := dbClaim.Status.MigrationState
@@ -897,6 +897,26 @@ loop:
 		switch next.Id() {
 		case pgctl.S_Completed:
 			logr.Info("completed migration")
+
+			dbRoleClaims := &v1.DbRoleClaimList{}
+			if err := r.Client.List(ctx, dbRoleClaims, client.InNamespace(dbClaim.Namespace)); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
+			logr.Info("copying dbroleclaims to new dbclaim")
+			for _, dbrc := range dbRoleClaims.Items {
+				dbrc.Name = dbrc.Name + "-" + dbClaim.Name
+				dbrc.Spec.SourceDatabaseClaim.Name = dbClaim.Name
+				dbrc.Status = v1.DbRoleClaimStatus{}
+				dbrc.ResourceVersion = ""
+				dbrc.Generation = 0
+
+				if err = r.Client.Create(ctx, &dbrc); err != nil {
+					logr.Error(err, "could not update db role claim")
+					return r.manageError(ctx, dbClaim, err)
+				}
+				logr.Info("dbroleclaim copied: " + dbrc.Name)
+			}
+
 			break loop
 
 		case pgctl.S_Retry:
