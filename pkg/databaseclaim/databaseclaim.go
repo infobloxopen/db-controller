@@ -898,6 +898,8 @@ loop:
 		case pgctl.S_Completed:
 			logr.Info("completed migration")
 
+			//PTEUDO1051: if migration was successfull, get the list of DBRoleClaims attached to the old DBClaim and recreate
+			// them pointing to the new DBClaim
 			dbRoleClaims := &v1.DbRoleClaimList{}
 			if err := r.Client.List(ctx, dbRoleClaims, client.InNamespace(dbClaim.Namespace)); err != nil {
 				return r.manageError(ctx, dbClaim, err)
