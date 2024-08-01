@@ -905,6 +905,7 @@ loop:
 			logr.Info("copying dbroleclaims to new dbclaim")
 			for _, dbrc := range dbRoleClaims.Items {
 				dbrc.Name = dbrc.Name + "-" + dbClaim.Name
+				dbrc.Spec.SecretName = dbrc.Spec.SecretName + "-" + dbClaim.Name
 				dbrc.Spec.SourceDatabaseClaim.Name = dbClaim.Name
 				dbrc.Status = v1.DbRoleClaimStatus{}
 				dbrc.ResourceVersion = ""
