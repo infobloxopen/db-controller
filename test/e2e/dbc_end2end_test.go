@@ -232,7 +232,7 @@ var _ = Describe("AWS", Ordered, func() {
 	})
 
 	//#region update db_1 - create new schema
-	Context("Create new schemas, roles and user ecgto-dbrc-1_user_a", func() {
+	Context("Create new schemas, roles and user <namespace>-dbrc-1_user_a", func() {
 		It("should create new user, schemas and roles", func() {
 			By("creating a new DBRoleClaim")
 			secretName := "dbroleclaim-secret"
@@ -274,19 +274,19 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-ecgto-db-1-b8ee12ca"))
+			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-b8ee12ca"))
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
 			Expect(string(secret.Data["uri_dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["username"])).Should(Equal("ecgto-dbrc-1_user_a"))
+			Expect(string(secret.Data["username"])).Should(Equal(namespace + "-dbrc-1_user_a"))
 
 		})
 	})
 	//#endregion
 
 	//#region update db_1 - create new schema
-	Context("Create new schemas, roles and user ecgto-dbrc-2_user_a", func() {
+	Context("Create new schemas, roles and user <namespace>-dbrc-2_user_a", func() {
 		It("should create new user, schemas and roles", func() {
 			By("creating a new DBRoleClaim")
 			secretName := "dbroleclaim-other-secret"
@@ -328,12 +328,12 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-ecgto-db-1-b8ee12ca"))
+			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-b8ee12ca"))
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
 			Expect(string(secret.Data["uri_dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["username"])).Should(Equal("ecgto-dbrc-2_user_a"))
+			Expect(string(secret.Data["username"])).Should(Equal(namespace + "-dbrc-2_user_a"))
 
 		})
 	})
