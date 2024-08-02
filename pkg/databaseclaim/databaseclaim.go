@@ -1325,7 +1325,7 @@ func (r *DatabaseClaimReconciler) canTagResources(ctx context.Context, dbClaim *
 	}
 
 	var dbClaimList v1.DatabaseClaimList
-	if err := r.Client.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+	if err := r.Client.List(ctx, &dbClaimList, client.MatchingFields{instanceLabelKey: dbClaim.Spec.InstanceLabel}); err != nil {
 		return false, err
 	}
 
@@ -1354,7 +1354,7 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 			} else {
 				// Check there is no other Claims that use this fragment
 				var dbClaimList v1.DatabaseClaimList
-				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLabelKey: dbClaim.Spec.InstanceLabel}); err != nil {
 					return err
 				}
 
@@ -1419,12 +1419,12 @@ func generateMasterPassword() (string, error) {
 }
 
 var (
-	instanceLableKey = ".spec.instanceLabel"
+	instanceLabelKey = ".spec.instanceLabel"
 )
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.DatabaseClaim{}, instanceLableKey, func(rawObj client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.DatabaseClaim{}, instanceLabelKey, func(rawObj client.Object) []string {
 		// grab the DatabaseClaim object, extract the InstanceLabel for index...
 		claim := rawObj.(*v1.DatabaseClaim)
 		return []string{claim.Spec.InstanceLabel}
