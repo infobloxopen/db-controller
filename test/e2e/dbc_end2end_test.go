@@ -577,22 +577,13 @@ var _ = Describe("AWS", Ordered, func() {
 
 	var _ = AfterAll(func() {
 
-		keyRoleClaim := types.NamespacedName{
-			Name:      dbroleclaim1,
-			Namespace: namespace,
+		//delete DBRoleClaims within this namespace
+		dbRoleClaims := &v1.DbRoleClaimList{}
+		if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
 		}
-
-		roleClaim := &persistancev1.DbRoleClaim{}
-		if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
-			By("Deleting dbRoleClaim1")
-			Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
-		}
-
-		keyRoleClaim.Name = dbroleclaim2
-		roleClaim = &persistancev1.DbRoleClaim{}
-		if err := k8sClient.Get(ctx, keyRoleClaim, roleClaim); err == nil {
-			By("Deleting dbRoleClaim2")
-			Expect(k8sClient.Delete(ctx, roleClaim)).Should(Succeed())
+		for _, dbrc := range dbRoleClaims.Items {
+			k8sClient.Delete(ctx, &dbrc)
 		}
 
 		key := types.NamespacedName{
@@ -603,21 +594,21 @@ var _ = Describe("AWS", Ordered, func() {
 		claim := &persistancev1.DatabaseClaim{}
 		if err := k8sClient.Get(ctx, key, claim); err == nil {
 			By("Deleting db1")
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+			k8sClient.Delete(ctx, claim)
 		}
 
 		key.Name = db1
 		claim = &persistancev1.DatabaseClaim{}
 		if err := k8sClient.Get(ctx, key, claim); err == nil {
 			By("Deleting db2")
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+			k8sClient.Delete(ctx, claim)
 		}
 
 		var dbinst crossplanerds.DBInstance
 
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst); err == nil {
 			By(fmt.Sprintf("Deleting crossplane.DBInstance: %s", dbinstance1))
-			Expect(k8sClient.Delete(ctx, &dbinst)).Should(Succeed())
+			k8sClient.Delete(ctx, &dbinst)
 		}
 
 		//delete master secret if it exists
