@@ -906,18 +906,27 @@ loop:
 			}
 			logr.Info("copying dbroleclaims to new dbclaim")
 			for _, dbrc := range dbRoleClaims.Items {
-				dbrc.Name = dbrc.Name + "-" + dbClaim.Name
-				dbrc.Spec.SecretName = dbrc.Spec.SecretName + "-" + dbClaim.Name
-				dbrc.Spec.SourceDatabaseClaim.Name = dbClaim.Name
-				dbrc.Status = v1.DbRoleClaimStatus{}
-				dbrc.ResourceVersion = ""
-				dbrc.Generation = 0
 
-				if err = r.Client.Create(ctx, &dbrc); err != nil {
-					logr.Error(err, "could not update db role claim")
-					return r.manageError(ctx, dbClaim, err)
+				err = r.Client.Get(ctx, client.ObjectKey{
+					Name:      dbrc.Name + "-" + dbClaim.Name,
+					Namespace: dbrc.Namespace,
+				}, &v1.DbRoleClaim{})
+				if errors.IsNotFound(err) {
+					dbrc.Name = dbrc.Name + "-" + dbClaim.Name
+					dbrc.Spec.SecretName = dbrc.Spec.SecretName + "-" + dbClaim.Name
+					dbrc.Spec.SourceDatabaseClaim.Name = dbClaim.Name
+					dbrc.Status = v1.DbRoleClaimStatus{}
+					dbrc.ResourceVersion = ""
+					dbrc.Generation = 0
+
+					if err = r.Client.Create(ctx, &dbrc); err != nil {
+						logr.Error(err, "could not update db role claim")
+						return r.manageError(ctx, dbClaim, err)
+					}
+					logr.Info("dbroleclaim copied: " + dbrc.Name)
+				} else {
+					logr.Info("dbroleclaim [" + dbrc.Name + "] already exists.")
 				}
-				logr.Info("dbroleclaim copied: " + dbrc.Name)
 			}
 
 			break loop

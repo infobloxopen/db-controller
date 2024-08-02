@@ -587,6 +587,8 @@ var _ = Describe("AWS", Ordered, func() {
 				}
 				return string(secret.Data["hostname"]), nil
 			}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
+
+			//TODO: check if the new RoleClaims were created.
 		})
 	})
 
