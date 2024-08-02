@@ -1,0 +1,32 @@
+name: Test
+
+on: pull_request
+
+env:
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Setup Go
+      uses: actions/setup-go@v4
+    - name: Setup PostgreSQL
+      uses: tj-actions/install-postgresql@v3
+      with:
+        postgresql-version: 16
+    - name: Test
+      env:
+        REGISTRY: ghcr.io/${{ github.repository_owner }}
+        BUILDKIT_PROGRESS: plain
+      run: |
+        echo 'db-controller-namespace' > .id
+        psql --version
+        make test

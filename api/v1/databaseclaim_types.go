@@ -46,11 +46,6 @@ const (
 
 type SourceDataType string
 
-const (
-	DatabaseSource SourceDataType = "database"
-	S3Source       SourceDataType = "s3"
-)
-
 type DeletionPolicy string
 
 const (
@@ -69,10 +64,6 @@ type SourceDataFrom struct {
 	// Database defines the connection information to an existing db
 	// +optional
 	Database *Database `json:"database,omitempty"`
-
-	// S3 defines the location of a DB backup in an S3 bucket
-	// +optional
-	S3 *S3BackupConfiguration `json:"s3,omitempty"`
 }
 
 // S3BackupConfiguration defines the details of the S3 backup to restore from.
