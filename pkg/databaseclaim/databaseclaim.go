@@ -906,6 +906,9 @@ loop:
 			}
 			logr.Info("copying dbroleclaims to new dbclaim")
 			for _, dbrc := range dbRoleClaims.Items {
+				if strings.HasSuffix(dbrc.Name, "-"+dbClaim.Name) {
+					continue
+				}
 
 				err = r.Client.Get(ctx, client.ObjectKey{
 					Name:      dbrc.Name + "-" + dbClaim.Name,
