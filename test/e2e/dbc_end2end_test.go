@@ -20,6 +20,7 @@ import (
 	"time"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -279,7 +280,7 @@ var _ = Describe("AWS", Ordered, func() {
 	})
 	//#endregion
 
-	//#region update db_1
+	//#region update db_1 - create new schema
 	Context("Create new schemas, roles and user ecgto-dbrc-2_user_a", func() {
 		It("should create new user, schemas and roles", func() {
 			By("creating a new DBRoleClaim")
@@ -588,7 +589,15 @@ var _ = Describe("AWS", Ordered, func() {
 				return string(secret.Data["hostname"]), nil
 			}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
 
-			//TODO: check if the new RoleClaims were created.
+			By("checking if the existing DBRoleClaim1 was copied to the new DB")
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: dbroleclaim1 + "-" + db2Claim.Name, Namespace: namespace}, &v1.DbRoleClaim{})
+			}, timeout_e2e, time.Second*5).Should(BeNil())
+
+			By("checking if the existing DBRoleClaim2 was copied to the new DB")
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: dbroleclaim2 + "-" + db2Claim.Name, Namespace: namespace}, &v1.DbRoleClaim{})
+			}, timeout_e2e, time.Second*5).Should(BeNil())
 		})
 	})
 

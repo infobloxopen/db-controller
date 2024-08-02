@@ -911,6 +911,7 @@ loop:
 					Name:      dbrc.Name + "-" + dbClaim.Name,
 					Namespace: dbrc.Namespace,
 				}, &v1.DbRoleClaim{})
+
 				if errors.IsNotFound(err) {
 					dbrc.Name = dbrc.Name + "-" + dbClaim.Name
 					dbrc.Spec.SecretName = dbrc.Spec.SecretName + "-" + dbClaim.Name
