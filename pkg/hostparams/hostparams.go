@@ -26,7 +26,7 @@ var (
 	// They are used to determine the hash for RDS names. Any change will result in a new RDS instance being created for all applications!
 	// These values are purposely moved from the config file to the code to avoid accidental changes.
 	defaultShape         = "db.t4g.medium"
-	defaultEngineVersion = "15.3"
+	defaultEngineVersion = "15.5"
 	defaultEngine        = v1.Postgres
 )
 

@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -252,10 +253,10 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		caCertificateIdentifier string
 	)
 
-	backupRetentionDays = r.Config.Viper.GetInt64("backupRetentionDays")
-	caCertificateIdentifier = r.Config.Viper.GetString("caCertificateIdentifier")
-	enablePerfInsight = r.Config.Viper.GetBool("enablePerfInsight")
-	enableCloudwatchLogsExport := r.Config.Viper.GetString("enableCloudwatchLogsExport")
+	backupRetentionDays = basefun.GetBackupRetentionDays(r.Config.Viper)
+	caCertificateIdentifier = basefun.GetCaCertificateIdentifier(r.Config.Viper)
+	enablePerfInsight = basefun.GetEnablePerfInsight(r.Config.Viper)
+	enableCloudwatchLogsExport := basefun.GetEnableCloudwatchLogsExport(r.Config.Viper)
 	postgresCloudwatchLogsExportLabels := []string{"postgresql", "upgrade"}
 	switch enableCloudwatchLogsExport {
 	case "all":
@@ -324,7 +325,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 
 		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	}
-	if r.Config.Viper.GetBool("supportSuperUserElevation") {
+	if basefun.GetSuperUserElevation(r.Config.Viper) {
 		r.Input.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
 	if r.Input.EnableSuperUser {
@@ -548,6 +549,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 	if r.mode == M_PostMigrationInProgress {
 		return r.postMigrationInProgress(ctx, dbClaim)
 	}
+	//when using an existing db, this is the first status, then it moves to M_MigrateExistingToNewDB and falls into the condition below
 	if r.mode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
 		err := r.reconcileUseExistingDB(ctx, dbClaim)
@@ -562,15 +564,16 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 	}
 	if r.mode == M_MigrateExistingToNewDB {
 		logr.Info("migrate to new  db reconcile started")
-		//check if existingDB has been already reconciled, else reconcileUseExisitngDB
+		//check if existingDB has been already reconciled, else reconcileUseExistingDB
 		existing_db_conn, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
+		logr.V(DebugLevel).Info("DSN", "M_MigrateExistingToNewDB", basefun.SanitizeDsn(dbClaim.Spec.SourceDataFrom.Database.DSN))
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
 		if (dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName != existing_db_conn.DatabaseName) ||
 			(dbClaim.Status.ActiveDB.ConnectionInfo.Host != existing_db_conn.Host) {
 
-			logr.Info("existing db was not reconciled, calling reconcileUseExisitngDB before reconcileUseExisitngDB")
+			logr.Info("existing db was not reconciled, calling reconcileUseExistingDB before reconcileUseExistingDB")
 
 			err := r.reconcileUseExistingDB(ctx, dbClaim)
 			if err != nil {
@@ -627,7 +630,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 }
 
 func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExisitngDB")
+	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExistingDB")
 
 	existingDBConnInfo, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
 	if err != nil {
@@ -683,7 +686,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 			return err
 		}
 	}
-	err = dbClient.ManageSystemFunctions(dbName, r.getSystemFunctions())
+	err = dbClient.ManageSystemFunctions(dbName, basefun.GetSystemFunctions(r.Config.Viper))
 	if err != nil {
 		return err
 	}
@@ -712,14 +715,14 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 
 		if !isReady {
 			logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+			return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
 		}
 
 		logr.Info("cloud instance ready. reading generated master secret")
 		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 		if err != nil {
 			logr.Info("unable to read the complete secret. requeueing")
-			return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+			return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
 		}
 		r.Input.MasterConnInfo.Host = connInfo.Host
 		r.Input.MasterConnInfo.Password = connInfo.Password
@@ -767,7 +770,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	err = dbClient.ManageSystemFunctions(GetDBName(dbClaim), r.getSystemFunctions())
+	err = dbClient.ManageSystemFunctions(GetDBName(dbClaim), basefun.GetSystemFunctions(r.Config.Viper))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -794,7 +797,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	if result.RequeueAfter > 0 {
 		return result, nil
 	}
-	//store a temp secret to beused by migration process
+	//store a temp secret to be used by migration process
 	//removing the practice of storing the secret in status
 	if r.Input.TempSecret != "" {
 		r.setTargetPasswordInTempSecret(ctx, r.Input.TempSecret, dbClaim)
@@ -803,19 +806,19 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context,
 	return r.reconcileMigrationInProgress(ctx, dbClaim)
 }
 
-func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context,
-	dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileMigrationInProgress")
 
 	migrationState := dbClaim.Status.MigrationState
 
-	logr.Info("Migration is progress", "state", migrationState)
+	logr.Info("Migration in progress", "state", migrationState)
 
 	logr.Info("cloud instance ready. reading generated master secret")
 	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 	if err != nil {
 		logr.Info("unable to read the complete secret. requeueing")
-		return ctrl.Result{RequeueAfter: r.getDynamicHostWaitTime()}, nil
+		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
 	}
 	r.Input.MasterConnInfo.Host = connInfo.Host
 	r.Input.MasterConnInfo.Password = connInfo.Password
@@ -876,7 +879,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		SourceDBUserDsn:  sourceAppDsn,
 		TargetDBUserDsn:  targetAppConn.Uri(),
 		TargetDBAdminDsn: targetMasterDsn,
-		ExportFilePath:   r.Config.Viper.GetString("pgTemp"),
+		ExportFilePath:   basefun.GetPgTempFolder(r.Config.Viper),
 	}
 
 	logr.V(DebugLevel).Info("DSN", "config", config)
@@ -895,6 +898,42 @@ loop:
 		switch next.Id() {
 		case pgctl.S_Completed:
 			logr.Info("completed migration")
+
+			//PTEUDO1051: if migration was successfull, get the list of DBRoleClaims attached to the old DBClaim and recreate
+			// them pointing to the new DBClaim
+			dbRoleClaims := &v1.DbRoleClaimList{}
+			if err := r.Client.List(ctx, dbRoleClaims, client.InNamespace(dbClaim.Namespace)); err != nil {
+				return r.manageError(ctx, dbClaim, err)
+			}
+			logr.Info("copying dbroleclaims to new dbclaim")
+			for _, dbrc := range dbRoleClaims.Items {
+				if strings.HasSuffix(dbrc.Name, "-"+dbClaim.Name) {
+					continue
+				}
+
+				err = r.Client.Get(ctx, client.ObjectKey{
+					Name:      dbrc.Name + "-" + dbClaim.Name,
+					Namespace: dbrc.Namespace,
+				}, &v1.DbRoleClaim{})
+
+				if errors.IsNotFound(err) {
+					dbrc.Name = dbrc.Name + "-" + dbClaim.Name
+					dbrc.Spec.SecretName = dbrc.Spec.SecretName + "-" + dbClaim.Name
+					dbrc.Spec.SourceDatabaseClaim.Name = dbClaim.Name
+					dbrc.Status = v1.DbRoleClaimStatus{}
+					dbrc.ResourceVersion = ""
+					dbrc.Generation = 0
+
+					if err = r.Client.Create(ctx, &dbrc); err != nil {
+						logr.Error(err, "could not update db role claim")
+						return r.manageError(ctx, dbClaim, err)
+					}
+					logr.Info("dbroleclaim copied: " + dbrc.Name)
+				} else {
+					logr.Info("dbroleclaim [" + dbrc.Name + "] already exists.")
+				}
+			}
+
 			break loop
 
 		case pgctl.S_Retry:
@@ -1158,7 +1197,7 @@ func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, 
 	// unlike other resources above, verifying tags updation and handling errors if any just for "DBInstance" resource
 	isVerfied, err := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName)
 
-	if r.getMultiAZEnabled() {
+	if basefun.GetMultiAZEnabled(r.Config.Viper) {
 		isVerfiedforMultiAZ, errMultiAZ := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName+"-2")
 		if err != nil {
 			return false, err
@@ -1233,6 +1272,8 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, db
 	}
 	updateHostPortStatus(&dbClaim.Status.NewDB, connInfo.Host, connInfo.Port, connInfo.SSLMode)
 
+	//log.Log.V(DebugLevel).Info("GET CLIENT FOR EXISTING DB> Full URI: " + connInfo.Uri())
+
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: connInfo.Uri()})
 }
 
@@ -1241,8 +1282,8 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 
 	connInfo.Host = r.getMasterHost(dbClaim)
 	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = r.getMasterUser()
-	connInfo.SSLMode = r.getSSLMode()
+	connInfo.Username = basefun.GetMasterUser(r.Config.Viper, "")
+	connInfo.SSLMode = basefun.GetSSLMode(r.Config.Viper, "")
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
@@ -1250,24 +1291,24 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
-	logr.V(DebugLevel).Info("getting dbclient", "dsn", r.getMasterDefaultDsn())
+	logr.V(DebugLevel).Info("GET DBCLIENT", "DSN", basefun.SanitizeDsn(r.getMasterDefaultDsn()))
 	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: r.getMasterDefaultDsn()})
 }
 
 func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", "postgres", r.Input.MasterConnInfo.Username, r.Input.MasterConnInfo.Password, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", url.QueryEscape(r.Input.MasterConnInfo.Username), url.QueryEscape(r.Input.MasterConnInfo.Password), r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
 }
 
 func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
-	defaultReclaimPolicy := r.Config.Viper.GetString("defaultReclaimPolicy")
+	defaultReclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
 
 	if fragmentKey == "" {
 		return defaultReclaimPolicy
 	}
 
-	reclaimPolicy := r.Config.Viper.GetString(fmt.Sprintf("%s::reclaimPolicy", fragmentKey))
+	reclaimPolicy := basefun.GetReclaimPolicy(r.Config.Viper, fragmentKey)
 
 	if reclaimPolicy == "retain" || (reclaimPolicy == "" && defaultReclaimPolicy == "retain") {
 		// Don't need to delete
@@ -1285,7 +1326,7 @@ func (r *DatabaseClaimReconciler) canTagResources(ctx context.Context, dbClaim *
 	}
 
 	var dbClaimList v1.DatabaseClaimList
-	if err := r.Client.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+	if err := r.Client.List(ctx, &dbClaimList, client.MatchingFields{instanceLabelKey: dbClaim.Spec.InstanceLabel}); err != nil {
 		return false, err
 	}
 
@@ -1314,7 +1355,7 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 			} else {
 				// Check there is no other Claims that use this fragment
 				var dbClaimList v1.DatabaseClaimList
-				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLableKey: dbClaim.Spec.InstanceLabel}); err != nil {
+				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLabelKey: dbClaim.Spec.InstanceLabel}); err != nil {
 					return err
 				}
 
@@ -1337,8 +1378,8 @@ func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, d
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	var pass string
 	var err error
-	minPasswordLength := r.getMinPasswordLength()
-	complEnabled := r.isPasswordComplexity()
+	minPasswordLength := basefun.GetMinPasswordLength(r.Config.Viper)
+	complEnabled := basefun.GetIsPasswordComplexity(r.Config.Viper)
 
 	// Customize the list of symbols.
 	// Removed \ ` @ ! from the default list as the encoding/decoding was treating it as an escape character
@@ -1379,12 +1420,12 @@ func generateMasterPassword() (string, error) {
 }
 
 var (
-	instanceLableKey = ".spec.instanceLabel"
+	instanceLabelKey = ".spec.instanceLabel"
 )
 
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.DatabaseClaim{}, instanceLableKey, func(rawObj client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.DatabaseClaim{}, instanceLabelKey, func(rawObj client.Object) []string {
 		// grab the DatabaseClaim object, extract the InstanceLabel for index...
 		claim := rawObj.(*v1.DatabaseClaim)
 		return []string{claim.Spec.InstanceLabel}
@@ -1403,16 +1444,7 @@ func (r *DatabaseClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) strin
 	if dbClaim.Spec.Host != "" {
 		return dbClaim.Spec.Host
 	}
-	return r.Config.Viper.GetString(fmt.Sprintf("%s::Host", r.Input.FragmentKey))
-}
-
-func (r *DatabaseClaimReconciler) getMasterUser() string {
-
-	u := r.Config.Viper.GetString(fmt.Sprintf("%s::masterUsername", r.Input.FragmentKey))
-	if u != "" {
-		return u
-	}
-	return r.Config.Viper.GetString("defaultMasterUsername")
+	return basefun.GetMasterHost(r.Config.Viper, r.Input.FragmentKey)
 }
 
 func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
@@ -1421,26 +1453,11 @@ func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) strin
 		return dbClaim.Spec.Port
 	}
 
-	p := r.Config.Viper.GetString(fmt.Sprintf("%s::Port", r.Input.FragmentKey))
-	if p != "" {
-		return p
-	}
-
-	return r.Config.Viper.GetString("defaultMasterPort")
-}
-
-func (r *DatabaseClaimReconciler) getSSLMode() string {
-
-	s := r.Config.Viper.GetString(fmt.Sprintf("%s::sslMode", r.Input.FragmentKey))
-	if s != "" {
-		return s
-	}
-
-	return r.Config.Viper.GetString("defaultSslMode")
+	return basefun.GetMasterPort(r.Config.Viper, "")
 }
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
-	prt := time.Duration(r.Config.Viper.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
+	prt := time.Duration(basefun.GetPasswordRotationPeriod(r.Config.Viper)) * time.Minute
 
 	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
 		// TODO: add this back maybe
@@ -1449,52 +1466,6 @@ func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 	}
 
 	return prt
-}
-
-func (r *DatabaseClaimReconciler) isPasswordComplexity() bool {
-	complEnabled := r.Config.Viper.GetString("passwordconfig::passwordComplexity")
-
-	return complEnabled == "enabled"
-}
-
-func (r *DatabaseClaimReconciler) getMinPasswordLength() int {
-	return r.Config.Viper.GetInt("passwordconfig::minPasswordLength")
-}
-
-func (r *DatabaseClaimReconciler) getRegion() string {
-	return r.Config.Viper.GetString("region")
-}
-
-func (r *DatabaseClaimReconciler) getMultiAZEnabled() bool {
-	return r.Config.Viper.GetBool("dbMultiAZEnabled")
-}
-
-func (r *DatabaseClaimReconciler) getVpcSecurityGroupIDRefs() string {
-	return r.Config.Viper.GetString("vpcSecurityGroupIDRefs")
-}
-
-func (r *DatabaseClaimReconciler) getProviderConfig() string {
-	return r.Config.Viper.GetString("providerConfig")
-}
-
-func (r *DatabaseClaimReconciler) getDbSubnetGroupNameRef() string {
-	return r.Config.Viper.GetString("dbSubnetGroupNameRef")
-}
-
-func (r *DatabaseClaimReconciler) getSystemFunctions() map[string]string {
-	return r.Config.Viper.GetStringMapString("systemFunctions")
-}
-
-func (r *DatabaseClaimReconciler) getDynamicHostWaitTime() time.Duration {
-	t := time.Duration(r.Config.Viper.GetInt("dynamicHostWaitTimeMin")) * time.Minute
-
-	if t > basefun.GetMaxWaitTime() {
-		// TODO: add this back maybe
-		// r.Log.Info(fmt.Sprintf("dynamic host wait time is out of range, should be between 1min and %s", maxWaitTime))
-		return time.Minute
-	}
-
-	return t
 }
 
 // FindStatusCondition finds the conditionType in conditions.
@@ -1615,7 +1586,7 @@ func (r *DatabaseClaimReconciler) manageCloudHost(ctx context.Context, dbClaim *
 		return false, err
 	}
 	secondInsReady := true
-	if r.getMultiAZEnabled() {
+	if basefun.GetMultiAZEnabled(r.Config.Viper) {
 		secondInsReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
 		if err != nil {
 			return false, err
@@ -1753,7 +1724,7 @@ func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tag
 		if tag.Key == defaultBackupPolicyKey {
 			if tag.Value != backupPolicy {
 				if backupPolicy == "" {
-					tag.Value = r.Config.Viper.GetString("defaultBackupPolicyValue")
+					tag.Value = basefun.GetDefaultBackupPolicy(r.Config.Viper)
 				} else {
 					tag.Value = backupPolicy
 				}
@@ -1763,12 +1734,13 @@ func (r *DatabaseClaimReconciler) configureBackupPolicy(backupPolicy string, tag
 	}
 
 	if backupPolicy == "" {
-		tags = append(tags, v1.Tag{Key: defaultBackupPolicyKey, Value: r.Config.Viper.GetString("defaultBackupPolicyValue")})
+		tags = append(tags, v1.Tag{Key: defaultBackupPolicyKey, Value: basefun.GetDefaultBackupPolicy(r.Config.Viper)})
 	} else {
 		tags = append(tags, v1.Tag{Key: defaultBackupPolicyKey, Value: backupPolicy})
 	}
 	return tags
 }
+
 func (r *DatabaseClaimReconciler) manageMasterPassword(ctx context.Context, secret *xpv1.SecretKeySelector) error {
 	logr := log.FromContext(ctx).WithValues("func", "manageMasterPassword")
 	masterSecret := &corev1.Secret{}
@@ -1831,7 +1803,7 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 	}
 	dbCluster := &crossplanerds.DBCluster{}
 	providerConfigReference := xpv1.Reference{
-		Name: r.getProviderConfig(),
+		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 
 	params := &r.Input.HostParams
@@ -1869,15 +1841,15 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 			},
 			Spec: crossplanerds.DBClusterSpec{
 				ForProvider: crossplanerds.DBClusterParameters{
-					Region:                r.getRegion(),
+					Region:                basefun.GetRegion(r.Config.Viper),
 					BackupRetentionPeriod: auroraBackupRetentionPeriod,
 					CustomDBClusterParameters: crossplanerds.CustomDBClusterParameters{
 						SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 						VPCSecurityGroupIDRefs: []xpv1.Reference{
-							{Name: r.getVpcSecurityGroupIDRefs()},
+							{Name: basefun.GetVpcSecurityGroupIDRefs(r.Config.Viper)},
 						},
 						DBSubnetGroupNameRef: &xpv1.Reference{
-							Name: r.getDbSubnetGroupNameRef(),
+							Name: basefun.GetDbSubnetGroupNameRef(r.Config.Viper),
 						},
 						AutogeneratePassword:        true,
 						MasterUserPasswordSecretRef: &dbMasterSecretCluster,
@@ -1965,16 +1937,16 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 		return false, err
 	}
 	// Infrastructure Config
-	region := r.getRegion()
+	region := basefun.GetRegion(r.Config.Viper)
 	providerConfigReference := xpv1.Reference{
-		Name: r.getProviderConfig(),
+		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 	restoreFromSource := defaultRestoreFromSource
 	dbInstance := &crossplanerds.DBInstance{}
 
 	params := &r.Input.HostParams
 	ms64 := int64(params.MinStorageGB)
-	multiAZ := r.getMultiAZEnabled()
+	multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
 	trueVal := true
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
@@ -2010,10 +1982,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 							VPCSecurityGroupIDRefs: []xpv1.Reference{
-								{Name: r.getVpcSecurityGroupIDRefs()},
+								{Name: basefun.GetVpcSecurityGroupIDRefs(r.Config.Viper)},
 							},
 							DBSubnetGroupNameRef: &xpv1.Reference{
-								Name: r.getDbSubnetGroupNameRef(),
+								Name: basefun.GetDbSubnetGroupNameRef(r.Config.Viper),
 							},
 							DBParameterGroupNameRef: &xpv1.Reference{
 								Name: pgName,
@@ -2090,9 +2062,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, dbHostName string, dbClaim *v1.DatabaseClaim, isSecondIns bool) (bool, error) {
 	logr := log.FromContext(ctx)
 	// Infrastructure Config
-	region := r.getRegion()
+	region := basefun.GetRegion(r.Config.Viper)
 	providerConfigReference := xpv1.Reference{
-		Name: r.getProviderConfig(),
+		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 	pgName, err := r.manageAuroraPostgresParamGroup(ctx, dbClaim)
 	if err != nil {
@@ -2197,7 +2169,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
-		Name: r.getProviderConfig(),
+		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 
 	dbParamGroup := &crossplanerds.DBParameterGroup{}
@@ -2217,7 +2189,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 				},
 				Spec: crossplanerds.DBParameterGroupSpec{
 					ForProvider: crossplanerds.DBParameterGroupParameters{
-						Region:      r.getRegion(),
+						Region:      basefun.GetRegion(r.Config.Viper),
 						Description: &desc,
 						CustomDBParameterGroupParameters: crossplanerds.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplanerds.DBParameterGroupFamilyNameSelector{
@@ -2285,7 +2257,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
-		Name: r.getProviderConfig(),
+		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 
 	dbParamGroup := &crossplanerds.DBParameterGroup{}
@@ -2305,7 +2277,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 				},
 				Spec: crossplanerds.DBParameterGroupSpec{
 					ForProvider: crossplanerds.DBParameterGroupParameters{
-						Region:      r.getRegion(),
+						Region:      basefun.GetRegion(r.Config.Viper),
 						Description: &desc,
 						CustomDBParameterGroupParameters: crossplanerds.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplanerds.DBParameterGroupFamilyNameSelector{
@@ -2369,7 +2341,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
-		Name: r.getProviderConfig(),
+		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 
 	dbParamGroup := &crossplanerds.DBClusterParameterGroup{}
@@ -2389,7 +2361,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 				},
 				Spec: crossplanerds.DBClusterParameterGroupSpec{
 					ForProvider: crossplanerds.DBClusterParameterGroupParameters{
-						Region:      r.getRegion(),
+						Region:      basefun.GetRegion(r.Config.Viper),
 						Description: &desc,
 						CustomDBClusterParameterGroupParameters: crossplanerds.CustomDBClusterParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplanerds.DBParameterGroupFamilyNameSelector{
@@ -2447,7 +2419,7 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 	dbInstance := &crossplanerds.DBInstance{}
 	dbCluster := &crossplanerds.DBCluster{}
 
-	if r.getMultiAZEnabled() {
+	if basefun.GetMultiAZEnabled(r.Config.Viper) {
 		err := r.Client.Get(ctx, client.ObjectKey{
 			Name: dbHostName + "-2",
 		}, dbInstance)
@@ -2565,7 +2537,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
 	params := &r.Input.HostParams
 	if dbClaim.Spec.Type == v1.Postgres {
-		multiAZ := r.getMultiAZEnabled()
+		multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
 		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
 
@@ -2722,7 +2694,7 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 			"sslmode":        []byte(connInfo.SSLMode),
 		},
 	}
-	logr.Info("creating connection info secret", "secret", secret.Name, "namespace", secret.Namespace)
+	logr.Info("creating connection info SECRET: "+secret.Name, "secret", secret.Name, "namespace", secret.Namespace)
 
 	return r.Client.Create(ctx, secret)
 }
@@ -2731,7 +2703,6 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 
 	logr := log.FromContext(ctx)
 
-	// FIXME: move this to validation logic
 	if dsnName == "" {
 		dsnName = "dsn.txt"
 	}
@@ -2744,7 +2715,7 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	exSecret.Data["username"] = []byte(connInfo.Username)
 	exSecret.Data["password"] = []byte(connInfo.Password)
 	exSecret.Data["sslmode"] = []byte(connInfo.SSLMode)
-	logr.Info("updating connection info secret", "secret", exSecret.Name, "namespace", exSecret.Namespace)
+	logr.Info("updating connection info SECRET: "+exSecret.Name, "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
 }

@@ -567,8 +567,7 @@ func (pc *client) UserExists(userName string) (bool, error) {
 	return exists, nil
 }
 
-func (pc *client) DeleteUser(username, reassignToUser string) error {
-	db := pc.DB
+func (pc *client) DeleteUser(dbName, username, reassignToUser string) error {
 	if username == "" {
 		err := fmt.Errorf("an empty username")
 		pc.log.Error(err, "error occurred")
@@ -576,15 +575,34 @@ func (pc *client) DeleteUser(username, reassignToUser string) error {
 		return err
 	}
 
-	pc.log.Info("drop user", "user:", username)
-	_, err := db.Exec(fmt.Sprintf(
-		`REASSIGN OWNED BY %s TO %s;
-DROP USER %s;`, pq.QuoteIdentifier(username), pq.QuoteIdentifier(reassignToUser), pq.QuoteIdentifier(username)))
+	var exists bool
+
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", username).Scan(&exists)
 	if err != nil {
-		pc.log.Error(err, "could not drop user "+username)
-		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+		pc.log.Error(err, "could not query for user name")
 		return err
 	}
+
+	if !exists {
+		pc.log.Info("user [" + username + "] does not exist.")
+		return nil
+	}
+
+	pc.log.Info("delete user", "user:", username)
+	_, err = pc.DB.Exec(fmt.Sprintf(
+		"GRANT %s TO %s;REASSIGN OWNED BY %s TO %s;REVOKE ALL ON DATABASE %s FROM %s;DROP ROLE IF EXISTS %s;",
+		pq.QuoteIdentifier(username),
+		pq.QuoteIdentifier(reassignToUser),
+		pq.QuoteIdentifier(username),
+		pq.QuoteIdentifier(reassignToUser),
+		pq.QuoteIdentifier(dbName),
+		pq.QuoteIdentifier(username),
+		pq.QuoteIdentifier(username)))
+	if err != nil {
+		pc.log.Error(err, "could not delete user: "+username)
+		metrics.UsersDeletedErrors.WithLabelValues("drop user error").Inc()
+	}
+
 	metrics.UsersDeleted.Inc()
 
 	return nil
@@ -593,10 +611,9 @@ DROP USER %s;`, pq.QuoteIdentifier(username), pq.QuoteIdentifier(reassignToUser)
 func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, error) {
 	start := time.Now()
 	var exists bool
-	db := pc.DB
 	created := false
 
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", userName).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_user.usename FROM pg_catalog.pg_user where pg_user.usename = $1)", userName).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
@@ -638,9 +655,7 @@ func (pc *client) CreateUser(userName, roleName, userPassword string) (bool, err
 
 func (pc *client) RenameUser(oldUsername string, newUsername string) error {
 	var exists bool
-	db := pc.DB
-
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", oldUsername).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", oldUsername).Scan(&exists)
 
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
@@ -650,7 +665,7 @@ func (pc *client) RenameUser(oldUsername string, newUsername string) error {
 	if exists {
 		pc.log.Info(fmt.Sprintf("renaming user %v to %v", oldUsername, newUsername))
 
-		_, err = db.Exec(fmt.Sprintf("ALTER USER %s RENAME TO %s", pq.QuoteIdentifier(oldUsername), pq.QuoteIdentifier(newUsername)))
+		_, err = pc.DB.Exec(fmt.Sprintf("ALTER USER %s RENAME TO %s", pq.QuoteIdentifier(oldUsername), pq.QuoteIdentifier(newUsername)))
 		if err != nil {
 			pc.log.Error(err, "could not rename user "+oldUsername)
 			return err
@@ -663,9 +678,8 @@ func (pc *client) RenameUser(oldUsername string, newUsername string) error {
 func (pc *client) UpdateUser(oldUsername, newUsername, rolename, password string) error {
 	start := time.Now()
 	var exists bool
-	db := pc.DB
 
-	err := db.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", oldUsername).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT pg_roles.rolname FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", oldUsername).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for user name")
 		metrics.UsersUpdatedErrors.WithLabelValues("read error").Inc()
@@ -700,7 +714,6 @@ func (pc *client) UpdateUser(oldUsername, newUsername, rolename, password string
 
 func (pc *client) UpdatePassword(username string, userPassword string) error {
 	start := time.Now()
-	db := pc.DB
 	if userPassword == "" {
 		err := fmt.Errorf("an empty password")
 		pc.log.Error(err, "error occurred")
@@ -709,7 +722,7 @@ func (pc *client) UpdatePassword(username string, userPassword string) error {
 	}
 
 	pc.log.Info("update user password", "user:", username)
-	_, err := db.Exec(fmt.Sprintf("ALTER ROLE %s with encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword)))
+	_, err := pc.DB.Exec(fmt.Sprintf("ALTER ROLE %s with encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword)))
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			pc.log.Error(err, "could not alter user "+username)
@@ -741,6 +754,7 @@ func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) err
 		return err
 	}
 	if hasSuperUser {
+		pc.log.Info("[" + username + "] is already a superuser")
 		if !enableSuperUser {
 			// remove superuser role
 			_, err = pc.DB.Exec(fmt.Sprintf("REVOKE %s FROM  %s", RDSSuperUserRole, pq.QuoteIdentifier(username)))
@@ -751,6 +765,7 @@ func (pc *client) ManageSuperUserRole(username string, enableSuperUser bool) err
 		}
 	} else {
 		if enableSuperUser {
+			pc.log.Info("enabling superuser to [" + username + "] user")
 			// add superuser role
 			// _, err = pc.DB.Exec(`GRANT $1 TO $2`, pq.QuoteIdentifier(RDSSuperUserRole), pq.QuoteIdentifier(username))
 			_, err = pc.DB.Exec(fmt.Sprintf("GRANT %s TO  %s", RDSSuperUserRole, pq.QuoteIdentifier(username)))

@@ -18,7 +18,6 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"flag"
 	"os"
 
@@ -46,7 +45,6 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	dbwebhook "github.com/infobloxopen/db-controller/webhook"
 )
 
 var (
@@ -62,20 +60,6 @@ func init() {
 
 	// Infrastructure provisioning using crossplane
 	utilruntime.Must(crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme))
-}
-
-func parseDBPoxySidecarConfig(configFile string) (*dbwebhook.Config, error) {
-	data, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg dbwebhook.Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
 }
 
 func main() {
@@ -209,8 +193,8 @@ func main() {
 		os.Exit(1)
 	}
 	dbRoleClaimConfig := &roleclaim.RoleConfig{
-		Viper: ctlConfig,
-
+		Viper:              ctlConfig,
+		Namespace:          os.Getenv("SERVICE_NAMESPACE"),
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),

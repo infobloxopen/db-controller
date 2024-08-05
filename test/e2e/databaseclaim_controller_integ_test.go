@@ -11,10 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 )
 
-var hasOperationalTag = databaseclaim.HasOperationalTag
+//var hasOperationalTag = databaseclaim.HasOperationalTag
 
 var _ = Describe("db-controller", func() {
 

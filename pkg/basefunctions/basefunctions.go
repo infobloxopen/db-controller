@@ -2,6 +2,7 @@ package basefunctions
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -95,11 +96,11 @@ func ValidateConnectionParameters(connInfo *persistancev1.DatabaseClaimConnectio
 	return nil
 }
 
-func GeneratePassword(config *viper.Viper) (string, error) {
+func GeneratePassword(viperConfig *viper.Viper) (string, error) {
 	var pass string
 	var err error
-	minPasswordLength := GetMinPasswordLength(config)
-	complEnabled := isPasswordComplexity(config)
+	minPasswordLength := GetMinPasswordLength(viperConfig)
+	complEnabled := GetIsPasswordComplexity(viperConfig)
 
 	// Customize the list of symbols.
 	// Removed \ ` @ ! from the default list as the encoding/decoding was treating it as an escape character
@@ -127,14 +128,8 @@ func GeneratePassword(config *viper.Viper) (string, error) {
 	return pass, nil
 }
 
-func isPasswordComplexity(config *viper.Viper) bool {
-	complEnabled := config.GetString("passwordconfig::passwordComplexity")
-
-	return complEnabled == "enabled"
-}
-
-func GetMinPasswordLength(config *viper.Viper) int {
-	return config.GetInt("passwordconfig::minPasswordLength")
+func GetMinPasswordLength(viperConfig *viper.Viper) int {
+	return viperConfig.GetInt("passwordconfig::minPasswordLength")
 }
 
 func GenerateMasterPassword() (string, error) {
@@ -147,4 +142,123 @@ func GenerateMasterPassword() (string, error) {
 		return "", err
 	}
 	return pass, nil
+}
+
+func SanitizeDsn(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return ""
+	}
+	u.User = url.UserPassword(u.User.Username(), "redacted")
+	return u.String()
+}
+
+func GetMasterHost(viperConfig *viper.Viper, fragmentKey string) string {
+	return viperConfig.GetString(fmt.Sprintf("%s::Host", fragmentKey))
+}
+
+func GetMasterUser(viperConfig *viper.Viper, fragmentKey string) string {
+	if fragmentKey != "" {
+		u := viperConfig.GetString(fmt.Sprintf("%s::masterUsername", fragmentKey))
+		if u != "" {
+			return u
+		}
+	}
+	return viperConfig.GetString("defaultMasterUsername")
+}
+
+func GetMasterPort(viperConfig *viper.Viper, fragmentKey string) string {
+	if fragmentKey != "" {
+		p := viperConfig.GetString(fmt.Sprintf("%s::Port", fragmentKey))
+		if p != "" {
+			return p
+		}
+	}
+
+	return viperConfig.GetString("defaultMasterPort")
+}
+
+func GetSSLMode(viperConfig *viper.Viper, fragmentKey string) string {
+	if fragmentKey != "" {
+		s := viperConfig.GetString(fmt.Sprintf("%s::sslMode", fragmentKey))
+		if s != "" {
+			return s
+		}
+	}
+
+	return viperConfig.GetString("defaultSslMode")
+}
+
+func GetSuperUserElevation(viperConfig *viper.Viper) bool {
+	return viperConfig.GetBool("supportSuperUserElevation")
+}
+
+func GetPasswordRotationPeriod(viperConfig *viper.Viper) int {
+	return viperConfig.GetInt("passwordconfig::passwordRotationPeriod")
+}
+
+func GetBackupRetentionDays(viperConfig *viper.Viper) int64 {
+	return viperConfig.GetInt64("backupRetentionDays")
+}
+func GetDefaultBackupPolicy(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("defaultBackupPolicyValue")
+}
+func GetCaCertificateIdentifier(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("caCertificateIdentifier")
+}
+func GetEnablePerfInsight(viperConfig *viper.Viper) bool {
+	return viperConfig.GetBool("enablePerfInsight")
+}
+func GetEnableCloudwatchLogsExport(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("enableCloudwatchLogsExport")
+}
+func GetPgTempFolder(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("pgTemp")
+}
+func GetDefaultReclaimPolicy(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("defaultReclaimPolicy")
+}
+func GetReclaimPolicy(viperConfig *viper.Viper, fragmentKey string) string {
+	return viperConfig.GetString(fmt.Sprintf("%s::reclaimPolicy", fragmentKey))
+}
+func GetIsPasswordComplexity(viperConfig *viper.Viper) bool {
+	complEnabled := viperConfig.GetString("passwordconfig::passwordComplexity")
+
+	return complEnabled == "enabled"
+}
+
+func GetRegion(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("region")
+}
+
+func GetMultiAZEnabled(viperConfig *viper.Viper) bool {
+	return viperConfig.GetBool("dbMultiAZEnabled")
+}
+
+func GetVpcSecurityGroupIDRefs(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("vpcSecurityGroupIDRefs")
+}
+
+func GetProviderConfig(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("providerConfig")
+}
+
+func GetDbSubnetGroupNameRef(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("dbSubnetGroupNameRef")
+}
+
+func GetSystemFunctions(viperConfig *viper.Viper) map[string]string {
+	return viperConfig.GetStringMapString("systemFunctions")
+}
+
+func GetDynamicHostWaitTime(viperConfig *viper.Viper) time.Duration {
+	t := time.Duration(viperConfig.GetInt("dynamicHostWaitTimeMin")) * time.Minute
+
+	if t > GetMaxWaitTime() {
+		// TODO: add this back maybe
+		// r.Log.Info(fmt.Sprintf("dynamic host wait time is out of range, should be between 1min and %s", maxWaitTime))
+		return time.Minute
+	}
+
+	return t
 }

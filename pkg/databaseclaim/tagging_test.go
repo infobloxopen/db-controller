@@ -12,7 +12,7 @@ func TestCanTagResources(t *testing.T) {
 
 	claims := v1.DatabaseClaimList{
 		Items: []v1.DatabaseClaim{
-			v1.DatabaseClaim{
+			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dbclaim",
 					Namespace: "default",
@@ -21,7 +21,7 @@ func TestCanTagResources(t *testing.T) {
 					InstanceLabel: "sample-connection-3",
 				},
 			},
-			v1.DatabaseClaim{
+			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "dbclaim-2",
 					Namespace: "default",

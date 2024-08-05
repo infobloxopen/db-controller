@@ -48,7 +48,7 @@ type Exister interface {
 }
 
 type Remover interface {
-	DeleteUser(username, reassignToUser string) error
+	DeleteUser(dbName, username, reassignToUser string) error
 	RevokeAccessToRole(username, rolename string) error
 }
 
