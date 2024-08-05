@@ -9,7 +9,7 @@ region: us-east-1
 vpcSecurityGroupIDRefs: demo-box-1
 dbSubnetGroupNameRef: demo-box-1
 dynamicHostWaitTimeMin: 1
-defaultShape: db.t4g.small
+defaultShape: db.t4g.medium
 defaultMinStorageGB: 20
 defaultEngine: postgres
 defaultEngineVersion: 12.11
@@ -44,7 +44,7 @@ dynamic-connection:
   port: 5432
   sslMode: require
   passwordSecretRef: dynamic-connection-secret
-  shape: db.t4g.small
+  shape: db.t4g.medium
   minStorageGB: 20
   engine: postgres
   engineVersion: 12.8

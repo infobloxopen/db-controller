@@ -50,7 +50,6 @@ var (
 	db2                    string
 	db3                    string
 	ctx                    = context.Background()
-	// DBVersion_new          = "15.7"
 )
 
 var _ = Describe("AWS", Ordered, func() {
@@ -83,7 +82,7 @@ var _ = Describe("AWS", Ordered, func() {
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
-		rds1 = env + "-" + db1 + "-b8ee12ca"
+		rds1 = env + "-" + db1 + "-1d9fb876"
 		newdbcMasterSecretName = rds1 + "-master"
 
 		// createNamespace()
@@ -274,7 +273,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-b8ee12ca"))
+			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-1d9fb876"))
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
@@ -328,7 +327,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-b8ee12ca"))
+			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-1d9fb876"))
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))

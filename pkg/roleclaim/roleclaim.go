@@ -74,6 +74,7 @@ func Reconcile(r *DbRoleClaimReconciler, ctx context.Context, req ctrl.Request) 
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// FIXME: dont shadow log package
 	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName)
+
 	timeNow := metav1.Now()
 
 	var dbRoleClaim v1.DbRoleClaim
@@ -89,7 +90,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if permitted := basefun.IsClassPermitted(r.Config.Class, *dbRoleClaim.Spec.Class); !permitted {
 		log.Info("ignoring this claim as this controller does not own this class", "claimclass", *dbRoleClaim.Spec.Class, "ctrlclass", r.Config.Class)
-		return ctrl.Result{RequeueAfter: time.Hour * 2}, nil
+		return ctrl.Result{}, nil
 	}
 
 	isObjectDeleted, err := r.deleteWorkflow(ctx, &dbRoleClaim, &log)
@@ -317,8 +318,8 @@ func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim, dbcBase
 
 	connInfo.Host = r.getMasterHost(dbClaim, dbcBaseConfig)
 	connInfo.Port = r.getMasterPort(dbClaim, dbcBaseConfig)
-	connInfo.Username = r.getMasterUser(dbcBaseConfig)
-	connInfo.SSLMode = r.getSSLMode(dbcBaseConfig)
+	connInfo.Username = basefun.GetMasterUser(r.Config.Viper, dbcBaseConfig.FragmentKey)
+	connInfo.SSLMode = basefun.GetSSLMode(r.Config.Viper, dbcBaseConfig.FragmentKey)
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
@@ -328,16 +329,7 @@ func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim, dbcBase
 	if dbClaim.Spec.Host != "" {
 		return dbClaim.Spec.Host
 	}
-	return r.Config.Viper.GetString(fmt.Sprintf("%s::Host", dbcBaseConfig.FragmentKey))
-}
-
-func (r *DbRoleClaimReconciler) getMasterUser(dbcBaseConfig *dbcBaseConfig) string {
-
-	u := r.Config.Viper.GetString(fmt.Sprintf("%s::masterUsername", dbcBaseConfig.FragmentKey))
-	if u != "" {
-		return u
-	}
-	return r.Config.Viper.GetString("defaultMasterUsername")
+	return basefun.GetMasterHost(r.Config.Viper, dbcBaseConfig.FragmentKey)
 }
 
 func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) string {
@@ -346,22 +338,7 @@ func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim, dbcBase
 		return dbClaim.Spec.Port
 	}
 
-	p := r.Config.Viper.GetString(fmt.Sprintf("%s::Port", dbcBaseConfig.FragmentKey))
-	if p != "" {
-		return p
-	}
-
-	return r.Config.Viper.GetString("defaultMasterPort")
-}
-
-func (r *DbRoleClaimReconciler) getSSLMode(dbcBaseConfig *dbcBaseConfig) string {
-
-	s := r.Config.Viper.GetString(fmt.Sprintf("%s::sslMode", dbcBaseConfig.FragmentKey))
-	if s != "" {
-		return s
-	}
-
-	return r.Config.Viper.GetString("defaultSslMode")
+	return basefun.GetMasterPort(r.Config.Viper, dbcBaseConfig.FragmentKey)
 }
 
 func GetDBName(dbClaim *v1.DatabaseClaim) string {
@@ -398,7 +375,7 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*d
 	if err != nil {
 		return nil, err
 	}
-	if r.Config.Viper.GetBool("supportSuperUserElevation") {
+	if basefun.GetSuperUserElevation(r.Config.Viper) {
 		dbcBaseConf.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
 	dbcBaseConf.ManageCloudDB = manageCloudDB
@@ -551,7 +528,7 @@ func createRole(dbClient dbclient.Clienter, roleName string, log *logr.Logger, d
 }
 
 func (r *DbRoleClaimReconciler) getPasswordRotationTime() time.Duration {
-	prt := time.Duration(r.Config.Viper.GetInt("passwordconfig::passwordRotationPeriod")) * time.Minute
+	prt := time.Duration(basefun.GetPasswordRotationPeriod(r.Config.Viper)) * time.Minute
 
 	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
 		log.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
@@ -633,7 +610,7 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	}
 	defer dbClient.Close()
 
-	if r.Config.Viper.GetBool("supportSuperUserElevation") {
+	if basefun.GetSuperUserElevation(r.Config.Viper) {
 		dbcBaseConfig.EnableSuperUser = *sourceDbClaim.Spec.EnableSuperUser
 	}
 

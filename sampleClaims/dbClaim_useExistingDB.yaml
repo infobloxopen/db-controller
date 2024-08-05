@@ -16,7 +16,7 @@ spec:
   port: '5432'
   minStorageGB: 2
   secretName: databaseclaim-sample
-  shape: db.t4g.small
+  shape: db.t4g.medium
   type: postgres
   useExistingSource: true
   userName: sample_user
