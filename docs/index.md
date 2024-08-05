@@ -197,12 +197,6 @@ DatabaseClaim to a specific cloud provider CR.
 In the case of AWS you would leverage
 [ACK RDS Provider](https://github.com/aws-controllers-k8s/rds-controller).
 
-The ClaimMap is meant to transform between DatabaseClaim and CloudDatabaseClaim.
-We will not use a resource for the ClaimMap, but will use a naming convention to do the
-mapping and will use the existing FragmentKey for the map to group a number of
-DatabaseClaim to share a database instance. If more complex use cases arrive we
-could implement a resource to provide the mapping.
-
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
 erDiagram
@@ -291,25 +285,12 @@ data:
 * minPasswordLength: Ensures that the generated password is at least this length.  The value is in the range [15, 99].  The default value is 15.  Upper limit is Postgresql max password length limit.
 * passwordRotationPeriod: Defines the period of time (in minutes) before a password is rotated.  The value can be in the range [60, 1440] minutes.  The default value is 60 minutes.
 
-* Fragment Keys: This is the label to use for identifying the master connection information to a DB instance
-   - Username: The username for the master/root user of the database instance
-   - Host: The host name where the database instance is located
-   - Port: The port to use for connecting to the host
-   - sslMode: Indicates of the connection to the DB instance requires secure connection values "require" or "disable"
-   - passwordSecretRef: The name of the secret that contains the password for this connection
-   - passwordSecretKey: Optional value for the key value, default value is "password"
-   - shape: The optional value of shape, see DatabaseClaim, specified here when defined by FragmentKey
-   - minStorageGB: The optional value of minStorageGB, see DatabaseClaim, specified here when defined by FragmentKey
-   - engineVersion: The optional version of RDS instance, for now Postgres version, but could be other types
-   - deletePolicy: The optional DeletePolicy value for CloudDatabase, default delete, possible values: delete, orphan
-   - reclaimPolicy: Used as value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
-
-* defaultMasterPort: Value of MasterPort if not specified in FragmentKey
-* defaultMasterUsername: Value of MasterUsername if not specified in FragmentKey
-* defaultSslMode: Value of sslMode if not specified in FragmentKey
-* defaultShape: Value of Shape if not specified in FragmentKey or DatabaseClaim
-* defaultMinStorageGB: Value of MinStorageGB if not specified in FragmentKey or DatabaseClaim 
-* defaultEngineVersion: Value of EngineVersion if not specified in FragmentKey or DatabaseClaim
+* defaultMasterPort: Value of MasterPort
+* defaultMasterUsername: Value of MasterUsername
+* defaultSslMode: Value of sslMode
+* defaultShape: Value of Shape if not specified in DatabaseClaim
+* defaultMinStorageGB: Value of MinStorageGB if not specified in DatabaseClaim 
+* defaultEngineVersion: Value of EngineVersion if not specified in DatabaseClaim
 * defaultDeletionPolicy: The DeletionPolicy for CloudDatabase, possible values: delete, orphan
 * defaultReclaimPolicy: Used as default value for ReclaimPolicy for CloudDatabase, possible values are "delete" and "retain"
 
@@ -374,14 +355,13 @@ DatabaseClaim:
       - AppID: Application ID used for the application.
       - SecretName: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.  The SecretName is Namespace scoped.
       - Type: The type of the database instance. E.g. Postgres
-      - InstanceLabel: The matching fragment key name of the database instance that will host the database. The fragment keys are defined in the db-controller configMap and describe the connection information for the database instance that this DBClaim is associated with. The longest match will win. For example, the database claim can have a label of athena.hostapp but the only available RDS instances have a label of athena, atlas and northstar. So the controller would match the athena instance. If however an instance label has a label of athena.hostapp, then the hostapp claim would match it exactly.
       - Username: The username that the application will use for accessing the database.
       - DatabaseName: The name of the database instance. 
       - DBVersion (optional): The version of the database.
       - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
       - DSNName: The key used for the client dsn connection string in the Secret
-      - Host (optional): The optional host name where the database instance is located.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-      - Port (optional): The optional port to use for connecting to the host.  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+      - Host (optional): The optional host name where the database instance is located.
+      - Port (optional): The optional port to use for connecting to the host.
       - Shape (optional): The optional Shape values are arbitrary and help drive instance selection
       - MinStorageGB (optional): The optional MinStorageGB value requests the minimum database host storage capacity
       - MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto. For auroraDB instance, this value is ignored.
@@ -407,7 +387,7 @@ DatabaseClaim:
 
     * Status: 
       - DbCreatedAt: Time the database was created.
-      - MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+      - MatchedLabel: The name of the label that was successfully matched in the db-controller configMap
       - ConnectionInfo{} (data in connection info is projected into a secret)
          - Username: The username that the application will use for accessing the database. 
          - Password: The password associated with the Username.
@@ -551,11 +531,8 @@ The DatabaseClaim
 Status is where keep the state used by the reconciler. The two parts
 of the Status that are important are:
 
-* MatchedLabel: The name of the label that was successfully matched against the fragment key names in the db-controller configMap
+* MatchedLabel: The name of the label that was successfully matched in the db-controller configMap
 * ConnectionInfo[]: connection info about the database that is projected into a client accessible secret
-
-There is also a fragmentKey that is the same as the MatchedLabel,
-but not sure there are two items versus one ***TBD***.
 
 In this part we will look at the UpdateStatus function sequence and the
 proposed changes to support dynamic database creation while leaving much of
@@ -563,8 +540,6 @@ the working db-controller to interoperate:
 
 ```mermaid
   sequenceDiagram
-    UpdateStatus->>matchInstanceLabel: Spec.InstanceLabel
-    matchInstanceLabel->>Status: Status.MatchedLabel
     UpdateStatus->>getClient: Status.MatchedLabel
       rect rgba(255, 0, 255, .2) 
         par New Dynamic Database Binding
@@ -649,8 +624,6 @@ The sharing of database by multiple applicaitons (Claims) by Crossplane
 [is an open issue](https://github.com/crossplane/provider-gcp/issues/157).
 The db-controller creates the CloudDatabase Claim and the associated
 connection secret is created in the db-controller namespace.
-We can allow sharing of the database using the FragmentKey structure
-by mapping to the FragmentKKey using DatabaseClaim InstanceLabel property.
 
 [Crossplane](https://github.com/crossplane/crossplane-runtime/issues/21) started 
 with the intent of using a similar
@@ -665,11 +638,6 @@ A namespaced resource cannot, by design, own a cluster scoped resource.
 This could be an issue in how we manage lifecycle, see
 [kubernetes](https://github.com/kubernetes/kubernetes/issues/65200) and
 [crossplane](https://github.com/crossplane/provider-gcp/issues/99) references.
-
-Given the Crossplane experience we will retain the FragmentKey allocation
-CloudDatabase cluster resource so that it can be shared. The deletion of
-ClaimDatabase will remove the CloudDatabase directly allocated
-directly by its claim, similar behavior to Crossplane composite behavior 
 
 We need some more research PoC to figure out if
 we can use 
@@ -687,21 +655,11 @@ boundaries with a  single claim is valid, as namespace == application
 team boundary. Does forcing applciations to share namespace for
 database sharing cause any issues, e.g. RBAC?
 
-The initial PoC will manage ReclaimPolicy from the db-controller
-configuration using the InstanceLabels that enable sharing.
-There will be a DatabaseClaim finalizer that will run 
-and if there are no more claims against the InstanceLabel
-then the dynamic database is reclaimed. There will also
-be a global and reclaim policy per InstanceLabel/FragmentKey.
-This will not be exposed to the Applications e.g. ReclaimPolicy 
-in the DatabaseClaim. I don't think we need this complexity
-but could be added if there is a need.
-
 The Crossplane Infrastructure Operator, has a
 resource DeletionPolicy which specifies what will happen 
 to the underlying external cloud resource when this managed resource is 
 deleted - either "Delete" or "Orphan" the external resource. This will
-be managed by defaultDeletionPolicy and deletionPolicy on each FragmentKey.
+be managed by defaultDeletionPolicy.
 
 Another features we have is to share resources like RDS among
 different clusters that are deployed. We don't have a design yet on

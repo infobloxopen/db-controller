@@ -21,7 +21,6 @@ import (
 	"time"
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -101,7 +100,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Namespace: namespace,
 			}
 
-			dbClaim := &persistancev1.DatabaseClaim{
+			dbClaim := &v1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
 					Kind:       "DatabaseClaim",
@@ -110,7 +109,7 @@ var _ = Describe("AWS", Ordered, func() {
 					Name:      key.Name,
 					Namespace: key.Namespace,
 				},
-				Spec: persistancev1.DatabaseClaimSpec{
+				Spec: v1.DatabaseClaimSpec{
 					Class:                 &class,
 					AppID:                 "sample-app",
 					DatabaseName:          "sample_db",
@@ -133,7 +132,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				viperconfig := config.NewConfig(logger, filepath.Join(wd, "cmd", "config", "config.yaml"))
-				hostParams, err := hostparams.New(viperconfig, "", dbClaim)
+				hostParams, err := hostparams.New(viperconfig, dbClaim)
 				Expect(err).ToNot(HaveOccurred())
 				dbinstance1 = fmt.Sprintf("%s-%s-%s", dbIdentifierPrefix, db1, hostParams.Hash())
 			}
@@ -147,7 +146,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
-			createdDbClaim := &persistancev1.DatabaseClaim{}
+			createdDbClaim := &v1.DatabaseClaim{}
 
 			By("status error includes engine version not specified error")
 			Eventually(func() (string, error) {
@@ -168,13 +167,13 @@ var _ = Describe("AWS", Ordered, func() {
 				Namespace: namespace,
 			}
 			invalidVersion := "15.3"
-			prevDbClaim := &persistancev1.DatabaseClaim{}
+			prevDbClaim := &v1.DatabaseClaim{}
 			By("Getting the prev dbclaim")
 			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
 			By(fmt.Sprintf("Updating with version dbVersion: %s", invalidVersion))
 			prevDbClaim.Spec.DBVersion = invalidVersion
 			Expect(k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
-			updatedDbClaim := &persistancev1.DatabaseClaim{}
+			updatedDbClaim := &v1.DatabaseClaim{}
 			By("Check that .spec.dbVersion is set")
 			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
 			Expect(updatedDbClaim.Spec.DBVersion).To(Equal(invalidVersion))
@@ -207,21 +206,21 @@ var _ = Describe("AWS", Ordered, func() {
 				Name:      db1,
 				Namespace: namespace,
 			}
-			prevDbClaim := &persistancev1.DatabaseClaim{}
+			prevDbClaim := &v1.DatabaseClaim{}
 			By("Getting the prev dbclaim")
 			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
 			By("Updating dbVersion")
 			prevDbClaim.Spec.DBVersion = "15.5"
 			k8sClient.Update(ctx, prevDbClaim)
-			updatedDbClaim := &persistancev1.DatabaseClaim{}
+			updatedDbClaim := &v1.DatabaseClaim{}
 			By("checking dbclaim status is ready")
-			Eventually(func() (persistancev1.DbState, error) {
+			Eventually(func() (v1.DbState, error) {
 				err := k8sClient.Get(ctx, key, updatedDbClaim)
 				if err != nil {
 					return "", err
 				}
 				return updatedDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.Ready))
+			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
 			By("checking if the secret [newdb-secret-db1] is created")
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: "newdb-secret-db1", Namespace: namespace}, &corev1.Secret{})
@@ -240,7 +239,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Name:      dbroleclaim1,
 				Namespace: namespace,
 			}
-			dbRoleClaim := &persistancev1.DbRoleClaim{
+			dbRoleClaim := &v1.DbRoleClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
 					Kind:       "DatabaseClaim",
@@ -249,17 +248,17 @@ var _ = Describe("AWS", Ordered, func() {
 					Name:      key.Name,
 					Namespace: key.Namespace,
 				},
-				Spec: persistancev1.DbRoleClaimSpec{
+				Spec: v1.DbRoleClaimSpec{
 					Class:      &class,
 					SecretName: secretName,
-					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+					SourceDatabaseClaim: &v1.SourceDatabaseClaim{
 						Namespace: namespace,
 						Name:      db1,
 					},
-					SchemaRoleMap: map[string]persistancev1.RoleType{
-						"schemaapp111": persistancev1.ReadOnly,
-						"schemaapp222": persistancev1.Regular,
-						"schemaapp333": persistancev1.Admin,
+					SchemaRoleMap: map[string]v1.RoleType{
+						"schemaapp111": v1.ReadOnly,
+						"schemaapp222": v1.Regular,
+						"schemaapp333": v1.Admin,
 					},
 				},
 			}
@@ -294,7 +293,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Name:      dbroleclaim2,
 				Namespace: namespace,
 			}
-			dbRoleClaim := &persistancev1.DbRoleClaim{
+			dbRoleClaim := &v1.DbRoleClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
 					Kind:       "DatabaseClaim",
@@ -303,17 +302,17 @@ var _ = Describe("AWS", Ordered, func() {
 					Name:      key.Name,
 					Namespace: key.Namespace,
 				},
-				Spec: persistancev1.DbRoleClaimSpec{
+				Spec: v1.DbRoleClaimSpec{
 					Class:      &class,
 					SecretName: secretName,
-					SourceDatabaseClaim: &persistancev1.SourceDatabaseClaim{
+					SourceDatabaseClaim: &v1.SourceDatabaseClaim{
 						Namespace: namespace,
 						Name:      db1,
 					},
-					SchemaRoleMap: map[string]persistancev1.RoleType{
-						"schemaapp444": persistancev1.ReadOnly,
-						"schemaapp555": persistancev1.Regular,
-						"schemaapp666": persistancev1.Admin,
+					SchemaRoleMap: map[string]v1.RoleType{
+						"schemaapp444": v1.ReadOnly,
+						"schemaapp555": v1.Regular,
+						"schemaapp666": v1.Admin,
 					},
 				},
 			}
@@ -369,7 +368,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Name:      db2,
 				Namespace: namespace,
 			}
-			dbClaim := &persistancev1.DatabaseClaim{
+			dbClaim := &v1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
 					Kind:       "DatabaseClaim",
@@ -378,7 +377,7 @@ var _ = Describe("AWS", Ordered, func() {
 					Name:      key.Name,
 					Namespace: key.Namespace,
 				},
-				Spec: persistancev1.DatabaseClaimSpec{
+				Spec: v1.DatabaseClaimSpec{
 					Class:                 &class,
 					AppID:                 "sample-app",
 					DatabaseName:          "sample_db_new", //in this test, the databasename is ignored as a existing one is used.
@@ -390,11 +389,11 @@ var _ = Describe("AWS", Ordered, func() {
 					UseExistingSource:     ptr.To(true),
 					DBVersion:             "15.5",
 					DeletionPolicy:        "delete",
-					SourceDataFrom: &persistancev1.SourceDataFrom{
-						Type: persistancev1.SourceDataType("database"),
-						Database: &persistancev1.Database{
+					SourceDataFrom: &v1.SourceDataFrom{
+						Type: v1.SourceDataType("database"),
+						Database: &v1.Database{
 							DSN: "postgres://root@" + rds1 + ".cpwy0kesdxhx.us-east-1.rds.amazonaws.com:5432/sample_db?sslmode=require",
-							SecretRef: &persistancev1.SecretRef{
+							SecretRef: &v1.SecretRef{
 								Name:      "existing-db-master-secret",
 								Namespace: namespace,
 							},
@@ -404,15 +403,15 @@ var _ = Describe("AWS", Ordered, func() {
 			}
 			k8sClient.Create(ctx, dbClaim)
 			time.Sleep(time.Minute * 5) //needed in order to have the new db created
-			createdDbClaim := &persistancev1.DatabaseClaim{}
+			createdDbClaim := &v1.DatabaseClaim{}
 			By("checking dbclaim status is use-existing-db")
-			Eventually(func() (persistancev1.DbState, error) {
+			Eventually(func() (v1.DbState, error) {
 				err := k8sClient.Get(ctx, key, createdDbClaim)
 				if err != nil {
 					return "", err
 				}
 				return createdDbClaim.Status.ActiveDB.DbState, nil
-			}, time.Minute*10, time.Second*15).Should(Equal(persistancev1.UsingExistingDB))
+			}, time.Minute*10, time.Second*15).Should(Equal(v1.UsingExistingDB))
 			//check if eventually the secret sample-secret-db2 is created
 			By("checking if the secret [sample-secret-db2] is created")
 			Eventually(func() error {
@@ -438,7 +437,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Name:      db2,
 				Namespace: namespace,
 			}
-			existingDbClaim := &persistancev1.DatabaseClaim{}
+			existingDbClaim := &v1.DatabaseClaim{}
 			By("Getting the existing dbclaim")
 			Expect(k8sClient.Get(ctx, key, existingDbClaim)).Should(Succeed())
 
@@ -451,16 +450,16 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(k8sClient.Patch(ctx, newDeploy, client.MergeFrom(existingDbClaim))).Should(Succeed())
 
-			createdDbClaim := &persistancev1.DatabaseClaim{}
+			createdDbClaim := &v1.DatabaseClaim{}
 			By("checking dbclaim status is ready (UsingExistingDB)")
-			Eventually(func() (persistancev1.DbState, error) {
+			Eventually(func() (v1.DbState, error) {
 				err := k8sClient.Get(ctx, key, createdDbClaim)
 				if err != nil {
 					logger.Error(err, "error getting dbclaim")
 					return "", err
 				}
 				return createdDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(persistancev1.UsingExistingDB))
+			}, timeout_e2e, interval_e2e).Should(Equal(v1.UsingExistingDB))
 			//check if eventually the secret sample-secret-db2 is created
 			By("checking if the secret [sample-secret-db2] is created")
 			//box-3-end2end-test-2-dbclaim-1ec9b27c
@@ -484,23 +483,23 @@ var _ = Describe("AWS", Ordered, func() {
 				Namespace: namespace,
 			}
 			type testState struct {
-				DbState        persistancev1.DbState
+				DbState        v1.DbState
 				MigrationState string
-				Type           persistancev1.DatabaseType
+				Type           v1.DatabaseType
 			}
 			expectedState := testState{
-				DbState:        persistancev1.Ready,
+				DbState:        v1.Ready,
 				MigrationState: "completed",
 				Type:           "aurora-postgresql",
 			}
-			db2Claim := &persistancev1.DatabaseClaim{}
+			db2Claim := &v1.DatabaseClaim{}
 			By("Getting the existing dbclaim")
 			Expect(k8sClient.Get(ctx, key, db2Claim)).Should(Succeed())
 			By("Updating type from postgres to aurora-postgresql in the claim")
 			db2Claim.Spec.Type = "aurora-postgresql"
 			db2Claim.Spec.Shape = "db.t4g.medium"
 			Expect(k8sClient.Update(ctx, db2Claim)).Should(Succeed())
-			createdDbClaim := &persistancev1.DatabaseClaim{}
+			createdDbClaim := &v1.DatabaseClaim{}
 			By("checking dbclaim status is ready")
 			By("checking dbclaim status type is aurora-postgresql")
 			Eventually(func() (testState, error) {
@@ -546,7 +545,7 @@ var _ = Describe("AWS", Ordered, func() {
 				Namespace: namespace,
 			}
 			By("Getting dbroleclaim2")
-			prevDbRoleClaim := &persistancev1.DbRoleClaim{}
+			prevDbRoleClaim := &v1.DbRoleClaim{}
 			Expect(k8sClient.Get(ctx, keyDbRoleClaim2, prevDbRoleClaim)).Should(Succeed())
 
 			By("Deleting dbroleclaim2")
@@ -590,14 +589,14 @@ var _ = Describe("AWS", Ordered, func() {
 			Namespace: namespace,
 		}
 
-		claim := &persistancev1.DatabaseClaim{}
+		claim := &v1.DatabaseClaim{}
 		if err := k8sClient.Get(ctx, key, claim); err == nil {
 			By("Deleting db1")
 			k8sClient.Delete(ctx, claim)
 		}
 
 		key.Name = db1
-		claim = &persistancev1.DatabaseClaim{}
+		claim = &v1.DatabaseClaim{}
 		if err := k8sClient.Get(ctx, key, claim); err == nil {
 			By("Deleting db2")
 			k8sClient.Delete(ctx, claim)

@@ -9,7 +9,6 @@ spec:
   appId: sample-app
   secretName: databaseclaim-dynamic-2
   type: postgres
-  instanceLabel: dynamic-connection
   userName: sample_user
   databaseName: sample_app_claim_2
   dsnName: dynamic-postgres-dsn

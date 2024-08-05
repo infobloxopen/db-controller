@@ -7,7 +7,6 @@ spec:
   appId: sample-app
   secretName: databaseclaim-sample
   type: postgres
-  instanceLabel: sample-connection
   userName: sample_user
   databaseName: sample_app
   dsnName: sample-postgres-dsn

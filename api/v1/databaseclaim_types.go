@@ -154,23 +154,18 @@ type DatabaseClaimSpec struct {
 	// The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.
 	SecretName string `json:"secretName,omitempty"`
 
-	// The matching fragment key name of the database instance that will host the database.
-	InstanceLabel string `json:"instanceLabel,omitempty"`
-
 	// The username that the application will use for accessing the database.
 	Username string `json:"userName"`
 
 	// The optional host name where the database instance is located.
-	// If the value is omitted, then the host value from the matching InstanceLabel will be used.
 	// +optional
 	Host string `json:"host,omitempty"`
 
 	// The optional port to use for connecting to the host.
-	// If the value is omitted, then the host value from the matching InstanceLabel will be used.
 	// +optional
 	Port string `json:"port,omitempty"`
 
-	// The name of the database within InstanceLabel.
+	// The name of the database.
 	// +required
 	DatabaseName string `json:"databaseName"`
 
@@ -284,9 +279,6 @@ type StatusForOldDB struct {
 type Status struct {
 	// Time the database was created
 	DbCreatedAt *metav1.Time `json:"dbCreateAt,omitempty"`
-
-	// The name of the label that was successfully matched against the fragment key names in the db-controller configMap
-	MatchedLabel string `json:"matchLabel,omitempty"`
 
 	// The optional Connection information to the database.
 	ConnectionInfo *DatabaseClaimConnectionInfo `json:"connectionInfo,omitempty"`
