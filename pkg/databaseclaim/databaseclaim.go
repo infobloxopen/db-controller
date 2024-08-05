@@ -1290,7 +1290,7 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
-	logr.V(DebugLevel).Info("==============GET DBCLIENT============", "DSN", r.getMasterDefaultDsn())
+	logr.V(DebugLevel).Info("GET DBCLIENT", "DSN", r.getMasterDefaultDsn())
 	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: r.getMasterDefaultDsn()})
 }

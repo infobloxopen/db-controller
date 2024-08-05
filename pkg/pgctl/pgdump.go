@@ -7,8 +7,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/lib/pq"
 )
 
 var (
@@ -96,15 +94,11 @@ func (x *Dump) SetPath(path string) {
 }
 
 func (x *Dump) newFileName() string {
-	var url, _ = pq.ParseURL(x.DsnUri)
-	fmt.Println("DSN URI: " + url)
 	return fmt.Sprintf(`%v_%v.sql`, "pub", time.Now().Unix())
 }
 
 func (x *Dump) dumpOptions() []string {
 	options := x.Options
-	var url, _ = pq.ParseURL(x.DsnUri)
-	fmt.Println("DSN URI: " + url)
 	options = append(options, x.DsnUri)
 
 	if x.Format != nil {
