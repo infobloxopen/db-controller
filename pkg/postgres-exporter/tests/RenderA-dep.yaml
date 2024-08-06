@@ -50,11 +50,16 @@ spec:
               containerPort: 9187
               protocol: TCP
           livenessProbe:
-            initialDelaySeconds: 0
+            exec:
+              command:
+              - sh
+              - -c
+              - wget -q -O - http://localhost:9187/metrics | grep '^pg_up ' | awk '{if ($2 == 1) exit 0; else exit 1;}'
+            failureThreshold: 3
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            successThreshold: 1
             timeoutSeconds: 1
-            httpGet:
-              path: /
-              port: http
           readinessProbe:
             initialDelaySeconds: 0
             timeoutSeconds: 1

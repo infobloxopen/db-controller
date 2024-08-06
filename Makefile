@@ -72,6 +72,9 @@ test-e2e: NS?=$(shell cat .id)
 test-e2e: ENV?=$(shell cat .env)
 test-e2e: .id .env
 test-e2e:
+	# =======================================================================
+	# ====== ATTENTION: MAKE SURE YOU ARE USING YOUR OWN **NAMESPACE** ======
+	# =======================================================================
 	NAMESPACE=$(NS) ENV=$(ENV) go test ./test/e2e/ -v -ginkgo.v --ginkgo.timeout=1h -timeout=1h
 
 .PHONY: lint

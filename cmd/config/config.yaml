@@ -30,28 +30,3 @@ passwordConfig:
   passwordComplexity: enabled
   minPasswordLength: 15
   passwordRotationPeriod: 60
-sample-connection:
-  masterUsername: postgres
-  username: postgres
-  host: localhost
-  port: 5432
-  sslMode: disable
-  passwordSecretRef: postgres-postgresql
-# host omitted, allocates database dynamically
-dynamic-connection:
-  masterUsername: root
-  username: postgres
-  port: 5432
-  sslMode: require
-  passwordSecretRef: dynamic-connection-secret
-  shape: db.t4g.medium
-  minStorageGB: 20
-  engine: postgres
-  engineVersion: 12.8
-  reclaimPolicy: delete
-another.connection:
-  username: root
-  host: some.other.service
-  port: 5412
-  sslMode: require
-  passwordSecretRef: another-connection-secret

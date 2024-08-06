@@ -13,7 +13,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
 // The following gingo struct and associted init() is required to run go test with ginkgo related flags
@@ -28,8 +27,6 @@ func init() {
 	flag.StringVar(&ginkgo.dry_run, "ginkgo.dry-run", "", "Ignore this flag")
 	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
 }
-
-var testenv = &envtest.Environment{}
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig
@@ -163,7 +160,7 @@ annotations:
 		e := openFile(t, path.Join(dir, tt.ePath))
 
 		if s != e {
-			ioutil.WriteFile(tt.cfg.Name, []byte(s), 0600)
+			os.WriteFile(tt.cfg.Name, []byte(s), 0600)
 			t.Errorf("got:\n%q\nwanted:\n%q", s, e)
 		}
 
@@ -228,7 +225,7 @@ annotations:
 		e := openFile(t, path.Join(dir, tt.eDepPath))
 		if !strings.EqualFold(d, e) {
 			t.Errorf("got:\n%s\nwanted:\n%s", d, e)
-			ioutil.WriteFile(tt.cfg.Name+"-dep.yaml", []byte(d), 0600)
+			os.WriteFile(tt.cfg.Name+"-dep.yaml", []byte(d), 0600)
 			continue
 		}
 
@@ -236,7 +233,7 @@ annotations:
 		if !strings.EqualFold(cm, e) {
 			t.Errorf("got:\n%q\nwanted:\n%q", cm, e)
 			t.Log(len(cm), len(e))
-			ioutil.WriteFile(tt.cfg.Name+"-cm.yaml", []byte(cm), 0600)
+			os.WriteFile(tt.cfg.Name+"-cm.yaml", []byte(cm), 0600)
 			continue
 		}
 

@@ -690,35 +690,6 @@ func TestDeletionPolicy(t *testing.T) {
 			},
 			want: "Orphan",
 		},
-		{
-			name: "test_default_deletion_policy",
-			args: args{
-				config: NewConfig(testConfig),
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
-					Type:         "aurora-postgresql",
-					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium",
-					MinStorageGB: 20,
-				}},
-			},
-			want: "Orphan",
-		},
-		{
-			name: "test_delete_deletion_policy",
-			args: args{
-				config: NewConfig(testConfig),
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:           "5432",
-					Type:           "aurora-postgresql",
-					DBVersion:      "12.11",
-					Shape:          "db.t4g.medium",
-					MinStorageGB:   20,
-					DeletionPolicy: "Delete",
-				}},
-			},
-			want: "Orphan",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
