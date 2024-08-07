@@ -311,41 +311,6 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 	return connInfo, nil
 }
 
-func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.DatabaseClaimConnectionInfo {
-	connInfo := v1.DatabaseClaimConnectionInfo{}
-
-	connInfo.Host = r.getMasterHost(dbClaim)
-	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = basefun.GetDefaultMasterUser(r.Config.Viper)
-	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
-	connInfo.DatabaseName = GetDBName(dbClaim)
-	return connInfo
-}
-
-func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) string {
-	if dbClaim.Spec.Host != "" {
-		return dbClaim.Spec.Host
-	}
-	return "" //TODO:check if this works after removing instanceLabel
-}
-
-func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
-
-	if dbClaim.Spec.Port != "" {
-		return dbClaim.Spec.Port
-	}
-
-	return basefun.GetDefaultMasterPort(r.Config.Viper)
-}
-
-func GetDBName(dbClaim *v1.DatabaseClaim) string {
-	if dbClaim.Spec.DBNameOverride != "" {
-		return dbClaim.Spec.DBNameOverride
-	}
-
-	return dbClaim.Spec.DatabaseName
-}
-
 func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*dbcBaseConfig, error) {
 	var (
 		err           error
@@ -353,11 +318,6 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*d
 	)
 
 	dbcBaseConf := dbcBaseConfig{}
-	connInfo := r.getClientConn(dbClaim)
-
-	if connInfo.Host == "" {
-		manageCloudDB = true
-	}
 
 	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
 	if err != nil {
@@ -367,7 +327,6 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*d
 		dbcBaseConf.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
 	dbcBaseConf.ManageCloudDB = manageCloudDB
-	dbcBaseConf.MasterConnInfo = connInfo
 	dbcBaseConf.HostParams = *hostParams
 
 	if manageCloudDB {

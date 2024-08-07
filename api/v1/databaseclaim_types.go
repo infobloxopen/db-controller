@@ -31,8 +31,6 @@ type DatabaseType string
 
 const (
 	Postgres       DatabaseType = "postgres"
-	MySQL          DatabaseType = "mysql"
-	Aurora         DatabaseType = "aurora"
 	AuroraPostgres DatabaseType = "aurora-postgresql"
 )
 
@@ -40,7 +38,6 @@ type SQLEngine string
 
 // SQL database engines.
 const (
-	MysqlEngine      SQLEngine = "mysql"
 	PostgresqlEngine SQLEngine = "postgres"
 )
 
@@ -137,9 +134,6 @@ type DatabaseClaimSpec struct {
 	// +required
 	Type DatabaseType `json:"type"`
 
-	// In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
-	DBNameOverride string `json:"dbNameOverride,omitempty"`
-
 	// Specifies the type of deletion policy to use when the resource is deleted.
 	// It makes a lot of sense to not set it for most cases - this will default it to Orphan based on defaultDeletionPolicy in controllerConfig
 	// If you are setting it to Delete, you should be aware that the database will be deleted when the resource is deleted. Hope you know what you are doing.
@@ -156,14 +150,6 @@ type DatabaseClaimSpec struct {
 
 	// The username that the application will use for accessing the database.
 	Username string `json:"userName"`
-
-	// The optional host name where the database instance is located.
-	// +optional
-	Host string `json:"host,omitempty"`
-
-	// The optional port to use for connecting to the host.
-	// +optional
-	Port string `json:"port,omitempty"`
 
 	// The name of the database.
 	// +required
@@ -189,7 +175,7 @@ type DatabaseClaimSpec struct {
 	// +kubebuilder:validation:Enum=Bronze;Silver;Gold;Platinum
 	BackupPolicy string `json:"backupPolicy,omitempty"`
 
-	// RestoreFrom indicates the snapshot to restore the Database from
+	// RestoreFrom indicates the snapshot id to restore the Database from
 	// +optional
 	RestoreFrom string `json:"restoreFrom,omitempty"`
 

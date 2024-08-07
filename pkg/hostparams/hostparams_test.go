@@ -399,7 +399,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium",
@@ -420,7 +419,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium!io1",
@@ -441,7 +439,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.large",
@@ -462,7 +459,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium!xxx",
@@ -492,7 +488,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium!xxx",
@@ -507,7 +502,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium!xxx",
@@ -528,7 +522,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium",
@@ -555,7 +548,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium!xxx",
@@ -577,7 +569,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium",
@@ -606,7 +597,6 @@ func TestNew(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "postgres",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium!xxx",
@@ -651,7 +641,6 @@ func TestDeletionPolicy(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium",
@@ -665,7 +654,6 @@ func TestDeletionPolicy(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:           "5432",
 					Type:           "aurora-postgresql",
 					DBVersion:      "12.11",
 					Shape:          "db.t4g.medium",
@@ -680,7 +668,6 @@ func TestDeletionPolicy(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:           "5432",
 					Type:           "postgres",
 					DBVersion:      "12.11",
 					Shape:          "db.t4g.medium",
@@ -715,7 +702,6 @@ func TestCheckEngineVersion(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "aurora-postgresql",
 					Shape:        "db.t4g.medium",
 					MinStorageGB: 20,
@@ -728,7 +714,6 @@ func TestCheckEngineVersion(t *testing.T) {
 			args: args{
 				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
 					Shape:        "db.t4g.medium",

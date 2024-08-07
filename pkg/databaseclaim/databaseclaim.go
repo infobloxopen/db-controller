@@ -68,11 +68,8 @@ var ErrMaxNameLen = fmt.Errorf("dbclaim name is too long. max length is 44 chara
 type input struct {
 
 	// FIXME: this is type DatabaseType, not string
-	DbType string
-
-	ManageCloudDB bool
-	SharedDBHost  bool
-	// FIXME: remove this, it's being logged as well. Remove those
+	DbType                     string
+	SharedDBHost               bool
 	MasterConnInfo             v1.DatabaseClaimConnectionInfo
 	TempSecret                 string
 	DbHostIdentifier           string
@@ -266,26 +263,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		cloudwatchLogsExport = append(cloudwatchLogsExport, &enableCloudwatchLogsExport)
 	}
 
-	connInfo := r.getClientConn(dbClaim)
-	if connInfo.Port == "" {
-		return fmt.Errorf("cannot get master port")
-	}
-
-	if connInfo.Username == "" {
-		return fmt.Errorf("invalid credentials (username)")
-	}
-	if connInfo.SSLMode == "" {
-		return fmt.Errorf("invalid sslMode")
-	}
-	if connInfo.DatabaseName == "" {
-		return fmt.Errorf("invalid DatabaseName")
-	}
-	if strings.Contains(connInfo.DatabaseName, " ") {
-		return fmt.Errorf("invalid DatabaseName (contains space)")
-	}
-	if connInfo.Host == "" {
-		manageCloudDB = true
-	}
 	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
 	if err != nil {
 		return err
@@ -294,9 +271,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 	// FIXME: don't store request specific information in the
 	// reconciler struct itself
 	r.Input = &input{
-		ManageCloudDB:              manageCloudDB,
 		SharedDBHost:               sharedDBHost,
-		MasterConnInfo:             connInfo,
 		DbType:                     string(dbClaim.Spec.Type),
 		HostParams:                 *hostParams,
 		EnablePerfInsight:          enablePerfInsight,
@@ -666,51 +641,35 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 	logr.Info("reconcileNewDB", "r.Input", r.Input)
 
-	if r.Input.ManageCloudDB {
-		isReady, err := r.manageCloudHost(ctx, dbClaim)
-		if err != nil {
-			logr.Error(err, "manage_cloud_host")
-			return ctrl.Result{}, err
-		}
-		// Clear existing error
-		if dbClaim.Status.Error != "" {
-			//resetting error
-			dbClaim.Status.Error = ""
-			if err := r.updateClientStatus(ctx, dbClaim); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
-		if !isReady {
-			logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
-			return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
-		}
-
-		logr.Info("cloud instance ready. reading generated master secret")
-		connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
-		if err != nil {
-			logr.Info("unable to read the complete secret. requeueing")
-			return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
-		}
-		r.Input.MasterConnInfo.Host = connInfo.Host
-		r.Input.MasterConnInfo.Password = connInfo.Password
-		r.Input.MasterConnInfo.Port = connInfo.Port
-		r.Input.MasterConnInfo.Username = connInfo.Username
-
-	} else {
-
-		err := r.Input.HostParams.CheckEngineVersion()
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		//was used only for local testing
-		password, err := r.readMasterPassword(ctx, dbClaim)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		r.Input.MasterConnInfo.Password = password
+	isReady, err := r.manageCloudHost(ctx, dbClaim)
+	if err != nil {
+		logr.Error(err, "manage_cloud_host")
+		return ctrl.Result{}, err
 	}
+	// Clear existing error
+	if dbClaim.Status.Error != "" {
+		//resetting error
+		dbClaim.Status.Error = ""
+		if err := r.updateClientStatus(ctx, dbClaim); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if !isReady {
+		logr.Info("cloud instance provisioning is in progress", "instance name", r.Input.DbHostIdentifier, "next-step", "requeueing")
+		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
+	}
+
+	logr.Info("cloud instance ready. reading generated master secret")
+	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
+	if err != nil {
+		logr.Info("unable to read the complete secret. requeueing")
+		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
+	}
+	r.Input.MasterConnInfo.Host = connInfo.Host
+	r.Input.MasterConnInfo.Password = connInfo.Password
+	r.Input.MasterConnInfo.Port = connInfo.Port
+	r.Input.MasterConnInfo.Username = connInfo.Username
 
 	dbClient, err := r.getDBClient(ctx, dbClaim)
 	if err != nil {
@@ -734,11 +693,11 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 		return ctrl.Result{}, err
 
 	}
-	err = r.manageUserAndExtensions(ctx, dbClient, &dbClaim.Status.NewDB, GetDBName(dbClaim), dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(ctx, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	err = dbClient.ManageSystemFunctions(GetDBName(dbClaim), basefun.GetSystemFunctions(r.Config.Viper))
+	err = dbClient.ManageSystemFunctions(dbClaim.Spec.DatabaseName, basefun.GetSystemFunctions(r.Config.Viper))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1245,17 +1204,6 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, db
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: connInfo.Uri()})
 }
 
-func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.DatabaseClaimConnectionInfo {
-	connInfo := v1.DatabaseClaimConnectionInfo{}
-
-	connInfo.Host = r.getMasterHost(dbClaim)
-	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = basefun.GetDefaultMasterUser(r.Config.Viper)
-	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
-	connInfo.DatabaseName = GetDBName(dbClaim)
-	return connInfo
-}
-
 func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
@@ -1272,24 +1220,20 @@ func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
 	// delete any external resources associated with the dbClaim
 	// Only RDS Instance are managed for now
+	reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
 
-	if r.Input.ManageCloudDB {
+	if reclaimPolicy == "delete" {
+		dbHostName := r.getDynamicHostName(dbClaim)
+		pgName := r.getParameterGroupName(dbClaim)
 
-		reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
-
-		if reclaimPolicy == "delete" {
-			dbHostName := r.getDynamicHostName(dbClaim)
-			pgName := r.getParameterGroupName(dbClaim)
-
-			// Delete
-			if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
-				return err
-			}
-			return r.deleteParameterGroup(ctx, pgName)
-
+		// Delete
+		if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
+			return err
 		}
-		// else reclaimPolicy == "retain" nothing to do!
+		return r.deleteParameterGroup(ctx, pgName)
+
 	}
+	// else reclaimPolicy == "retain" nothing to do!
 
 	return nil
 }
@@ -1344,23 +1288,6 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.DatabaseClaim{}).WithEventFilter(pred).
 		Complete(r)
-}
-
-func (r *DatabaseClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) string {
-	// If config host is overridden by db claims host
-	if dbClaim.Spec.Host != "" {
-		return dbClaim.Spec.Host
-	}
-	return "" //TODO: check if this works after removing the instancelabel
-}
-
-func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
-
-	if dbClaim.Spec.Port != "" {
-		return dbClaim.Spec.Port
-	}
-
-	return basefun.GetDefaultMasterPort(r.Config.Viper)
 }
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
@@ -2617,41 +2544,6 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	logr.Info("updating connection info SECRET: "+exSecret.Name, "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
-}
-
-// FIXME: remove this method. It's a bunch of custom logic that
-// only was written to make unit tests work. We should be testing
-// code that is actually used in production
-func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, claim *v1.DatabaseClaim) (string, error) {
-	gs := &corev1.Secret{}
-
-	secretName := claim.Spec.SecretName
-
-	if secretName == "" {
-		return "", fmt.Errorf("an empty password secret reference")
-	}
-
-	if err := r.Client.Get(ctx, client.ObjectKey{
-		Namespace: claim.Namespace,
-		Name:      secretName,
-	}, gs); err != nil {
-		return "", err
-	}
-
-	bsPass, ok := gs.Data["password"]
-	if !ok {
-		return "", fmt.Errorf("unable to find password text")
-	}
-
-	return string(bsPass), nil
-}
-
-func GetDBName(dbClaim *v1.DatabaseClaim) string {
-	if dbClaim.Spec.DBNameOverride != "" {
-		return dbClaim.Spec.DBNameOverride
-	}
-
-	return dbClaim.Spec.DatabaseName
 }
 
 func (r *DatabaseClaimReconciler) updateUserStatus(status *v1.Status, userName, userPassword string) {
