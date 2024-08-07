@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/internal/controller"
@@ -41,6 +42,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
+	dbwebhook "github.com/infobloxopen/db-controller/webhook"
 
 	// +kubebuilder:scaffold:imports
 
@@ -104,15 +106,15 @@ func main() {
 	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "", "The prefix to be added to the DbHost. Ideally this is the env name.")
 
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml", "Database connection string to with root credentials.")
-	flag.StringVar(&dBProxySidecarConfigPath, "db-proxy-sidecar-config-path", "/etc/config/sidecar.yaml", "Mutating webhook sidecar configuration.")
-	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/sidecar.yaml", "Mutating webhook sidecar configuration.")
+	flag.StringVar(&dBProxySidecarConfigPath, "db-proxy-sidecar-config-path", "/etc/config/dbproxy/dbproxysidecar.json", "Mutating webhook sidecar configuration.")
+	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/dsnexec/dsnexecsidecar.json", "Mutating webhook sidecar configuration.")
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
-	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false,
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", true,
 		"Enable DB Proxy webhook. "+
 			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
 			"with the infoblox.com/db-secret-path annotation set.")
-	flag.BoolVar(&enableDSNExecWebhook, "enable-dsnexec", false,
+	flag.BoolVar(&enableDSNExecWebhook, "enable-dsnexec", true,
 		"Enable Dsnexec webhook. "+
 			"Enabling this option will cause the db-controller to inject dsnexec container into pods "+
 			"with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
@@ -220,6 +222,45 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
+	}
+
+	webHookServer := mgr.GetWebhookServer()
+	if enableDBProxyWebhook {
+
+		cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)
+		if err != nil {
+			setupLog.Error(err, "could not parse db proxy sidecar configuration")
+			os.Exit(1)
+		}
+		setupLog.Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
+
+		webHookServer.Register("/mutate", &webhook.Admission{
+			Handler: &dbwebhook.DBProxyInjector{
+				Name:                 "DB Proxy",
+				Client:               mgr.GetClient(),
+				DBProxySidecarConfig: cfg,
+				Decoder:              admission.NewDecoder(mgr.GetScheme()),
+			},
+		})
+	}
+	if enableDSNExecWebhook {
+
+		cfg, err := dbwebhook.ParseConfig(dsnExecSidecarConfigPath)
+
+		if err != nil {
+			setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
+			os.Exit(1)
+		}
+		setupLog.Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
+
+		webHookServer.Register("/mutate-dsnexec", &webhook.Admission{
+			Handler: &dbwebhook.DsnExecInjector{
+				Name:                 "Dsnexec",
+				Client:               mgr.GetClient(),
+				DsnExecSidecarConfig: cfg,
+				Decoder:              admission.NewDecoder(mgr.GetScheme()),
+			},
+		})
 	}
 
 	setupLog.Info("starting manager")
