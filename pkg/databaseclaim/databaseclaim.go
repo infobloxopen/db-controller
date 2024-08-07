@@ -283,6 +283,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		return ErrMaxNameLen
 	}
 
+	r.Input.MasterConnInfo.DatabaseName = dbClaim.Spec.DatabaseName
 	r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	if basefun.GetSuperUserElevation(r.Config.Viper) {
 		r.Input.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
@@ -667,6 +668,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	r.Input.MasterConnInfo.Password = connInfo.Password
 	r.Input.MasterConnInfo.Port = connInfo.Port
 	r.Input.MasterConnInfo.Username = connInfo.Username
+	r.Input.MasterConnInfo.DatabaseName = connInfo.DatabaseName
 
 	dbClient, err := r.getDBClient(ctx, dbClaim)
 	if err != nil {
