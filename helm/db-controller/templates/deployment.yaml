@@ -88,22 +88,10 @@ spec:
             - name: config-volume
               mountPath: /etc/config
             {{- if or ( .Values.dbproxy.enabled ) ( .Values.dsnexec.enabled ) }}
-            - name: dbproxycert
-              mountPath: /certs
+            - name: cert
+              mountPath: /tmp/k8s-webhook-server/serving-certs
               readOnly: true
             {{- end }}
-        - name: kube-rbac-proxy
-          args:
-            - --secure-listen-address=0.0.0.0:8443
-            - --upstream=http://127.0.0.1:8080/
-            - --logtostderr=true
-            - --v=10
-          image: gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-          {{- toYaml .Values.securityContext | nindent 12 }}
-          resources:
-        {{- toYaml .Values.resources | nindent 12 }}
       volumes:
       - name: pg-temp-volume
         emptyDir: {}
@@ -111,9 +99,9 @@ spec:
         configMap:
           name: {{ include "db-controller.name" . }}-config
       {{- if or ( .Values.dbproxy.enabled ) ( .Values.dsnexec.enabled ) }}
-      - name: dbproxycert
+      - name: cert
         secret:
-          secretName: {{ include "db-controller.fullname" . }}
+          secretName: {{ include "db-controller.fullname" . }}-webhook
           optional: false
           items:
           - key: tls.crt
