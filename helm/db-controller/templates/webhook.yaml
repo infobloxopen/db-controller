@@ -8,7 +8,6 @@ metadata:
 webhooks:
 {{- if .Values.dbproxy.enabled }}
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "db-controller.fullname" . }}
       path: /mutate
@@ -32,7 +31,6 @@ webhooks:
 {{- end }}
 {{- if .Values.dsnexec.enabled }}
 - clientConfig:
-    caBundle: Cg==
     service:
       name: {{ include "db-controller.fullname" . }}
       path: /mutate-dsnexec

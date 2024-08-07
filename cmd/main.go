@@ -224,6 +224,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// FIXME: use SetupWebhookWithManager and register as
+	// pod Defaulters
+	// https://book.kubebuilder.io/cronjob-tutorial/webhook-implementation
 	webHookServer := mgr.GetWebhookServer()
 	if enableDBProxyWebhook {
 
