@@ -668,7 +668,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	r.Input.MasterConnInfo.Password = connInfo.Password
 	r.Input.MasterConnInfo.Port = connInfo.Port
 	r.Input.MasterConnInfo.Username = connInfo.Username
-	r.Input.MasterConnInfo.DatabaseName = connInfo.DatabaseName
+	r.Input.MasterConnInfo.DatabaseName = dbClaim.Spec.DatabaseName
 
 	dbClient, err := r.getDBClient(ctx, dbClaim)
 	if err != nil {
