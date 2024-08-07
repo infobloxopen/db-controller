@@ -110,14 +110,8 @@ func main() {
 	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/dsnexec/dsnexecsidecar.json", "Mutating webhook sidecar configuration.")
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
-	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", true,
-		"Enable DB Proxy webhook. "+
-			"Enabling this option will cause the db-controller to inject db proxy pod into pods "+
-			"with the infoblox.com/db-secret-path annotation set.")
-	flag.BoolVar(&enableDSNExecWebhook, "enable-dsnexec", true,
-		"Enable Dsnexec webhook. "+
-			"Enabling this option will cause the db-controller to inject dsnexec container into pods "+
-			"with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. Enabling this option will cause the db-controller to inject db proxy pod into pods with the infoblox.com/db-secret-path annotation set.")
+	flag.BoolVar(&enableDSNExecWebhook, "enable-dsnexec", false, "Enable Dsnexec webhook. Enabling this option will cause the db-controller to inject dsnexec container into pods with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
 
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -224,6 +218,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// FIXME: use SetupWebhookWithManager and register as
+	// pod Defaulters
+	// https://book.kubebuilder.io/cronjob-tutorial/webhook-implementation
 	webHookServer := mgr.GetWebhookServer()
 	if enableDBProxyWebhook {
 
