@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
@@ -569,55 +568,55 @@ var _ = Describe("AWS", Ordered, func() {
 
 	var _ = AfterAll(func() {
 
-		//delete DBRoleClaims within this namespace
-		dbRoleClaims := &v1.DbRoleClaimList{}
-		if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, dbrc := range dbRoleClaims.Items {
-			By("Deleting DBRoleClaim: " + dbrc.Name)
-			k8sClient.Delete(ctx, &dbrc)
-		}
+		// //delete DBRoleClaims within this namespace
+		// dbRoleClaims := &v1.DbRoleClaimList{}
+		// if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, dbrc := range dbRoleClaims.Items {
+		// 	By("Deleting DBRoleClaim: " + dbrc.Name)
+		// 	k8sClient.Delete(ctx, &dbrc)
+		// }
 
-		// delete DBClaims within this namespace
-		dbClaims := &v1.DatabaseClaimList{}
-		if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, dbc := range dbClaims.Items {
-			By("Deleting DatabaseClaim: " + dbc.Name)
-			k8sClient.Delete(ctx, &dbc)
-		}
+		// // delete DBClaims within this namespace
+		// dbClaims := &v1.DatabaseClaimList{}
+		// if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, dbc := range dbClaims.Items {
+		// 	By("Deleting DatabaseClaim: " + dbc.Name)
+		// 	k8sClient.Delete(ctx, &dbc)
+		// }
 
-		// delete DBClaims within this namespace
-		dbinstances := &crossplanerds.DBInstanceList{}
-		if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, dbinstance := range dbinstances.Items {
-			if strings.Contains(dbinstance.Name, namespace) {
-				By("Deleting DBInstance: " + dbinstance.Name)
-				k8sClient.Delete(ctx, &dbinstance)
-			}
-		}
+		// // delete DBClaims within this namespace
+		// dbinstances := &crossplanerds.DBInstanceList{}
+		// if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, dbinstance := range dbinstances.Items {
+		// 	if strings.Contains(dbinstance.Name, namespace) {
+		// 		By("Deleting DBInstance: " + dbinstance.Name)
+		// 		k8sClient.Delete(ctx, &dbinstance)
+		// 	}
+		// }
 
-		// delete Secrets within this namespace
-		secrets := &corev1.SecretList{}
-		if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, secret := range secrets.Items {
-			By("Deleting Secret: " + secret.Name)
-			k8sClient.Delete(ctx, &secret)
-		}
+		// // delete Secrets within this namespace
+		// secrets := &corev1.SecretList{}
+		// if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, secret := range secrets.Items {
+		// 	By("Deleting Secret: " + secret.Name)
+		// 	k8sClient.Delete(ctx, &secret)
+		// }
 
-		//delete the namespace
-		By("deleting the namespace")
-		k8sClient.Delete(ctx, &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: namespace,
-			},
-		})
+		// //delete the namespace
+		// By("deleting the namespace")
+		// k8sClient.Delete(ctx, &corev1.Namespace{
+		// 	ObjectMeta: metav1.ObjectMeta{
+		// 		Name: namespace,
+		// 	},
+		// })
 
 	})
 })
