@@ -387,7 +387,6 @@ DatabaseClaim:
 
     * Status: 
       - DbCreatedAt: Time the database was created.
-      - MatchedLabel: The name of the label that was successfully matched in the db-controller configMap
       - ConnectionInfo{} (data in connection info is projected into a secret)
          - Username: The username that the application will use for accessing the database. 
          - Password: The password associated with the Username.
@@ -528,10 +527,8 @@ B --> A
 ```
 
 The DatabaseClaim
-Status is where keep the state used by the reconciler. The two parts
-of the Status that are important are:
+Status is where keep the state used by the reconciler. The important part is:
 
-* MatchedLabel: The name of the label that was successfully matched in the db-controller configMap
 * ConnectionInfo[]: connection info about the database that is projected into a client accessible secret
 
 In this part we will look at the UpdateStatus function sequence and the
@@ -540,11 +537,10 @@ the working db-controller to interoperate:
 
 ```mermaid
   sequenceDiagram
-    UpdateStatus->>getClient: Status.MatchedLabel
       rect rgba(255, 0, 255, .2) 
         par New Dynamic Database Binding
           getClient->>getHost: dbClaim
-          getHost->>getHost: Spec.Host && Config::Status.MatchedLabel.Host == "" ?
+          getHost->>getHost: Spec.Host
           getHost->>getHost: Yes
           Status->>getHost: Status.CloudDatabase.Host == "" ?
           getHost->>getHost: Yes        
@@ -557,12 +553,11 @@ the working db-controller to interoperate:
       end
       rect rgba(255, 255, 0, .2) 
         par Existing Static Database Binding
-          getHost->>getHost: Spec.Host && Config::Status.MatchedLabel.Host == ""
+          getHost->>getHost: Spec.Host
           getHost->>getHost: No
           getProvisionedHost->>getHost: {Host, Port, User, Password}
           getHost->>getClient: {Host, Port, User, Password}
         end
-    end   
     getClient->>Status: Status.ConnectionInfo.Host
     getClient->>Status: Status.ConnectionInfo.Port
     getClient->>Status: Status.ConnectionInfo.SSLMode
