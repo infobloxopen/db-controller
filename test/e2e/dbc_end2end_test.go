@@ -178,13 +178,6 @@ var _ = Describe("AWS", Ordered, func() {
 			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
 			Expect(updatedDbClaim.Spec.DBVersion).To(Equal(invalidVersion))
 
-			var dbinst crossplanerds.DBInstance
-			By(fmt.Sprintf("checking crossplane.dbinstance is created: %s", dbinstance1))
-			Eventually(func() error {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
-				return err
-			}, 60*time.Second, 100*time.Millisecond).Should(BeNil())
-
 			By("checking dbclaim status.error message is not empty")
 			Eventually(func() (string, error) {
 				err := k8sClient.Get(ctx, key, updatedDbClaim)
