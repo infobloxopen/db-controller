@@ -40,7 +40,6 @@ var _ = Describe("db-controller", func() {
 					Class:                 ptr.To(""),
 					AppID:                 "sample-app",
 					DatabaseName:          "sample_app",
-					InstanceLabel:         "sample-connection",
 					SecretName:            "sample-secret",
 					Username:              "sample_user",
 					EnableSuperUser:       ptr.To(false),
@@ -57,7 +56,7 @@ var _ = Describe("db-controller", func() {
 					return false
 				}
 
-				return dbClaim.Status.Error == "can't find any instance label matching fragment keys"
+				return dbClaim.Status.Error == "can't find any instance label matching keys"
 
 			}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
 

@@ -73,7 +73,7 @@ spec:
                 description: Class is used to run multiple instances of dbcontroller.
                 type: string
               databaseName:
-                description: The name of the database within InstanceLabel.
+                description: The name of the database.
                 type: string
               dbNameOverride:
                 description: In most cases the AppID will match the database name.
@@ -109,13 +109,8 @@ spec:
                   This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false
                 type: boolean
               host:
-                description: |-
-                  The optional host name where the database instance is located.
-                  If the value is omitted, then the host value from the matching InstanceLabel will be used.
-                type: string
-              instanceLabel:
-                description: The matching fragment key name of the database instance
-                  that will host the database.
+                description: The optional host name where the database instance is
+                  located.
                 type: string
               maxStorageGB:
                 description: |-
@@ -128,9 +123,7 @@ spec:
                   database host storage capacity in GBytes
                 type: integer
               port:
-                description: |-
-                  The optional port to use for connecting to the host.
-                  If the value is omitted, then the host value from the matching InstanceLabel will be used.
+                description: The optional port to use for connecting to the host.
                 type: string
               preferredMaintenanceWindow:
                 description: |-
@@ -282,10 +275,6 @@ spec:
                   dbversion:
                     description: Version of the provisioned Database
                     type: string
-                  matchLabel:
-                    description: The name of the label that was successfully matched
-                      against the fragment key names in the db-controller configMap
-                    type: string
                   maxStorageGB:
                     description: |-
                       If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
@@ -385,10 +374,6 @@ spec:
                     type: string
                   dbversion:
                     description: Version of the provisioned Database
-                    type: string
-                  matchLabel:
-                    description: The name of the label that was successfully matched
-                      against the fragment key names in the db-controller configMap
                     type: string
                   maxStorageGB:
                     description: |-

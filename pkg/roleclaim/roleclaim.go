@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/armon/go-radix"
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
@@ -52,7 +51,6 @@ const (
 )
 
 type dbcBaseConfig struct {
-	FragmentKey      string
 	HostParams       hostparams.HostParams
 	MasterConnInfo   v1.DatabaseClaimConnectionInfo
 	DbHostIdentifier string
@@ -313,32 +311,31 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 	return connInfo, nil
 }
 
-func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) v1.DatabaseClaimConnectionInfo {
+func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.DatabaseClaimConnectionInfo {
 	connInfo := v1.DatabaseClaimConnectionInfo{}
 
-	connInfo.Host = r.getMasterHost(dbClaim, dbcBaseConfig)
-	connInfo.Port = r.getMasterPort(dbClaim, dbcBaseConfig)
-	connInfo.Username = basefun.GetMasterUser(r.Config.Viper, dbcBaseConfig.FragmentKey)
-	connInfo.SSLMode = basefun.GetSSLMode(r.Config.Viper, dbcBaseConfig.FragmentKey)
+	connInfo.Host = r.getMasterHost(dbClaim)
+	connInfo.Port = r.getMasterPort(dbClaim)
+	connInfo.Username = basefun.GetDefaultMasterUser(r.Config.Viper)
+	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
 
-func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) string {
-	// If config host is overridden by db claims host
+func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) string {
 	if dbClaim.Spec.Host != "" {
 		return dbClaim.Spec.Host
 	}
-	return basefun.GetMasterHost(r.Config.Viper, dbcBaseConfig.FragmentKey)
+	return "" //TODO:check if this works after removing instanceLabel
 }
 
-func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim, dbcBaseConfig *dbcBaseConfig) string {
+func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
 
 	if dbClaim.Spec.Port != "" {
 		return dbClaim.Spec.Port
 	}
 
-	return basefun.GetMasterPort(r.Config.Viper, dbcBaseConfig.FragmentKey)
+	return basefun.GetDefaultMasterPort(r.Config.Viper)
 }
 
 func GetDBName(dbClaim *v1.DatabaseClaim) string {
@@ -351,27 +348,18 @@ func GetDBName(dbClaim *v1.DatabaseClaim) string {
 
 func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*dbcBaseConfig, error) {
 	var (
-		fragmentKey   string
 		err           error
 		manageCloudDB bool
 	)
 
-	if dbClaim.Spec.InstanceLabel != "" {
-		fragmentKey, err = r.matchInstanceLabel(dbClaim)
-		if err != nil {
-			return nil, err
-		}
-	}
-	dbcBaseConf := dbcBaseConfig{
-		FragmentKey: fragmentKey,
-	}
-	connInfo := r.getClientConn(dbClaim, &dbcBaseConf)
+	dbcBaseConf := dbcBaseConfig{}
+	connInfo := r.getClientConn(dbClaim)
 
 	if connInfo.Host == "" {
 		manageCloudDB = true
 	}
 
-	hostParams, err := hostparams.New(r.Config.Viper, fragmentKey, dbClaim)
+	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
 	if err != nil {
 		return nil, err
 	}
@@ -386,28 +374,6 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*d
 		dbcBaseConf.DbHostIdentifier = r.getDynamicHostName(dbClaim, &dbcBaseConf)
 	}
 	return &dbcBaseConf, nil
-}
-
-// Load settings into the DBClaim (connection, config, controllerconfig...)
-func (r *DbRoleClaimReconciler) matchInstanceLabel(dbClaim *v1.DatabaseClaim) (string, error) {
-	settingsMap := r.Config.Viper.AllSettings()
-
-	rTree := radix.New()
-	for k := range settingsMap {
-		if k != "passwordconfig" {
-			rTree.Insert(k, true)
-		}
-	}
-
-	// Find the longest prefix match
-	m, _, ok := rTree.LongestPrefix(dbClaim.Spec.InstanceLabel)
-	if !ok {
-		return "", fmt.Errorf("can't find any instance label matching fragment keys")
-	}
-
-	dbClaim.Status.ActiveDB.MatchedLabel = m
-
-	return m, nil
 }
 
 func (r *DbRoleClaimReconciler) getServiceNamespace() (string, error) {
@@ -425,11 +391,8 @@ func (r *DbRoleClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim, db
 	if r.Config.DbIdentifierPrefix != "" {
 		prefix = r.Config.DbIdentifierPrefix + "-"
 	}
-	if dbcBaseConf.FragmentKey == "" {
-		return prefix + dbClaim.Name + suffix
-	}
 
-	return prefix + dbcBaseConf.FragmentKey + suffix
+	return prefix + dbClaim.Name + suffix
 }
 
 func (r *DbRoleClaimReconciler) getSourceSecret(ctx context.Context, secretName string, dbRoleClaim *v1.DbRoleClaim, log *logr.Logger) (*corev1.Secret, error) {

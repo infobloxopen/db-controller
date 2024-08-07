@@ -153,39 +153,15 @@ func SanitizeDsn(dsn string) string {
 	return u.String()
 }
 
-func GetMasterHost(viperConfig *viper.Viper, fragmentKey string) string {
-	return viperConfig.GetString(fmt.Sprintf("%s::Host", fragmentKey))
-}
-
-func GetMasterUser(viperConfig *viper.Viper, fragmentKey string) string {
-	if fragmentKey != "" {
-		u := viperConfig.GetString(fmt.Sprintf("%s::masterUsername", fragmentKey))
-		if u != "" {
-			return u
-		}
-	}
+func GetDefaultMasterUser(viperConfig *viper.Viper) string {
 	return viperConfig.GetString("defaultMasterUsername")
 }
 
-func GetMasterPort(viperConfig *viper.Viper, fragmentKey string) string {
-	if fragmentKey != "" {
-		p := viperConfig.GetString(fmt.Sprintf("%s::Port", fragmentKey))
-		if p != "" {
-			return p
-		}
-	}
-
+func GetDefaultMasterPort(viperConfig *viper.Viper) string {
 	return viperConfig.GetString("defaultMasterPort")
 }
 
-func GetSSLMode(viperConfig *viper.Viper, fragmentKey string) string {
-	if fragmentKey != "" {
-		s := viperConfig.GetString(fmt.Sprintf("%s::sslMode", fragmentKey))
-		if s != "" {
-			return s
-		}
-	}
-
+func GetDefaultSSLMode(viperConfig *viper.Viper) string {
 	return viperConfig.GetString("defaultSslMode")
 }
 
@@ -217,9 +193,6 @@ func GetPgTempFolder(viperConfig *viper.Viper) string {
 }
 func GetDefaultReclaimPolicy(viperConfig *viper.Viper) string {
 	return viperConfig.GetString("defaultReclaimPolicy")
-}
-func GetReclaimPolicy(viperConfig *viper.Viper, fragmentKey string) string {
-	return viperConfig.GetString(fmt.Sprintf("%s::reclaimPolicy", fragmentKey))
 }
 func GetIsPasswordComplexity(viperConfig *viper.Viper) bool {
 	complEnabled := viperConfig.GetString("passwordconfig::passwordComplexity")

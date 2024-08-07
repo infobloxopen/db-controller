@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/armon/go-radix"
 	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
@@ -71,7 +70,6 @@ type input struct {
 	// FIXME: this is type DatabaseType, not string
 	DbType string
 
-	FragmentKey   string
 	ManageCloudDB bool
 	SharedDBHost  bool
 	// FIXME: remove this, it's being logged as well. Remove those
@@ -243,7 +241,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 
 	r.Input = &input{}
 	var (
-		fragmentKey             string
 		err                     error
 		manageCloudDB           bool
 		sharedDBHost            bool
@@ -269,15 +266,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		cloudwatchLogsExport = append(cloudwatchLogsExport, &enableCloudwatchLogsExport)
 	}
 
-	if dbClaim.Spec.InstanceLabel != "" {
-		fragmentKey, err = r.matchInstanceLabel(dbClaim)
-		if err != nil {
-			return err
-		}
-		sharedDBHost = true
-	}
-
-	r.Input.FragmentKey = fragmentKey
 	connInfo := r.getClientConn(dbClaim)
 	if connInfo.Port == "" {
 		return fmt.Errorf("cannot get master port")
@@ -298,7 +286,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 	if connInfo.Host == "" {
 		manageCloudDB = true
 	}
-	hostParams, err := hostparams.New(r.Config.Viper, fragmentKey, dbClaim)
+	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
 	if err != nil {
 		return err
 	}
@@ -309,7 +297,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		ManageCloudDB:              manageCloudDB,
 		SharedDBHost:               sharedDBHost,
 		MasterConnInfo:             connInfo,
-		FragmentKey:                fragmentKey,
 		DbType:                     string(dbClaim.Spec.Type),
 		HostParams:                 *hostParams,
 		EnablePerfInsight:          enablePerfInsight,
@@ -459,25 +446,6 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 
 	logr.Info("post migration is in progress")
-
-	canTag, err := r.canTagResources(ctx, dbClaim)
-	if err != nil {
-		logr.Error(err, "error in checking  criteria post migration ")
-		return r.manageError(ctx, dbClaim, err)
-	}
-	if !canTag {
-		logr.Info("Skipping post migration actions due to DB being used by other entities")
-		dbClaim.Status.OldDB = v1.StatusForOldDB{}
-		dbClaim.Status.Error = ""
-		if err = r.updateClientStatus(ctx, dbClaim); err != nil {
-			return r.manageError(ctx, dbClaim, err)
-		}
-		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-			return ctrl.Result{Requeue: true}, nil
-		}
-
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
-	}
 
 	// get name of DBInstance from connectionInfo
 	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
@@ -1282,8 +1250,8 @@ func (r *DatabaseClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.Da
 
 	connInfo.Host = r.getMasterHost(dbClaim)
 	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = basefun.GetMasterUser(r.Config.Viper, "")
-	connInfo.SSLMode = basefun.GetSSLMode(r.Config.Viper, "")
+	connInfo.Username = basefun.GetDefaultMasterUser(r.Config.Viper)
+	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
 	connInfo.DatabaseName = GetDBName(dbClaim)
 	return connInfo
 }
@@ -1301,73 +1269,24 @@ func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", url.QueryEscape(r.Input.MasterConnInfo.Username), url.QueryEscape(r.Input.MasterConnInfo.Password), r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
 }
 
-func (r *DatabaseClaimReconciler) getReclaimPolicy(fragmentKey string) string {
-	defaultReclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
-
-	if fragmentKey == "" {
-		return defaultReclaimPolicy
-	}
-
-	reclaimPolicy := basefun.GetReclaimPolicy(r.Config.Viper, fragmentKey)
-
-	if reclaimPolicy == "retain" || (reclaimPolicy == "" && defaultReclaimPolicy == "retain") {
-		// Don't need to delete
-		return "retain"
-	} else {
-		// Assume reclaimPolicy == "delete"
-		return "delete"
-	}
-}
-
-func (r *DatabaseClaimReconciler) canTagResources(ctx context.Context, dbClaim *v1.DatabaseClaim) (bool, error) {
-
-	if dbClaim == nil {
-		return false, fmt.Errorf("nil dbclaim")
-	}
-
-	var dbClaimList v1.DatabaseClaimList
-	if err := r.Client.List(ctx, &dbClaimList, client.MatchingFields{instanceLabelKey: dbClaim.Spec.InstanceLabel}); err != nil {
-		return false, err
-	}
-
-	return CanTagResources(ctx, dbClaimList, *dbClaim)
-}
-
 func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
 	// delete any external resources associated with the dbClaim
 	// Only RDS Instance are managed for now
 
 	if r.Input.ManageCloudDB {
 
-		fragmentKey := dbClaim.Spec.InstanceLabel
-		reclaimPolicy := r.getReclaimPolicy(fragmentKey)
+		reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
 
 		if reclaimPolicy == "delete" {
 			dbHostName := r.getDynamicHostName(dbClaim)
 			pgName := r.getParameterGroupName(dbClaim)
-			if fragmentKey == "" {
-				// Delete
-				if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
-					return err
-				}
-				return r.deleteParameterGroup(ctx, pgName)
 
-			} else {
-				// Check there is no other Claims that use this fragment
-				var dbClaimList v1.DatabaseClaimList
-				if err := r.List(ctx, &dbClaimList, client.MatchingFields{instanceLabelKey: dbClaim.Spec.InstanceLabel}); err != nil {
-					return err
-				}
-
-				if len(dbClaimList.Items) == 1 {
-					// Delete
-					if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
-						return err
-					}
-					return r.deleteParameterGroup(ctx, pgName)
-
-				}
+			// Delete
+			if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
+				return err
 			}
+			return r.deleteParameterGroup(ctx, pgName)
+
 		}
 		// else reclaimPolicy == "retain" nothing to do!
 	}
@@ -1419,19 +1338,7 @@ func generateMasterPassword() (string, error) {
 	return pass, nil
 }
 
-var (
-	instanceLabelKey = ".spec.instanceLabel"
-)
-
 func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.DatabaseClaim{}, instanceLabelKey, func(rawObj client.Object) []string {
-		// grab the DatabaseClaim object, extract the InstanceLabel for index...
-		claim := rawObj.(*v1.DatabaseClaim)
-		return []string{claim.Spec.InstanceLabel}
-	}); err != nil {
-		return err
-	}
 
 	pred := predicate.GenerationChangedPredicate{}
 	return ctrl.NewControllerManagedBy(mgr).
@@ -1444,7 +1351,7 @@ func (r *DatabaseClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) strin
 	if dbClaim.Spec.Host != "" {
 		return dbClaim.Spec.Host
 	}
-	return basefun.GetMasterHost(r.Config.Viper, r.Input.FragmentKey)
+	return "" //TODO: check if this works after removing the instancelabel
 }
 
 func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
@@ -1453,15 +1360,14 @@ func (r *DatabaseClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) strin
 		return dbClaim.Spec.Port
 	}
 
-	return basefun.GetMasterPort(r.Config.Viper, "")
+	return basefun.GetDefaultMasterPort(r.Config.Viper)
 }
 
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 	prt := time.Duration(basefun.GetPasswordRotationPeriod(r.Config.Viper)) * time.Minute
 
 	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
-		// TODO: add this back maybe
-		// r.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
+		log.Log.Info(fmt.Sprintf("password rotation time is out of range, should be between %d and %d min, use the default", basefun.GetMinRotationTime(), basefun.GetMaxRotationTime()))
 		return basefun.GetMinRotationTime()
 	}
 
@@ -1542,11 +1448,7 @@ func (r *DatabaseClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim) 
 	if r.Config.DbIdentifierPrefix != "" {
 		prefix = r.Config.DbIdentifierPrefix + "-"
 	}
-	if r.Input.FragmentKey == "" {
-		return prefix + dbClaim.Name + suffix
-	}
-
-	return prefix + r.Input.FragmentKey + suffix
+	return prefix + dbClaim.Name + suffix
 }
 
 func (r *DatabaseClaimReconciler) getParameterGroupName(dbClaim *v1.DatabaseClaim) string {
@@ -1858,7 +1760,6 @@ func (r *DatabaseClaimReconciler) manageDBCluster(ctx context.Context, dbHostNam
 						},
 						EngineVersion: &params.EngineVersion,
 					},
-					// Items from Claim and fragmentKey
 					Engine: &params.Engine,
 					Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 					// Items from Config
@@ -1994,7 +1895,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstance(ctx context.Context, 
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
 							EngineVersion:               &params.EngineVersion,
 						},
-						// Items from Claim and fragmentKey
 						Engine:              &params.Engine,
 						MultiAZ:             &multiAZ,
 						DBInstanceClass:     &params.InstanceClass,
@@ -2107,10 +2007,9 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 							EngineVersion:     &params.EngineVersion,
 						},
 						DBParameterGroupName: &pgName,
-						// Items from Claim and fragmentKey
-						Engine:          &params.Engine,
-						DBInstanceClass: &params.InstanceClass,
-						Tags:            ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
+						Engine:               &params.Engine,
+						DBInstanceClass:      &params.InstanceClass,
+						Tags:                 ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
 						// Items from Config
 						PubliclyAccessible:          &params.PubliclyAccessible,
 						DBClusterIdentifier:         &dbClusterIdentifier,
@@ -2745,28 +2644,6 @@ func (r *DatabaseClaimReconciler) readMasterPassword(ctx context.Context, claim 
 	}
 
 	return string(bsPass), nil
-}
-
-// Load settings into the DBClaim (connection, config, controllerconfig...)
-func (r *DatabaseClaimReconciler) matchInstanceLabel(dbClaim *v1.DatabaseClaim) (string, error) {
-	settingsMap := r.Config.Viper.AllSettings()
-
-	rTree := radix.New()
-	for k := range settingsMap {
-		if k != "passwordconfig" {
-			rTree.Insert(k, true)
-		}
-	}
-
-	// Find the longest prefix match
-	m, _, ok := rTree.LongestPrefix(dbClaim.Spec.InstanceLabel)
-	if !ok {
-		return "", fmt.Errorf("can't find any instance label matching fragment keys")
-	}
-
-	dbClaim.Status.ActiveDB.MatchedLabel = m
-
-	return m, nil
 }
 
 func GetDBName(dbClaim *v1.DatabaseClaim) string {

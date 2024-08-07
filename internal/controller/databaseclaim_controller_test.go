@@ -75,11 +75,9 @@ var _ = Describe("DatabaseClaim Controller", func() {
 					Namespace: "default",
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
-					Class:        ptr.To(""),
-					AppID:        "sample-app",
-					DatabaseName: "sample_app",
-					// Dont set this property its for a dead version of db-controller still lurking in this codebase
-					// InstanceLabel:         "sample-connection",
+					Class:                 ptr.To(""),
+					AppID:                 "sample-app",
+					DatabaseName:          "sample_app",
 					SecretName:            secretName,
 					Username:              parsedDSN.User.Username(),
 					EnableSuperUser:       ptr.To(false),

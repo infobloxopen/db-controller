@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"log"
 	"strconv"
 	"strings"
 
@@ -124,7 +123,7 @@ func (p *HostParams) CheckEngineVersion() error {
 	return nil
 }
 
-func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.DatabaseClaim) (*HostParams, error) {
+func New(config *viper.Viper, dbClaim *persistancev1.DatabaseClaim) (*HostParams, error) {
 	var (
 		err   error
 		port  string
@@ -132,25 +131,14 @@ func New(config *viper.Viper, fragmentKey string, dbClaim *persistancev1.Databas
 	)
 	hostParams := HostParams{}
 
-	if fragmentKey == "" {
-		hostParams.DeletionPolicy = xpv1.DeletionPolicy(
-			cases.Title(language.English, cases.Compact).String(string(dbClaim.Spec.DeletionPolicy)))
-		hostParams.Engine = string(dbClaim.Spec.Type)
-		hostParams.EngineVersion = dbClaim.Spec.DBVersion
-		hostParams.Shape = dbClaim.Spec.Shape
-		hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
-		port = dbClaim.Spec.Port
-		hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
-	} else {
-		// change this to a panic after verifying all fragmentKey references are removed
-		log.Println("FIXME: remove all fragment key references")
-		hostParams.MasterUsername = config.GetString(fmt.Sprintf("%s::masterUsername", fragmentKey))
-		hostParams.Engine = config.GetString(fmt.Sprintf("%s::Engine", fragmentKey))
-		hostParams.EngineVersion = config.GetString(fmt.Sprintf("%s::Engineversion", fragmentKey))
-		hostParams.Shape = config.GetString(fmt.Sprintf("%s::shape", fragmentKey))
-		hostParams.MinStorageGB = config.GetInt(fmt.Sprintf("%s::minStorageGB", fragmentKey))
-		port = config.GetString(fmt.Sprintf("%s::Port", fragmentKey))
-	}
+	hostParams.DeletionPolicy = xpv1.DeletionPolicy(
+		cases.Title(language.English, cases.Compact).String(string(dbClaim.Spec.DeletionPolicy)))
+	hostParams.Engine = string(dbClaim.Spec.Type)
+	hostParams.EngineVersion = dbClaim.Spec.DBVersion
+	hostParams.Shape = dbClaim.Spec.Shape
+	hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
+	port = dbClaim.Spec.Port
+	hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
 
 	if port == "" {
 		port = config.GetString("defaultMasterPort")

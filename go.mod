@@ -6,7 +6,6 @@ toolchain go1.22.4
 
 require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
-	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-sdk-go v1.54.6
 	github.com/aws/aws-sdk-go-v2 v1.30.0
 	github.com/aws/aws-sdk-go-v2/config v1.27.21

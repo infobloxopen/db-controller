@@ -119,7 +119,6 @@ func TestHostParams_Hash(t *testing.T) {
 func TestHostParams_IsUpgradeRequested(t *testing.T) {
 	type args struct {
 		config           *viper.Viper
-		fragmentKey      string
 		dbClaim          *persistancev1.DatabaseClaim
 		activeHostParams *HostParams
 	}
@@ -131,9 +130,8 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "no-change-with-default", want: false,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
-				dbClaim:     &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
+				config:  NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 				activeHostParams: &HostParams{Engine: "postgres",
 					Shape:         "db.t4g.medium",
 					MinStorageGB:  20,
@@ -144,8 +142,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "shape-different", want: true,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					Shape:        "db.t4g.medium",
@@ -163,8 +160,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "shape-different-default-shape", want: false,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					MinStorageGB: 20,
@@ -181,8 +177,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "version-different", want: true,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					Shape:        "db.t4g.medium",
@@ -200,9 +195,8 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "version-different-default-version", want: false,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
-				dbClaim:     &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
+				config:  NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 				activeHostParams: &HostParams{Engine: "postgres",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
@@ -214,8 +208,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "engine-different", want: true,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:  "aurora-postgresql",
 					Shape: "db.t4g.different",
@@ -231,8 +224,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "storage-different-postgres", want: false,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					Shape:        "db.t4g.medium",
@@ -249,8 +241,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "storage-different-aurora", want: false,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					Shape:        "db.t4g.medium",
@@ -267,8 +258,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "storage-different-aurora-with-io-shape", want: false,
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					Shape:        "db.t4g.medium!io1",
@@ -285,7 +275,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hp, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			hp, _ := New(tt.args.config, tt.args.dbClaim)
 			if got := hp.IsUpgradeRequested(tt.args.activeHostParams); got != tt.want {
 				t.Errorf("IsUpgradeRequested() = %v, want %v", got, tt.want)
 			}
@@ -395,9 +385,8 @@ defaultDeletionPolicy: orphan
 
 func TestNew(t *testing.T) {
 	type args struct {
-		config      *viper.Viper
-		fragmentKey string
-		dbClaim     *persistancev1.DatabaseClaim
+		config  *viper.Viper
+		dbClaim *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name    string
@@ -406,10 +395,9 @@ func TestNew(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "fragmentKey_nil_use_no_default_ok",
+			name: "use_no_default_ok",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "aurora-postgresql",
@@ -428,10 +416,9 @@ func TestNew(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "fragmentKey_nil_aurora_with_io_ok",
+			name: "aurora_with_io_ok",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "aurora-postgresql",
@@ -450,10 +437,9 @@ func TestNew(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "fragmentKey_nil_postgres_ok",
+			name: "postgres_ok",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -472,10 +458,9 @@ func TestNew(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "fragmentKey_nil_aurora_with_io_not_ok",
+			name: "aurora_with_io_not_ok",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "aurora-postgresql",
@@ -489,11 +474,10 @@ func TestNew(t *testing.T) {
 		},
 
 		{
-			name: "fragmentKey_set_use_default_ok",
+			name: "use_default_ok",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "sample-connection",
-				dbClaim:     &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
+				config:  NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 			},
 			want: &HostParams{Engine: "postgres",
 				Shape:         "db.t4g.medium",
@@ -506,8 +490,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "maxStorage-less",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -522,8 +505,7 @@ func TestNew(t *testing.T) {
 		}, {
 			name: "maxStorage-reduced",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -544,8 +526,7 @@ func TestNew(t *testing.T) {
 		}, {
 			name: "maxStorage_increased",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -572,8 +553,7 @@ func TestNew(t *testing.T) {
 		}, {
 			name: "maxStorage-equel-minStorage",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -595,8 +575,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "maxStorage-not-specified-freash-dbc",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -625,8 +604,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "maxStorage-not-specified-after-enabled",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "postgres",
@@ -647,7 +625,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			got, err := New(tt.args.config, tt.args.dbClaim)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -660,9 +638,8 @@ func TestNew(t *testing.T) {
 }
 func TestDeletionPolicy(t *testing.T) {
 	type args struct {
-		config      *viper.Viper
-		fragmentKey string
-		dbClaim     *persistancev1.DatabaseClaim
+		config  *viper.Viper
+		dbClaim *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name string
@@ -672,8 +649,7 @@ func TestDeletionPolicy(t *testing.T) {
 		{
 			name: "test_default_deletion_policy",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "aurora-postgresql",
@@ -687,8 +663,7 @@ func TestDeletionPolicy(t *testing.T) {
 		{
 			name: "test_delete_deletion_policy",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:           "5432",
 					Type:           "aurora-postgresql",
@@ -703,8 +678,7 @@ func TestDeletionPolicy(t *testing.T) {
 		{
 			name: "test_orphan_deletion_policy",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:           "5432",
 					Type:           "postgres",
@@ -716,41 +690,10 @@ func TestDeletionPolicy(t *testing.T) {
 			},
 			want: "Orphan",
 		},
-		{
-			name: "test_default_deletion_policy_with_fragment_key",
-			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "sample-connection",
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:         "5432",
-					Type:         "aurora-postgresql",
-					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium",
-					MinStorageGB: 20,
-				}},
-			},
-			want: "Orphan",
-		},
-		{
-			name: "test_delete_deletion_policy_with_fragment_key",
-			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "sample-connection",
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Port:           "5432",
-					Type:           "aurora-postgresql",
-					DBVersion:      "12.11",
-					Shape:          "db.t4g.medium",
-					MinStorageGB:   20,
-					DeletionPolicy: "Delete",
-				}},
-			},
-			want: "Orphan",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			got, _ := New(tt.args.config, tt.args.dbClaim)
 			if string(got.DeletionPolicy) != tt.want {
 				t.Errorf("DeletionPolicy = %v, want %v", got.DeletionPolicy, tt.want)
 			}
@@ -759,9 +702,8 @@ func TestDeletionPolicy(t *testing.T) {
 }
 func TestCheckEngineVersion(t *testing.T) {
 	type args struct {
-		config      *viper.Viper
-		fragmentKey string
-		dbClaim     *persistancev1.DatabaseClaim
+		config  *viper.Viper
+		dbClaim *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
 		name string
@@ -771,8 +713,7 @@ func TestCheckEngineVersion(t *testing.T) {
 		{
 			name: "test_default_EngineVersion",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "aurora-postgresql",
@@ -785,8 +726,7 @@ func TestCheckEngineVersion(t *testing.T) {
 		{
 			name: "test_specific_EngineVersion",
 			args: args{
-				config:      NewConfig(testConfig),
-				fragmentKey: "",
+				config: NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Port:         "5432",
 					Type:         "aurora-postgresql",
@@ -800,7 +740,7 @@ func TestCheckEngineVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hp, _ := New(tt.args.config, tt.args.fragmentKey, tt.args.dbClaim)
+			hp, _ := New(tt.args.config, tt.args.dbClaim)
 			if got := hp.CheckEngineVersion(); got != tt.want {
 				t.Errorf("CheckEngineVersion() = %v, want %v", got, tt.want)
 			}
