@@ -75,10 +75,6 @@ spec:
               databaseName:
                 description: The name of the database.
                 type: string
-              dbNameOverride:
-                description: In most cases the AppID will match the database name.
-                  In some cases, however, we will need to provide an optional override.
-                type: string
               dbVersion:
                 description: The version of the database.
                 type: string
@@ -108,10 +104,6 @@ spec:
                   EnableSuperUser will grant rds_superuser and createrole role to Username
                   This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false
                 type: boolean
-              host:
-                description: The optional host name where the database instance is
-                  located.
-                type: string
               maxStorageGB:
                 description: |-
                   If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
@@ -122,9 +114,6 @@ spec:
                 description: The optional MinStorageGB value requests the minimum
                   database host storage capacity in GBytes
                 type: integer
-              port:
-                description: The optional port to use for connecting to the host.
-                type: string
               preferredMaintenanceWindow:
                 description: |-
                   The weekly time range during which system maintenance can occur.
@@ -155,8 +144,8 @@ spec:
                      * Must be at least 30 minutes.
                 type: string
               restoreFrom:
-                description: RestoreFrom indicates the snapshot to restore the Database
-                  from
+                description: RestoreFrom indicates the snapshot id to restore the
+                  Database from
                 type: string
               secretName:
                 description: The name of the secret to use for storing the ConnectionInfo.  Must

@@ -239,7 +239,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 	r.Input = &input{}
 	var (
 		err                     error
-		manageCloudDB           bool
 		sharedDBHost            bool
 		enablePerfInsight       bool
 		cloudwatchLogsExport    []*string
@@ -279,14 +278,12 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		BackupRetentionDays:        backupRetentionDays,
 		CACertificateIdentifier:    caCertificateIdentifier,
 	}
-	if manageCloudDB {
-		//check if dbclaim.name is > maxNameLen and if so, error out
-		if len(dbClaim.Name) > maxNameLen {
-			return ErrMaxNameLen
-		}
-
-		r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
+	//check if dbclaim.name is > maxNameLen and if so, error out
+	if len(dbClaim.Name) > maxNameLen {
+		return ErrMaxNameLen
 	}
+
+	r.Input.DbHostIdentifier = r.getDynamicHostName(dbClaim)
 	if basefun.GetSuperUserElevation(r.Config.Viper) {
 		r.Input.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
@@ -1355,6 +1352,7 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secret
 	connInfo.Port = string(rs.Data["port"])
 	connInfo.Username = string(rs.Data["username"])
 	connInfo.Password = string(rs.Data["password"])
+	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
 
 	if connInfo.Host == "" ||
 		connInfo.Port == "" ||
