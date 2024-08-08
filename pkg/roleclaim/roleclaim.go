@@ -291,8 +291,6 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 	}
 
 	connInfo.DatabaseName = dbClaim.Spec.DatabaseName
-	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
-
 	connInfo.Host = string(rs.Data["endpoint"])
 	connInfo.Port = string(rs.Data["port"])
 	connInfo.Username = string(rs.Data["username"])
