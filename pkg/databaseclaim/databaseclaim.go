@@ -669,6 +669,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	r.Input.MasterConnInfo.Port = connInfo.Port
 	r.Input.MasterConnInfo.Username = connInfo.Username
 	r.Input.MasterConnInfo.DatabaseName = dbClaim.Spec.DatabaseName
+	r.Input.MasterConnInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
 
 	dbClient, err := r.getDBClient(ctx, dbClaim)
 	if err != nil {
