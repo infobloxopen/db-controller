@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -123,7 +122,7 @@ func (p *HostParams) CheckEngineVersion() error {
 	return nil
 }
 
-func New(config *viper.Viper, dbClaim *persistancev1.DatabaseClaim) (*HostParams, error) {
+func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	var (
 		err   error
 		port  string
@@ -137,12 +136,9 @@ func New(config *viper.Viper, dbClaim *persistancev1.DatabaseClaim) (*HostParams
 	hostParams.EngineVersion = dbClaim.Spec.DBVersion
 	hostParams.Shape = dbClaim.Spec.Shape
 	hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
-	port = dbClaim.Spec.Port
 	hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
 
-	if port == "" {
-		port = config.GetString("defaultMasterPort")
-	}
+	port = config.GetString("defaultMasterPort")
 	iport, err = strconv.Atoi(port)
 	if err != nil {
 		return nil, fmt.Errorf("invalid master port")
@@ -208,7 +204,7 @@ func New(config *viper.Viper, dbClaim *persistancev1.DatabaseClaim) (*HostParams
 	return &hostParams, nil
 }
 
-func GetActiveHostParams(dbClaim *persistancev1.DatabaseClaim) *HostParams {
+func GetActiveHostParams(dbClaim *v1.DatabaseClaim) *HostParams {
 
 	hostParams := HostParams{}
 

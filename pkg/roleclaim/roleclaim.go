@@ -54,7 +54,6 @@ type dbcBaseConfig struct {
 	HostParams       hostparams.HostParams
 	MasterConnInfo   v1.DatabaseClaimConnectionInfo
 	DbHostIdentifier string
-	ManageCloudDB    bool
 	EnableSuperUser  bool
 }
 
@@ -138,13 +137,11 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, errors.New("schema and role are mandatory when one of these fields are provided")
 		}
 
-		masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig)
+		masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig, sourceDbClaim)
 		if err != nil {
 			log.Error(err, "reading resource secret")
 			return ctrl.Result{}, errors.New("reading resource secret")
 		}
-
-		//log.V(DebugLevel).Info("Full URI: " + masterUserDBConnInfo.Uri())
 
 		// get client to DB
 		dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, &log)
@@ -278,7 +275,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 }
 
-func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseConfig *dbcBaseConfig) (v1.DatabaseClaimConnectionInfo, error) {
+func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseConfig *dbcBaseConfig, dbClaim *v1.DatabaseClaim) (v1.DatabaseClaimConnectionInfo, error) {
 	rs := &corev1.Secret{}
 	connInfo := v1.DatabaseClaimConnectionInfo{}
 
@@ -293,13 +290,12 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 		return connInfo, err
 	}
 
-	connInfo.DatabaseName = dbcBaseConfig.MasterConnInfo.DatabaseName
-	connInfo.SSLMode = dbcBaseConfig.MasterConnInfo.SSLMode
-
+	connInfo.DatabaseName = dbClaim.Spec.DatabaseName
 	connInfo.Host = string(rs.Data["endpoint"])
 	connInfo.Port = string(rs.Data["port"])
 	connInfo.Username = string(rs.Data["username"])
 	connInfo.Password = string(rs.Data["password"])
+	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
 
 	if connInfo.Host == "" ||
 		connInfo.Port == "" ||
@@ -311,53 +307,12 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 	return connInfo, nil
 }
 
-func (r *DbRoleClaimReconciler) getClientConn(dbClaim *v1.DatabaseClaim) v1.DatabaseClaimConnectionInfo {
-	connInfo := v1.DatabaseClaimConnectionInfo{}
-
-	connInfo.Host = r.getMasterHost(dbClaim)
-	connInfo.Port = r.getMasterPort(dbClaim)
-	connInfo.Username = basefun.GetDefaultMasterUser(r.Config.Viper)
-	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
-	connInfo.DatabaseName = GetDBName(dbClaim)
-	return connInfo
-}
-
-func (r *DbRoleClaimReconciler) getMasterHost(dbClaim *v1.DatabaseClaim) string {
-	if dbClaim.Spec.Host != "" {
-		return dbClaim.Spec.Host
-	}
-	return "" //TODO:check if this works after removing instanceLabel
-}
-
-func (r *DbRoleClaimReconciler) getMasterPort(dbClaim *v1.DatabaseClaim) string {
-
-	if dbClaim.Spec.Port != "" {
-		return dbClaim.Spec.Port
-	}
-
-	return basefun.GetDefaultMasterPort(r.Config.Viper)
-}
-
-func GetDBName(dbClaim *v1.DatabaseClaim) string {
-	if dbClaim.Spec.DBNameOverride != "" {
-		return dbClaim.Spec.DBNameOverride
-	}
-
-	return dbClaim.Spec.DatabaseName
-}
-
 func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*dbcBaseConfig, error) {
 	var (
-		err           error
-		manageCloudDB bool
+		err error
 	)
 
 	dbcBaseConf := dbcBaseConfig{}
-	connInfo := r.getClientConn(dbClaim)
-
-	if connInfo.Host == "" {
-		manageCloudDB = true
-	}
 
 	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
 	if err != nil {
@@ -366,13 +321,9 @@ func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*d
 	if basefun.GetSuperUserElevation(r.Config.Viper) {
 		dbcBaseConf.EnableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
-	dbcBaseConf.ManageCloudDB = manageCloudDB
-	dbcBaseConf.MasterConnInfo = connInfo
 	dbcBaseConf.HostParams = *hostParams
+	dbcBaseConf.DbHostIdentifier = r.getDynamicHostName(dbClaim, &dbcBaseConf)
 
-	if manageCloudDB {
-		dbcBaseConf.DbHostIdentifier = r.getDynamicHostName(dbClaim, &dbcBaseConf)
-	}
 	return &dbcBaseConf, nil
 }
 
@@ -557,7 +508,7 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	if err != nil {
 		return err
 	}
-	masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig)
+	masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig, sourceDbClaim)
 	if err != nil {
 		log.Error(err, "reading resource secret")
 		return errors.New("reading resource secret")

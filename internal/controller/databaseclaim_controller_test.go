@@ -84,9 +84,6 @@ var _ = Describe("DatabaseClaim Controller", func() {
 					EnableReplicationRole: ptr.To(false),
 					UseExistingSource:     ptr.To(false),
 					Type:                  "postgres",
-
-					Port: parsedDSN.Port(),
-					Host: parsedDSN.Hostname(),
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
