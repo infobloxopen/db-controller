@@ -297,6 +297,7 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 	connInfo.Port = string(rs.Data["port"])
 	connInfo.Username = string(rs.Data["username"])
 	connInfo.Password = string(rs.Data["password"])
+	connInfo.SSLMode = basefun.GetDefaultSSLMode(r.Config.Viper)
 
 	if connInfo.Host == "" ||
 		connInfo.Port == "" ||

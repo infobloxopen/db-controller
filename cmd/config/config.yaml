@@ -14,7 +14,7 @@ defaultMinStorageGB: 20
 defaultEngine: postgres
 defaultEngineVersion: 12.11
 defaultMasterPort: 5432
-defaultSslMode: disable
+defaultSslMode: require
 defaultMasterUsername: postgres
 defaultReclaimPolicy: delete
 # For Production this should be false and if SnapShot is not taken it will not be deleted
