@@ -5,11 +5,17 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "db-controller.labels" . | nindent 4 }}
+  annotations:
+    # ensure this runs on the new db-controller, not the existing one
+    "helm.sh/hook": "test"
+    "helm.sh/hook-weight": "-5"
 type: Opaque
 data:
   uri_dsn.txt: {{ printf "postgres://myuser:mypassword@%s-dbproxy-test-db.%s.svc:5432/mydb?sslmode=disable" .Release.Name .Release.Namespace | b64enc | quote }}
   password: {{ "mypassword" | b64enc }}
 ---
+# Keep this separate from test so it can get a chance to setup
+# before the mutating webhook test runs
 apiVersion: persistance.atlas.infoblox.com/v1
 kind: DatabaseClaim
 metadata:
@@ -18,8 +24,8 @@ metadata:
   labels:
     {{- include "db-controller.labels" . | nindent 4 }}
   annotations:
-    helm.sh/hook: test
-    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
+    # ensure this runs on the new db-controller, not the existing one
+    "helm.sh/hook": "test"
 spec:
   class: {{ .Values.dbController.class }}
   databaseName: mydb
@@ -28,6 +34,7 @@ spec:
   useExistingSource: true
   userName: myuser
   appId: "removethispropertyfromcrd"
+  dsnName: "dsn.txt"
   type: "postgres"
   sourceDataFrom:
     type: database
@@ -37,6 +44,38 @@ spec:
         namespace: {{ .Release.Namespace }}
         name: {{ .Release.Name }}-dbproxy-test
     #S3 defines the location of a DB backup in an S3 bucket
+---
+# apiVersion: batch/v1
+# kind: Job
+# metadata:
+#   name: wait-for-dbclaim-ready
+#   annotations:
+#     "helm.sh/hook": "post-install,post-upgrade"
+#     "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+# spec:
+#   template:
+#     spec:
+#       # FIXME: give this a separate service account
+#       serviceAccountName: {{ include "db-controller.serviceAccountName" . }}
+#       containers:
+#       - name: wait-for-dbclaim
+#         image: {{ .Values.tools.kubectl.repository }}:{{ .Values.tools.kubectl.tag }}
+#         command:
+#         - /bin/sh
+#         - -c
+#         - |
+#           TIMEOUT=300  # 5 minutes in seconds
+#           SECONDS=0
+#           until kubectl -n {{ .Release.Namespace | quote }} get secret {{ .Release.Name }}-dbproxy-test-claims || [ $SECONDS -ge $TIMEOUT ]; do
+#             echo "Waiting for secret to be created... elapsed: $SECONDS";
+#             sleep 5;
+#           done
+#           if [ $SECONDS -ge $TIMEOUT ]; then
+#             echo "Timed out waiting for secret";
+#             exit 1;
+#           fi
+#       restartPolicy: Never
+#   backoffLimit: 3
 ---
 apiVersion: v1
 kind: Service
@@ -123,21 +162,17 @@ spec:
         - -c
         - |
           set -x
-          for i in $(seq 1 20); do
-            echo "Attempt $i: Connecting to PostgreSQL..."
-            if psql -h localhost -c 'SELECT 1'; then
-              echo "Connection successful!"
-              # Shutdown dbproxy so test can complete
-              kill -s INT $(pidof /usr/bin/dbproxy)
-              exit 0
-            fi
-            echo "Failed to connect. Retrying in 5 seconds..."
-            sleep 1
+          until timeout 10 psql -h localhost -c 'SELECT 1'; do
+            echo "Waiting for pgbouncer to be ready..."
+            sleep 3
           done
-          echo "Failed to connect after 20 attempts. Exiting."
-          exit 1
+
+          echo "Connection successful!"
+          kill -s INT $(pidof /usr/bin/dbproxy)
+          exit 0
   shareProcessNamespace: true
-  restartPolicy: Never
+  # Sidecar has a liveness probe, allow it to restart
+  restartPolicy: OnFailure
   volumes:
     - name: dsn-volume
       secret:

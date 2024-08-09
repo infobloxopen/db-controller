@@ -1,223 +1,228 @@
-package main
+package dbproxy
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
-	"os/signal"
-	"path/filepath"
-	"strconv"
-	"syscall"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
 	"github.com/infobloxopen/db-controller/dbproxy/pgbouncer"
+	"go.uber.org/zap"
 )
 
-type cachedCredentials struct {
-	currUser string
-	currPass string
+var logger logr.Logger
+
+func init() {
+	zapLog, _ := zap.NewDevelopment()
+	logger = zapr.NewLogger(zapLog)
 }
 
-func (cached *cachedCredentials) verifyIfNewCreds(newUser, newPass string) bool {
-	if cached.currPass != newPass || cached.currUser != newUser {
+type Config struct {
+	StartUpTime      time.Duration
+	DBCredentialPath string
+	DBPasswordPath   string
+	PGCredentialPath string
+	PGBStartScript   string
+	PGBReloadScript  string
+	Port             int
+}
+
+type cachedCredentials struct {
+	user, pass string
+}
+
+func (c *cachedCredentials) verifyIfNewCreds(newUser, newPass string) bool {
+	if c.pass != newPass || c.user != newUser {
+		c.pass = newPass
+		c.user = newUser
 		return true
 	}
 	return false
 }
 
-func (cached *cachedCredentials) setNewCreds(newUser, newPass string) {
-	cached.currUser = newUser
-	cached.currPass = newPass
-}
-
+// FIXME: remove password path, uri_dsn has the password in it
 func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath string, port int, pbCredentialPath string) (string, string) {
 
 	bs, err := ioutil.ReadFile(dbCredentialPath)
 	if err != nil {
-		panic(err)
+		logger.Error(err, "failed to read database dsn file")
+		os.Exit(1)
 	}
 
 	cfg, err := pgbouncer.GenerateConfig(string(bs), dbPasswordPath, int16(port))
 	if err != nil {
-		panic(err)
+		logger.Error(err, "failed to generate config")
+		os.Exit(1)
 	}
 
 	err = pgbouncer.WritePGBouncerConfig(pbCredentialPath, &cfg)
-	log.Printf("Setup pgbouncerconfig: %s\n", cfg)
 	if err != nil {
-		log.Println(err)
-		panic(err)
+		logger.Error(err, "failed to write pgbouncerconfig")
+		os.Exit(1)
 	}
 	return cfg.UserName, cfg.Password
 }
 
-func startPGBouncer() {
-	ok, err := pgbouncer.Start()
-	if !ok {
-		log.Println(err)
-		panic(err)
+func waitForFiles(ctx context.Context, paths ...string) error {
+	var errs []error
+	wg := &sync.WaitGroup{}
+	for _, path := range paths {
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
+			err := waitForFile(ctx, path)
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}(path)
 	}
+	wg.Wait()
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
 
-func reloadPGBouncerConfiguration() {
-	ok, err := pgbouncer.ReloadConfiguration()
-	if !ok {
-		log.Println(err)
-		panic(err)
-	}
-}
-
-func waitForDbCredentialFile(path string) {
+func waitForFile(ctx context.Context, path string) error {
+	logr := logger.WithValues("path", path)
+	var sleep time.Duration
 	for {
-		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout_wait_for_file: %s", path)
+		case <-time.After(sleep):
+			sleep = 5 * time.Second
+			time.Sleep(time.Second)
 
-		file, err := os.Open(path)
-		if err != nil {
-			log.Println("Waiting for file to appear:", path, ", error:", err)
-			continue
-		}
+			file, err := os.Open(path)
+			if err != nil {
+				logr.Error(err, "file_not_found")
+				continue
+			}
 
-		stat, err := file.Stat()
-		if err != nil {
-			log.Println("failed stat file:", err)
-			continue
-		}
+			stat, err := file.Stat()
+			if err != nil {
+				logr.Error(err, "failed to stat file")
+				continue
+			}
 
-		if !stat.Mode().IsRegular() {
-			log.Println("not a regular file")
-			continue
-		} else {
-			break
+			if !stat.Mode().IsRegular() {
+				logr.Info("irregular file")
+				continue
+			}
+			return nil
 		}
 	}
 }
 
-var (
-	dbCredentialPath = os.Getenv("DBPROXY_CREDENTIAL")
-	dbPasswordPath   = os.Getenv("DBPROXY_PASSWORD")
-	pbCredentialPath string
-	port             int
-)
-
-func init() {
-	flag.StringVar(&dbCredentialPath, "dbc", dbCredentialPath, "Location of the DB Credentials")
-	flag.StringVar(&dbPasswordPath, "dbp", dbPasswordPath, "Location of the unescaped DB Password")
-	flag.StringVar(&pbCredentialPath, "pbc", "./pgbouncer.ini", "Location of the PGBouncer config file")
-	flag.IntVar(&port, "port", 5432, "Port to listen on")
+type mgr struct {
+	cfg Config
 }
 
-func main() {
-
-	// Catch signals so helm test can exit cleanly
-	catch()
+func New(ctx context.Context, cfg Config) (*mgr, error) {
 
 	flag.Parse()
 
-	if port < 1 || port > 65535 {
-		log.Fatal("Invalid port number")
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return nil, fmt.Errorf("invalid_port_number must be between 1 and 65535: %d", cfg.Port)
 	}
 
-	cachedCreds := cachedCredentials{}
+	if cfg.StartUpTime == 0 {
+		cfg.StartUpTime = 30 * time.Second
+	}
 
-	waitForDbCredentialFile(dbCredentialPath)
+	waitCtx, cancel := context.WithTimeout(ctx, cfg.StartUpTime)
+	if err := waitForFiles(waitCtx, cfg.DBCredentialPath, cfg.DBPasswordPath); err != nil {
+		return nil, err
+	}
+	cancel()
+	return &mgr{cfg: cfg}, nil
+}
 
-	waitForDbCredentialFile(dbPasswordPath)
+func (m *mgr) Start(ctx context.Context) error {
 
+	cfg := m.cfg
 	// First time pgbouncer config generation and start
-	user, pass := generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, port, pbCredentialPath)
-	startPGBouncer()
-	cachedCreds.setNewCreds(user, pass)
+	user, pass := generatePGBouncerConfiguration(cfg.DBCredentialPath, cfg.DBPasswordPath, cfg.Port, cfg.PGCredentialPath)
+
+	if err := pgbouncer.Start(context.TODO(), cfg.PGBStartScript); err != nil {
+		return err
+	}
+
+	cachedCreds := cachedCredentials{user: user, pass: pass}
 
 	// Watch for ongoing changes and regenerate pgbouncer config
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal("NewWatcher failed: ", err)
+		return err
 	}
 	defer watcher.Close()
 
-	done := make(chan bool)
+	done := make(chan error)
 	go func() {
 		defer close(done)
 
 		for {
 			select {
+			case <-ctx.Done():
+				done <- nil
+				return
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return
 				}
 				log.Printf("%s %s\n", event.Name, event.Op)
-				err := watcher.Remove(dbCredentialPath)
+				err := watcher.Remove(cfg.DBCredentialPath)
 				if err != nil {
 					if !errors.Is(err, fsnotify.ErrNonExistentWatch) {
 						log.Fatal("Remove failed:", err)
 					}
 				}
 
-				waitForDbCredentialFile(dbCredentialPath)
-				waitForDbCredentialFile(dbPasswordPath)
+				waitCtx, cancel := context.WithTimeout(ctx, cfg.StartUpTime)
+				if err := waitForFiles(waitCtx, cfg.DBCredentialPath, cfg.DBPasswordPath); err != nil {
+					log.Println("waitForFiles failed:", err)
+				}
+				cancel()
 
-				err = watcher.Add(dbCredentialPath)
+				err = watcher.Add(cfg.DBCredentialPath)
 				if err != nil {
 					log.Fatal("Add failed:", err)
 				}
 				// Regenerate pgbouncer configuration and signal pgbouncer to reload cconfiguration
-				newUser, newPass := generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath, port, pbCredentialPath)
+				newUser, newPass := generatePGBouncerConfiguration(cfg.DBCredentialPath, cfg.DBPasswordPath, cfg.Port, cfg.PGCredentialPath)
+				if err != nil {
+					log.Println("parseWritePGBConfig failed:", err)
+					continue
+				}
+
 				if cachedCreds.verifyIfNewCreds(newUser, newPass) {
-					reloadPGBouncerConfiguration()
-					cachedCreds.setNewCreds(newUser, newPass)
+
+					if err := pgbouncer.ReloadConfiguration(context.TODO(), cfg.PGBReloadScript); err != nil {
+						panic(err)
+					}
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
 				}
-				log.Println("error:", err)
+				log.Println("watcher_error:", err)
 			}
 		}
 
 	}()
 
-	err = watcher.Add(dbCredentialPath)
+	err = watcher.Add(cfg.DBCredentialPath)
 	if err != nil {
 		log.Fatal("Add failed:", err)
 	}
-	<-done
-}
-
-func catch() {
-
-	sigs := make(chan os.Signal, 1)
-
-	// Notify the channel on SIGINT (Ctrl+C) or SIGTERM (kill command)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
-
-	// Goroutine to handle the signal
-	go func() {
-		sig := <-sigs
-		fmt.Println("Received signal:", sig)
-
-		// Path set in ini file
-		bs, err := ioutil.ReadFile(filepath.Join("pgbouncer.pid"))
-		if err != nil {
-			log.Fatal(err)
-		}
-		pid, err := strconv.Atoi(string(bytes.TrimSpace(bs)))
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println("terminating pgbouncer pid: %d", pid)
-		// Terminate pgbouncer
-		cmd := exec.Command("sh", "-c", fmt.Sprintf("kill -s 9 %d", pid))
-		stdoutStderr, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(stdoutStderr)
-		os.Exit(0)
-	}()
+	return <-done
 }

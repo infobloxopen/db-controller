@@ -44,7 +44,7 @@ HELM_VERSION ?= v3.15.2
 
 .PHONY: helm
 helm: $(HELM) ## Download golangci-lint locally if necessary.
-$(HELM): localbin
+$(HELM): $(LOCALBIN)
 	@test -s $(LOCALBIN)/helm || { curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH="${PATH}":$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; }
 	@ln -sf $(LOCALBIN)/helm-$(HELM_VERSION) $(LOCALBIN)/helm
 
@@ -91,7 +91,8 @@ push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 	@./scripts/check-context.sh
 	helm upgrade --install `cat .id` \
 		db-controller-${CHART_VERSION}.tgz \
-		--debug --wait --namespace "`cat .id`" \
+		--debug --namespace "`cat .id`" \
+		--wait --wait-for-jobs \
 		--create-namespace \
 		-f helm/db-controller/minikube.yaml \
 		--set dbController.class=`cat .id` \
@@ -113,3 +114,7 @@ test/crd: test/crd/rds.aws.crossplane.io_dbclusters.yaml test/crd/rds.aws.crossp
 test/crd/%.yaml:
 	mkdir -p test/crd
 	curl -sS -o $@ https://raw.githubusercontent.com/crossplane-contrib/provider-aws/v0.48.1/package/crds/$*.yaml
+
+clean:
+	chmod -R +w bin/
+	rm -rf $(shell git check-ignore -- *)

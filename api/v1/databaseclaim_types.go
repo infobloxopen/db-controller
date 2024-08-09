@@ -169,8 +169,9 @@ type DatabaseClaimSpec struct {
 	DBVersion string `json:"dbVersion"`
 
 	// DSN is used to name the secret key that contains old style DSN for postgres.
-	// This field is deprecated, update your code to access key "dsn.txt" or
-	// preferrably "uri_dsn.txt" as this field is not customizable any longer.
+	// This field is deprecated, update your code to access key
+	// "dsn.txt" or preferrably "uri_dsn.txt" as this field is
+	// not customizable any longer.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=dsn.txt
 	DSNName string `json:"dsnName"`
