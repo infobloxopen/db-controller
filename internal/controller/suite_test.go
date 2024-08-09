@@ -123,7 +123,7 @@ var _ = BeforeSuite(func() {
 
 	controllerReconciler = &DatabaseClaimReconciler{
 		Config: &databaseclaim.DatabaseClaimConfig{
-			Viper:     config.NewConfig(logger, configPath),
+			Viper:     config.NewConfig(configPath),
 			Namespace: "default",
 		},
 		Client: k8sClient,

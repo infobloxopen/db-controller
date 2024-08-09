@@ -90,6 +90,7 @@ spec:
                 - orphan
                 type: string
               dsnName:
+                default: dsn.txt
                 description: DSN key name.
                 type: string
               enableReplicationRole:
@@ -168,6 +169,7 @@ spec:
                         description: |-
                           DSN is the connection string used to reach the postgres database
                           must have protocol specifier at beginning (example: mysql://  postgres:// )
+                          Deprecated: Use SecretRef dsn.txt instead
                         type: string
                       secretRef:
                         description: |-
@@ -181,8 +183,6 @@ spec:
                         required:
                         - name
                         type: object
-                    required:
-                    - dsn
                     type: object
                   type:
                     description: Type specifies the type of source
@@ -206,6 +206,7 @@ spec:
                 nullable: true
                 type: array
               type:
+                default: postgres
                 description: Specifies the type of database to provision. Only postgres
                   is supported.
                 type: string
@@ -222,10 +223,7 @@ spec:
                   the database.
                 type: string
             required:
-            - appId
             - databaseName
-            - dsnName
-            - type
             - userName
             type: object
           status:
@@ -292,6 +290,7 @@ spec:
                             description: |-
                               DSN is the connection string used to reach the postgres database
                               must have protocol specifier at beginning (example: mysql://  postgres:// )
+                              Deprecated: Use SecretRef dsn.txt instead
                             type: string
                           secretRef:
                             description: |-
@@ -305,8 +304,6 @@ spec:
                             required:
                             - name
                             type: object
-                        required:
-                        - dsn
                         type: object
                       type:
                         description: Type specifies the type of source
@@ -392,6 +389,7 @@ spec:
                             description: |-
                               DSN is the connection string used to reach the postgres database
                               must have protocol specifier at beginning (example: mysql://  postgres:// )
+                              Deprecated: Use SecretRef dsn.txt instead
                             type: string
                           secretRef:
                             description: |-
@@ -405,8 +403,6 @@ spec:
                             required:
                             - name
                             type: object
-                        required:
-                        - dsn
                         type: object
                       type:
                         description: Type specifies the type of source

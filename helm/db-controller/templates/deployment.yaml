@@ -33,7 +33,7 @@ spec:
           ports:
           - containerPort: 8443
             name: https
-          - containerPort: 7443
+          - containerPort: 9443
             name: webhook
           env:
             - name: SERVICE_NAMESPACE
@@ -51,17 +51,12 @@ spec:
             - --enable-db-proxy={{ .Values.dbproxy.enabled }}
             - --enable-dsnexec={{ .Values.dsnexec.enabled }}
             - --config-file=/etc/config/config.yaml
-            - --db-proxy-sidecar-config-path=config/dbproxy/dbproxysidecar.json
             - --dsnexec-sidecar-config-path=config/dsnexec/dsnexecsidecar.json
             - --db-identifier-prefix={{ tpl .Values.db.identifier.prefix . }}
             - --class={{ .Values.dbController.class }}
-            - --verbosity={{ .Values.zapLogger.verbosity }}
-            {{ if .Values.zapLogger.develMode }}
-            - --zap-devel
-            {{ end }}
-            {{ if .Values.zapLogger.level }}
-            - --zap-log-level={{ .Values.zapLogger.level}}
-            {{ end }}
+            - -zap-encoder={{ .Values.zapLogger.encoding }}
+            - -zap-log-level={{ .Values.zapLogger.level }}
+            - -zap-time-encoding={{ .Values.zapLogger.timeEncoding }}
           command:
             - /manager
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"

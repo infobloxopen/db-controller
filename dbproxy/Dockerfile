@@ -1,4 +1,4 @@
-FROM golang:1.20 as BUILDER
+FROM golang:1.22-alpine3.20 AS builder
 
 WORKDIR /workspace
 
@@ -6,14 +6,12 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 COPY dbproxy.go dbproxy.go
 COPY pgbouncer/ pgbouncer/
-COPY start-pgbouncer.sh start-pgbouncer.sh
-COPY reload-pgbouncer.sh reload-pgbouncer.sh
-COPY start-dbproxy.sh start-dbproxy.sh
+COPY *.sh .
 
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a
 
-from alpine:3.13 AS PGBBUILDER
+FROM alpine:3.20 AS PGBBUILDER
 ARG VERSION=1.17.0
 
 ADD /pgbouncer/docker/pgbouncer.patch /tmp/pgbouncer.patch
@@ -29,7 +27,7 @@ RUN apk add -U --no-cache --upgrade busybox && \
   make && \
   cp pgbouncer /usr/bin
 
-FROM alpine:3.13
+FROM alpine:3.20
 
 RUN apk add -U --no-cache udns libevent openssl ca-certificates postgresql-client
 
@@ -39,11 +37,9 @@ RUN mkdir -p /var/run/dbproxy
 RUN chown -R bloxone /var/run/dbproxy
 
 COPY --from=pgbbuilder /usr/bin/pgbouncer /usr/bin/pgbouncer
-COPY --from=builder /workspace/dbproxy /var/run/dbproxy/dbproxy
+COPY --from=builder /workspace/dbproxy /usr/bin/dbproxy
 COPY --from=builder /workspace/pgbouncer/pgbouncer.template /var/run/dbproxy/pgbouncer.template
-COPY --from=builder /workspace/start-pgbouncer.sh /var/run/dbproxy/start-pgbouncer.sh
-COPY --from=builder /workspace/reload-pgbouncer.sh /var/run/dbproxy/reload-pgbouncer.sh
-COPY --from=builder /workspace/start-dbproxy.sh /var/run/dbproxy/start-dbproxy.sh
+COPY --from=builder /workspace/*.sh /var/run/dbproxy/
 
 RUN chmod +x /usr/bin/pgbouncer
 RUN chmod +x /var/run/dbproxy/start-pgbouncer.sh /var/run/dbproxy/reload-pgbouncer.sh
@@ -52,4 +48,5 @@ WORKDIR /var/run/dbproxy
 
 USER bloxone
 
-ENTRYPOINT ["/var/run/dbproxy/start-dbproxy.sh"]
+# TODO: remove this entrypoint and hardcode it in mutating webhook
+ENTRYPOINT /usr/bin/dbproxy

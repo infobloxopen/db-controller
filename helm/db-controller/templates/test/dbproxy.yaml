@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-dbproxy-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+type: Opaque
+data:
+  uri_dsn.txt: {{ printf "postgres://myuser:mypassword@%s-dbproxy-test-db.%s.svc:5432/mydb?sslmode=disable" .Release.Name .Release.Namespace | b64enc | quote }}
+  password: {{ "mypassword" | b64enc }}
+---
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DatabaseClaim
+metadata:
+  name: {{ .Release.Name }}-dbproxy-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+spec:
+  class: {{ .Values.dbController.class }}
+  databaseName: mydb
+  secretName: {{ .Release.Name }}-dbproxy-test-claims
+  # Ensure this is set to true, we don't want to use aws
+  useExistingSource: true
+  userName: myuser
+  appId: "removethispropertyfromcrd"
+  type: "postgres"
+  # FIXME: remove this property
+  dsnName: "uri_dsn.txt"
+  sourceDataFrom:
+    type: database
+    database:
+      dsn: {{ printf "postgres://myuser:@%s-dbproxy-test-db.%s.svc:5432/mydb?sslmode=disable" .Release.Name .Release.Namespace | quote }}
+      secretRef:
+        namespace: {{ .Release.Namespace }}
+        name: {{ .Release.Name }}-dbproxy-test
+    #S3 defines the location of a DB backup in an S3 bucket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-dbproxy-test-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: dbproxy-test-db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-dbproxy-test-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dbproxy-test-db
+    {{- include "db-controller.labels" . | nindent 4 }}
+spec:
+  containers:
+    - name: postgres
+      image: postgres:15
+      env:
+        - name: POSTGRES_USER
+          value: "myuser"
+        - name: POSTGRES_PASSWORD
+          value: "mypassword"
+        - name: POSTGRES_DB
+          value: "mydb"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-dbproxy-test-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+    persistance.atlas.infoblox.com/databaseclaim: {{ .Release.Name }}-dbproxy-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  initContainers:
+    - name: init
+      image: postgres:15
+      env:
+        - name: PGCONNECT_TIMEOUT
+          value: "2"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          cat /etc/secrets/uri_dsn.txt
+          for i in $(seq 1 10); do
+            echo "Attempt $i: Connecting to PostgreSQL..."
+            if psql $(cat /etc/secrets/uri_dsn.txt) -c 'SELECT 1'; then
+              echo "Connection successful!"
+              exit 0
+            fi
+            echo "Failed to connect. Retrying in 5 seconds..."
+            sleep 5
+          done
+          echo "Failed to connect after 20 attempts. Exiting."
+          exit 1
+      volumeMounts:
+        - name: dsn-volume
+          mountPath: /etc/secrets
+          readOnly: true
+  containers:
+    - name: client
+      image: "{{ .Values.dbproxy.image.repository }}:{{ .Values.dbproxy.image.tag | default .Chart.AppVersion }}"
+      env:
+        - name: PGCONNECT_TIMEOUT
+          value: "2"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -x
+          for i in $(seq 1 20); do
+            echo "Attempt $i: Connecting to PostgreSQL..."
+            if psql -h localhost -c 'SELECT 1'; then
+              echo "Connection successful!"
+              # Shutdown dbproxy so test can complete
+              kill -s INT $(pidof /usr/bin/dbproxy)
+              exit 0
+            fi
+            echo "Failed to connect. Retrying in 5 seconds..."
+            sleep 1
+          done
+          echo "Failed to connect after 20 attempts. Exiting."
+          exit 1
+  shareProcessNamespace: true
+  restartPolicy: Never
+  volumes:
+    - name: dsn-volume
+      secret:
+        secretName: {{ .Release.Name }}-dbproxy-test
+---

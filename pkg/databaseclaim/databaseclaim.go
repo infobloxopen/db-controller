@@ -39,6 +39,7 @@ import (
 var (
 	maxNameLen                      = 44 // max length of dbclaim name
 	serviceNamespaceEnvVar          = "SERVICE_NAMESPACE"
+	defaultDSNKey                   = "dsn.txt"
 	defaultRestoreFromSource        = "Snapshot"
 	defaultBackupPolicyKey          = "Backup"
 	tempTargetPassword              = "targetPassword"
@@ -332,7 +333,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if permitted := isClassPermitted(r.Config.Class, *dbClaim.Spec.Class); !permitted {
-		logr.Info("ignoring this claim as this controller does not own this class", "spec", dbClaim.Spec, "controllerClass", r.Config.Class)
+		logr.V(1).Info("invalid_class", "spec", dbClaim.Spec)
 		return ctrl.Result{}, nil
 	}
 
@@ -573,10 +574,11 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExistingDB")
 
-	existingDBConnInfo, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
+	existingDBConnInfo, err := getExistingDSN(ctx, r.Client, dbClaim)
 	if err != nil {
 		return err
 	}
+
 	if dbClaim.Status.ActiveDB.DbState == v1.UsingExistingDB {
 		if dbClaim.Status.ActiveDB.ConnectionInfo.Host == existingDBConnInfo.Host {
 			logr.Info("requested existing db host is same as active db host. reusing existing db host")
@@ -587,18 +589,14 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	dbClaim.Status.NewDB.SourceDataFrom = dbClaim.Spec.SourceDataFrom.DeepCopy()
 
 	logr.Info("creating database client")
-	masterPassword, err := r.getMasterPasswordForExistingDB(ctx, dbClaim)
-	if err != nil {
-		logr.Error(err, "get master password for existing db error")
-		return err
-	}
+	masterPassword := existingDBConnInfo.Password
+
 	//cache master password for existing db
 	err = r.setMasterPasswordInTempSecret(ctx, masterPassword, dbClaim)
 	if err != nil {
 		logr.Error(err, "cache master password error")
 		return err
 	}
-	existingDBConnInfo.Password = masterPassword
 	dbClient, err := r.getClientForExistingDB(ctx, dbClaim, existingDBConnInfo)
 	if err != nil {
 		logr.Error(err, "creating database client error")
@@ -1146,31 +1144,7 @@ func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, 
 
 }
 
-func (r *DatabaseClaimReconciler) getMasterPasswordForExistingDB(ctx context.Context,
-	dbClaim *v1.DatabaseClaim) (string, error) {
-
-	secretKey := "password"
-
-	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
-	if ns == "" {
-		ns = dbClaim.Namespace
-	}
-
-	gs := corev1.Secret{}
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Namespace: ns,
-		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
-	}, &gs)
-	if err != nil {
-		return "", err
-	}
-
-	password, ok := gs.Data[secretKey]
-	if !ok {
-		return "", fmt.Errorf("invalid_credentials_password_missing")
-	}
-	return string(password), nil
-}
+var ErrInvalidCredentialsPasswordMissing = fmt.Errorf("invalid_credentials_password_missing")
 
 func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
 
@@ -2511,14 +2485,14 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 			},
 		},
 		Data: map[string][]byte{
-			dsnName:          []byte(dsn),
-			"uri_" + dsnName: []byte(dbURI),
-			"hostname":       []byte(connInfo.Host),
-			"port":           []byte(connInfo.Port),
-			"database":       []byte(connInfo.DatabaseName),
-			"username":       []byte(connInfo.Username),
-			"password":       []byte(connInfo.Password),
-			"sslmode":        []byte(connInfo.SSLMode),
+			dsnName:       []byte(dsn),
+			"uri_dsn.txt": []byte(dbURI),
+			"hostname":    []byte(connInfo.Host),
+			"port":        []byte(connInfo.Port),
+			"database":    []byte(connInfo.DatabaseName),
+			"username":    []byte(connInfo.Username),
+			"password":    []byte(connInfo.Password),
+			"sslmode":     []byte(connInfo.SSLMode),
 		},
 	}
 	logr.Info("creating connection info SECRET: "+secret.Name, "secret", secret.Name, "namespace", secret.Namespace)
@@ -2531,11 +2505,11 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn
 	logr := log.FromContext(ctx)
 
 	if dsnName == "" {
-		dsnName = "dsn.txt"
+		dsnName = defaultDSNKey
 	}
 
 	exSecret.Data[dsnName] = []byte(dsn)
-	exSecret.Data["uri_"+dsnName] = []byte(dbURI)
+	exSecret.Data["uri_dsn.txt"] = []byte(dbURI)
 	exSecret.Data["hostname"] = []byte(connInfo.Host)
 	exSecret.Data["port"] = []byte(connInfo.Port)
 	exSecret.Data["database"] = []byte(connInfo.DatabaseName)

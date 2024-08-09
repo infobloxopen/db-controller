@@ -19,11 +19,12 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"go.uber.org/zap/zapcore"
+
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,7 @@ import (
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/internal/controller"
+	mutating "github.com/infobloxopen/db-controller/internal/webhook"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
@@ -70,10 +72,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var verbosity int
-
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
-		"Use the port :8080. If not set, it will be 0 in order to disable the metrics server")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. Use the port :8080. If not set, it will be 0 in order to disable the metrics server")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -83,19 +82,9 @@ func main() {
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
-	flag.IntVar(&verbosity, "verbosity", 0, "Configures the verbosity of the logging. "+
-		"By default it's set to 0, set to 1 to enable debug logs.")
-
-	opts := zap.Options{
-		Development: false,
-		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
-		Level:       zapcore.Level(-1 * verbosity),
-	}
-
 	var class string
 	var dbIdentifierPrefix string
 	var configFile string
-	var dBProxySidecarConfigPath string
 	var dsnExecSidecarConfigPath string
 	var metricsDepYamlPath string
 	var metricsConfigYamlPath string
@@ -106,19 +95,20 @@ func main() {
 	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "", "The prefix to be added to the DbHost. Ideally this is the env name.")
 
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml", "Database connection string to with root credentials.")
-	flag.StringVar(&dBProxySidecarConfigPath, "db-proxy-sidecar-config-path", "/etc/config/dbproxy/dbproxysidecar.json", "Mutating webhook sidecar configuration.")
 	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/dsnexec/dsnexecsidecar.json", "Mutating webhook sidecar configuration.")
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
 	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. Enabling this option will cause the db-controller to inject db proxy pod into pods with the infoblox.com/db-secret-path annotation set.")
 	flag.BoolVar(&enableDSNExecWebhook, "enable-dsnexec", false, "Enable Dsnexec webhook. Enabling this option will cause the db-controller to inject dsnexec container into pods with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
 
+	opts := zap.Options{
+		Development: true,
+	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	logger := zap.New(zap.UseFlagOptions(&opts))
-	ctlConfig := config.NewConfig(logger, configFile)
-	ctrl.SetLogger(logger)
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	ctlConfig := config.NewConfig(configFile)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -138,6 +128,8 @@ func main() {
 
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: tlsOpts,
+		// 9443 is the default port
+		Port: 9443,
 	})
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -168,9 +160,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	namespace := os.Getenv("SERVICE_NAMESPACE")
+	if len(namespace) == 0 {
+		setupLog.Error(fmt.Errorf("empty_namespace"), "namespace must be set")
+		os.Exit(1)
+	}
+
 	dbClaimConfig := &databaseclaim.DatabaseClaimConfig{
 		Viper:              ctlConfig,
-		Namespace:          os.Getenv("SERVICE_NAMESPACE"),
+		Namespace:          namespace,
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
@@ -190,7 +188,7 @@ func main() {
 	}
 	dbRoleClaimConfig := &roleclaim.RoleConfig{
 		Viper:              ctlConfig,
-		Namespace:          os.Getenv("SERVICE_NAMESPACE"),
+		Namespace:          namespace,
 		Class:              class,
 		DbIdentifierPrefix: dbIdentifierPrefix,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
@@ -218,27 +216,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// FIXME: use SetupWebhookWithManager and register as
-	// pod Defaulters
-	// https://book.kubebuilder.io/cronjob-tutorial/webhook-implementation
-	webHookServer := mgr.GetWebhookServer()
 	if enableDBProxyWebhook {
 
-		cfg, err := dbwebhook.ParseConfig(dBProxySidecarConfigPath)
-		if err != nil {
-			setupLog.Error(err, "could not parse db proxy sidecar configuration")
+		if err := mutating.SetupWebhookWithManager(mgr, mutating.SetupConfig{
+			Namespace:  namespace,
+			Class:      class,
+			DBProxyImg: os.Getenv("DBPROXY_IMAGE"),
+		}); err != nil {
+			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
 		}
-		setupLog.Info("Parsed db proxy conig:", "dbproxysidecarconfig", cfg)
-
-		webHookServer.Register("/mutate", &webhook.Admission{
-			Handler: &dbwebhook.DBProxyInjector{
-				Name:                 "DB Proxy",
-				Client:               mgr.GetClient(),
-				DBProxySidecarConfig: cfg,
-				Decoder:              admission.NewDecoder(mgr.GetScheme()),
-			},
-		})
 	}
 	if enableDSNExecWebhook {
 
@@ -248,9 +235,9 @@ func main() {
 			setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
 			os.Exit(1)
 		}
-		setupLog.Info("Parsed dsnexec conig:", "dsnexecsidecarconfig", cfg)
+		setupLog.Info("dnsexec-controller", "config", cfg)
 
-		webHookServer.Register("/mutate-dsnexec", &webhook.Admission{
+		mgr.GetWebhookServer().Register("/mutate-dsnexec", &webhook.Admission{
 			Handler: &dbwebhook.DsnExecInjector{
 				Name:                 "Dsnexec",
 				Client:               mgr.GetClient(),

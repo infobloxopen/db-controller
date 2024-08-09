@@ -92,6 +92,8 @@ type S3BackupConfiguration struct {
 type Database struct {
 	// DSN is the connection string used to reach the postgres database
 	// must have protocol specifier at beginning (example: mysql://  postgres:// )
+	// Deprecated: Use SecretRef dsn.txt instead
+	// +optional
 	DSN string `json:"dsn"`
 
 	// SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
@@ -128,10 +130,12 @@ type DatabaseClaimSpec struct {
 	UseExistingSource *bool `json:"useExistingSource"`
 
 	// Specifies an indentifier for the application using the database.
+	// +optional
 	AppID string `json:"appId"`
 
 	// Specifies the type of database to provision. Only postgres is supported.
-	// +required
+	// +optional
+	// +kubebuilder:default:=postgres
 	Type DatabaseType `json:"type"`
 
 	// Specifies the type of deletion policy to use when the resource is deleted.
@@ -160,6 +164,8 @@ type DatabaseClaimSpec struct {
 	DBVersion string `json:"dbVersion"`
 
 	// DSN key name.
+	// +optional
+	// +kubebuilder:default:=dsn.txt
 	DSNName string `json:"dsnName"`
 
 	// The optional Shape values are arbitrary and help drive instance selection
@@ -359,6 +365,8 @@ func (c *DatabaseClaimConnectionInfo) Uri() string {
 		url.QueryEscape(c.Username), url.QueryEscape(c.Password), c.Host, c.Port, url.QueryEscape(c.DatabaseName), c.SSLMode)
 }
 
+// ParseUri parses a correctly formatted database URI into a
+// DatabaseClaimConnectionInfo
 func ParseUri(dsn string) (*DatabaseClaimConnectionInfo, error) {
 
 	c := DatabaseClaimConnectionInfo{}
