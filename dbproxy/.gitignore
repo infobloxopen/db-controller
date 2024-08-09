@@ -1,1 +1,3 @@
-dbproxy
+/dbproxy
+/pgbouncer/pgbouncer
+/pgbouncer/pgbouncer-*.tar.gz

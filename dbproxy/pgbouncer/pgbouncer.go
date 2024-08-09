@@ -1,9 +1,7 @@
 package pgbouncer
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -98,8 +96,31 @@ func ParseDBCredentials(path string, passwordPath string) (*DBCredential, error)
 	return &dbc, nil
 }
 
+const templateText = `
+[databases]
+{{.LocalDbName}} = host={{.RemoteHost}} port={{.RemotePort}} dbname={{.LocalDbName}}
+
+[pgbouncer]
+listen_port = {{.LocalPort}}
+listen_addr = {{.LocalHost}}
+auth_type = trust
+auth_file = userlist.txt
+logfile = pgbouncer.log
+pidfile = pgbouncer.pid
+admin_users = {{.UserName}}
+remote_user_override = {{.UserName}}
+remote_db_override = {{.LocalDbName}}
+ignore_startup_parameters = extra_float_digits
+client_tls_sslmode = require
+client_tls_key_file=dbproxy-client.key
+client_tls_cert_file=dbproxy-client.crt
+server_tls_sslmode = require
+#server_tls_key_file=dbproxy-server.key
+#server_tls_cert_file=dbproxy-server.crt
+`
+
 func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
-	t, err := template.ParseFiles("./pgbouncer.template")
+	t, err := template.New("pgbouncer").Parse(templateText)
 	if err != nil {
 		return err
 	}
@@ -111,7 +132,6 @@ func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer configFile.Close()
 
 	userFile, err := os.OpenFile("userlist.txt", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
@@ -133,48 +153,21 @@ func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 	return (nil)
 }
 
-func ReloadConfiguration() (ok bool, err error) {
-	fmt.Println("Reloading PG Bouncer config")
-
-	ok = true
-
-	cmd := exec.Command("/var/run/dbproxy/reload-pgbouncer.sh")
-
-	var stdOut, stdErr bytes.Buffer
-
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-
-	err = cmd.Run()
-	if err != nil {
-		ok = false
-	}
-
-	log.Println(stdOut.String())
-	log.Println(stdErr.String())
-
-	return ok, err
+func ReloadConfiguration(scriptPath string) (err error) {
+	log.Println("Reloading PG Bouncer config")
+	_, err = run(scriptPath)
+	return err
 }
 
-func Start() (ok bool, err error) {
-	fmt.Println("Starting PG Bouncer ...")
+func Start(scriptPath string) error {
+	log.Println("Starting PG Bouncer:", scriptPath)
+	_, err := run(scriptPath)
+	return err
+}
 
-	ok = true
+func run(scriptPath string) (string, error) {
 
-	cmd := exec.Command("/var/run/dbproxy/start-pgbouncer.sh")
-
-	var stdOut, stdErr bytes.Buffer
-
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-
-	err = cmd.Run()
-	if err != nil {
-		ok = false
-	}
-
-	log.Println(stdOut.String())
-	log.Println(stdErr.String())
-
-	return ok, err
+	cmd := exec.Command(scriptPath)
+	stdoutStderr, err := cmd.CombinedOutput()
+	return string(stdoutStderr), err
 }
