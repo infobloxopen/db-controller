@@ -131,7 +131,7 @@ var _ = Describe("AWS", Ordered, func() {
 				wd, err := utils.GetProjectDir()
 				Expect(err).ToNot(HaveOccurred())
 
-				viperconfig := config.NewConfig(logger, filepath.Join(wd, "cmd", "config", "config.yaml"))
+				viperconfig := config.NewConfig(filepath.Join(wd, "cmd", "config", "config.yaml"))
 				hostParams, err := hostparams.New(viperconfig, dbClaim)
 				Expect(err).ToNot(HaveOccurred())
 				dbinstance1 = fmt.Sprintf("%s-%s-%s", dbIdentifierPrefix, db1, hostParams.Hash())

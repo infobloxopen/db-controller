@@ -1,8 +1,6 @@
 module github.com/infobloxopen/db-controller
 
-go 1.22.0
-
-toolchain go1.22.4
+go 1.22.4
 
 require (
 	github.com/Masterminds/sprig v2.22.0+incompatible

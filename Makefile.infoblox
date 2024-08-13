@@ -59,7 +59,9 @@ $(HELMS3): $(LOCALBIN)
 
 package-charts: package-chart-db-controller package-chart-db-controller-crds
 
-%-$(CHART_VERSION).tgz:
+.FORCE:
+
+%-$(CHART_VERSION).tgz: .FORCE
 	$(HELM) lint helm/$(*F)
 	$(HELM) package helm/$(*F) --version ${CHART_VERSION} --app-version ${CHART_VERSION}
 	touch $@
@@ -95,9 +97,6 @@ push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 		--set dbController.class=`cat .id` \
 		--set env=`cat .env` \
 		${HELM_SETFLAGS}
-	# Consider removing this, since we dont actually no
-	# helm upgrade is applied in the cluster
-	#@touch $@
 
 deploy: package-chart-db-controller .deploy-$(GIT_COMMIT)
 

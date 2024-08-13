@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -30,26 +31,45 @@ var (
 func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 	remoteDbSecretName, ok := pod.Annotations["infoblox.com/remote-db-dsn-secret"]
 	if !ok {
-		dsnexecLog.V(DebugLevel).Info("remote-db-dsn-secret can not be seen in the annotations.", pod.Name, pod.Annotations)
+		dsnexecLog.V(1).Info("remote-db-dsn-secret can not be seen in the annotations.", pod.Name, pod.Annotations)
 		return false, "", ""
 	}
 
 	dsnExecConfigSecret, ok := pod.Annotations["infoblox.com/dsnexec-config-secret"]
 	if !ok {
-		dsnexecLog.V(DebugLevel).Info("dsnexec-config-secret can not be seen in the annotations.", pod.Name, pod.Annotations)
+		dsnexecLog.V(1).Info("dsnexec-config-secret can not be seen in the annotations.", pod.Name, pod.Annotations)
 		return false, "", ""
 	}
 
 	alreadyInjected, err := strconv.ParseBool(pod.Annotations["infoblox.com/dsnexec-injected"])
 
 	if err == nil && alreadyInjected {
-		dsnexecLog.V(DebugLevel).Info("DsnExec sidecar already injected: ", pod.Name, pod.Annotations)
+		dsnexecLog.V(1).Info("DsnExec sidecar already injected: ", pod.Name, pod.Annotations)
 		return false, remoteDbSecretName, dsnExecConfigSecret
 	}
 
-	dsnexecLog.V(DebugLevel).Info("DsnExec sidecar Injection required: ", pod.Name, pod.Annotations)
+	dsnexecLog.V(1).Info("DsnExec sidecar Injection required: ", pod.Name, pod.Annotations)
 
 	return true, remoteDbSecretName, dsnExecConfigSecret
+}
+
+type Config struct {
+	Containers []corev1.Container `json:"containers"`
+	Volumes    []corev1.Volume    `json:"volumes"`
+}
+
+func ParseConfig(configFile string) (*Config, error) {
+	data, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
 }
 
 // DsnExecInjector adds an annotation to every incoming pods.
@@ -71,7 +91,7 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 	shoudInjectDsnExec, remoteDbSecretName, dsnExecConfigSecret := dsnExecSideCarInjectionRequired(pod)
 
 	if shoudInjectDsnExec {
-		dsnexecLog.V(DebugLevel).Info("Injecting sidecar...")
+		dsnexecLog.V(1).Info("Injecting sidecar...")
 
 		dbpi.DsnExecSidecarConfig.Containers[0].Image = sidecarImageForDsnExec
 		dbpi.DsnExecSidecarConfig.Volumes[0].Secret.SecretName = remoteDbSecretName
@@ -84,10 +104,10 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 		shareProcessNamespace := true
 		pod.Spec.ShareProcessNamespace = &shareProcessNamespace
 
-		dsnexecLog.V(DebugLevel).Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
+		dsnexecLog.V(1).Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
 
 	} else {
-		dsnexecLog.V(DebugLevel).Info("dsnexec sidecar not needed.", pod.Name, pod.APIVersion)
+		dsnexecLog.V(1).Info("dsnexec sidecar not needed.", pod.Name, pod.APIVersion)
 	}
 	marshaledPod, err := json.Marshal(pod)
 

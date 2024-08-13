@@ -4,19 +4,23 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: {{ include "db-controller.fullname" . }}
   annotations:
-    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}-webhook
 webhooks:
 {{- if .Values.dbproxy.enabled }}
 - clientConfig:
     service:
       name: {{ include "db-controller.fullname" . }}
-      path: /mutate
-      port: 7443
+      path: /mutate--v1-pod
+      port: 9443
       namespace: {{ .Release.Namespace }}
   sideEffects: None
   admissionReviewVersions: ["v1"]
-  failurePolicy: Ignore
-  name: dbproxy-injector.infoblox.com
+  failurePolicy: Fail
+  name: persistance.atlas.infoblox.com
+  objectSelector:
+    matchExpressions:
+      - key: "persistance.atlas.infoblox.com/databaseclaim"
+        operator: "Exists"
   rules:
   - apiGroups:
     - ""
@@ -34,7 +38,7 @@ webhooks:
     service:
       name: {{ include "db-controller.fullname" . }}
       path: /mutate-dsnexec
-      port: 7443
+      port: 9443
       namespace: {{ .Release.Namespace }}
   sideEffects: None
   admissionReviewVersions: ["v1"]

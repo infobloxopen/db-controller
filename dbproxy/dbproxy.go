@@ -1,10 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -29,21 +37,24 @@ func (cached *cachedCredentials) setNewCreds(newUser, newPass string) {
 }
 
 func generatePGBouncerConfiguration(dbCredentialPath, dbPasswordPath string, port int, pbCredentialPath string) (string, string) {
-	dbc, err := pgbouncer.ParseDBCredentials(dbCredentialPath, dbPasswordPath)
+
+	bs, err := ioutil.ReadFile(dbCredentialPath)
+	if err != nil {
+		panic(err)
+	}
+
+	cfg, err := pgbouncer.GenerateConfig(string(bs), dbPasswordPath, int16(port))
+	if err != nil {
+		panic(err)
+	}
+
+	err = pgbouncer.WritePGBouncerConfig(pbCredentialPath, &cfg)
+	log.Printf("Setup pgbouncerconfig: %s\n", cfg)
 	if err != nil {
 		log.Println(err)
 		panic(err)
 	}
-	localHost := "127.0.0.1"
-	localPort := port
-	err = pgbouncer.WritePGBouncerConfig(pbCredentialPath, &pgbouncer.PGBouncerConfig{
-		LocalDbName: dbc.DBName, LocalHost: &localHost, LocalPort: int16(localPort),
-		RemoteHost: dbc.Host, RemotePort: int16(dbc.Port), UserName: dbc.User, Password: dbc.Password})
-	if err != nil {
-		log.Println(err)
-		panic(err)
-	}
-	return *dbc.User, *dbc.Password
+	return cfg.UserName, cfg.Password
 }
 
 func startPGBouncer() {
@@ -88,20 +99,23 @@ func waitForDbCredentialFile(path string) {
 }
 
 var (
-	dbCredentialPath string
-	dbPasswordPath   string
+	dbCredentialPath = os.Getenv("DBPROXY_CREDENTIAL")
+	dbPasswordPath   = os.Getenv("DBPROXY_PASSWORD")
 	pbCredentialPath string
 	port             int
 )
 
 func init() {
-	flag.StringVar(&dbCredentialPath, "dbc", "./db-credential", "Location of the DB Credentials")
-	flag.StringVar(&dbPasswordPath, "dbp", "./db-password", "Location of the unescaped DB Password")
+	flag.StringVar(&dbCredentialPath, "dbc", dbCredentialPath, "Location of the DB Credentials")
+	flag.StringVar(&dbPasswordPath, "dbp", dbPasswordPath, "Location of the unescaped DB Password")
 	flag.StringVar(&pbCredentialPath, "pbc", "./pgbouncer.ini", "Location of the PGBouncer config file")
 	flag.IntVar(&port, "port", 5432, "Port to listen on")
 }
 
 func main() {
+
+	// Catch signals so helm test can exit cleanly
+	catch()
 
 	flag.Parse()
 
@@ -173,4 +187,37 @@ func main() {
 		log.Fatal("Add failed:", err)
 	}
 	<-done
+}
+
+func catch() {
+
+	sigs := make(chan os.Signal, 1)
+
+	// Notify the channel on SIGINT (Ctrl+C) or SIGTERM (kill command)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+
+	// Goroutine to handle the signal
+	go func() {
+		sig := <-sigs
+		fmt.Println("Received signal:", sig)
+
+		// Path set in ini file
+		bs, err := ioutil.ReadFile(filepath.Join("pgbouncer.pid"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		pid, err := strconv.Atoi(string(bytes.TrimSpace(bs)))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("terminating pgbouncer pid: %d", pid)
+		// Terminate pgbouncer
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("kill -s 9 %d", pid))
+		stdoutStderr, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(stdoutStderr)
+		os.Exit(0)
+	}()
 }

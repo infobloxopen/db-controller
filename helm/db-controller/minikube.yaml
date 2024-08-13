@@ -8,4 +8,4 @@ zapLogger:
   develMode: true
   level: debug
 dbproxy:
-  enabled: false
+  enabled: true

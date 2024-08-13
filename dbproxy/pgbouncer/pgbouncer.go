@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -13,31 +14,43 @@ import (
 	"text/template"
 )
 
-type DBCredential struct {
-	Host     *string
-	Port     int
-	DBName   *string
-	User     *string
-	Password *string
-}
-
 type PGBouncerConfig struct {
-	LocalDbName *string
-	LocalHost   *string
+	LocalDbName string
+	LocalHost   string
 	LocalPort   int16
-	RemoteHost  *string
+	RemoteHost  string
 	RemotePort  int16
-	UserName    *string
-	Password    *string
+	UserName    string
+	Password    string
+	SSLMode     string
 }
 
-func ParseDBCredentials(path string, passwordPath string) (*DBCredential, error) {
-	content, err := ioutil.ReadFile(path)
-
-	if err != nil {
-		return nil, err
+func (pgb PGBouncerConfig) String() string {
+	pass := pgb.Password
+	// Redact all but last 4 characters of password
+	if len(pass) > 4 {
+		pass = "****" + pass[len(pass)-4:]
 	}
 
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s", pgb.UserName, pass, pgb.RemoteHost, pgb.RemotePort, pgb.LocalDbName)
+}
+
+func GenerateConfig(dsn string, passwordPath string, port int16) (PGBouncerConfig, error) {
+	cfg, err := parseURI(dsn)
+	if err != nil {
+		// Fall back to old style dsn
+		cfg, err = parseOldDSN(dsn, passwordPath)
+		if err != nil {
+			return cfg, err
+		}
+	}
+	cfg.LocalHost = "0.0.0.0"
+	cfg.LocalPort = port
+	return cfg, nil
+}
+
+func parseOldDSN(content string, passwordPath string) (PGBouncerConfig, error) {
+	var cfg PGBouncerConfig
 	fields := strings.Split(string(content), " ")
 
 	f := func(c rune) bool {
@@ -59,43 +72,72 @@ func ParseDBCredentials(path string, passwordPath string) (*DBCredential, error)
 
 	passwordContent, err := ioutil.ReadFile(passwordPath)
 	if err != nil {
-		return nil, err
+		return cfg, err
 	}
 
-	// override password from db credential file with unescaped password
+	// FIXME: password in dsn never gets updated, read from password key for rotated password
 	password := string(passwordContent)
 	m["password"] = &password
 
 	if m["host"] == nil {
-		return nil, errors.New("host value not found in db credential")
+		return cfg, errors.New("host value not found in db credential")
 	}
 
 	if m["port"] == nil {
-		return nil, errors.New("port value not found in db credential")
+		return cfg, errors.New("port value not found in db credential")
 	}
 
 	if m["dbname"] == nil {
-		return nil, errors.New("dbname value not found in db credential")
+		return cfg, errors.New("dbname value not found in db credential")
 	}
 
 	if m["user"] == nil {
-		return nil, errors.New("user value not found in db credential")
+		return cfg, errors.New("user value not found in db credential")
 	}
 
 	if m["password"] == nil {
-		return nil, errors.New("password value not found in db credential")
+		return cfg, errors.New("password value not found in db credential")
 	}
 
-	dbc := DBCredential{}
-	dbc.Host = m["host"]
-	dbc.Port, _ = strconv.Atoi(*m["port"])
-	dbc.DBName = m["dbname"]
-	dbc.User = m["user"]
-	dbc.Password = m["password"]
+	cfg.RemoteHost = *m["host"]
+	cfg.UserName = *m["user"]
+	remotePort, _ := strconv.Atoi(*m["port"])
+	cfg.RemotePort = int16(remotePort)
+	cfg.Password = *m["password"]
+	cfg.LocalDbName = *m["dbname"]
+	cfg.SSLMode = *m["sslmode"]
 
-	// fmt.Println(*dbc.Host, dbc.Port, *dbc.DBName, *dbc.User, *dbc.Password)
+	return cfg, nil
+}
 
-	return &dbc, nil
+func parseURI(dsn string) (PGBouncerConfig, error) {
+	c := PGBouncerConfig{}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return c, err
+	}
+
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return c, fmt.Errorf("invalid_scheme: %s", u.Scheme)
+	}
+
+	c.RemoteHost = u.Hostname()
+	c.UserName = u.User.Username()
+	remotePort, err := strconv.Atoi(u.Port())
+	if err != nil {
+		return c, err
+	}
+	c.RemotePort = int16(remotePort)
+	c.Password, _ = u.User.Password()
+	if u.Path != "" {
+		c.LocalDbName = u.Path[1:]
+	}
+
+	q := u.Query()
+	c.SSLMode = q.Get("sslmode")
+
+	return c, nil
 }
 
 func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
@@ -126,7 +168,7 @@ func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
 		return err
 	}
 
-	userLine := strconv.Quote(*config.UserName) + " \"" + strings.Replace(*config.Password, "\"", "\"\"", -1) + "\""
+	userLine := strconv.Quote(config.UserName) + " \"" + strings.Replace(config.Password, "\"", "\"\"", -1) + "\""
 
 	userFile.Write([]byte(userLine))
 

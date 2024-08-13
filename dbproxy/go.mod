@@ -1,6 +1,6 @@
 module github.com/infobloxopen/db-controller/dbproxy
 
-go 1.20
+go 1.22.4
 
 require github.com/fsnotify/fsnotify v1.6.0
 
