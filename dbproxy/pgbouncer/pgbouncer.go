@@ -119,7 +119,7 @@ func parseURI(dsn string) (PGBouncerConfig, error) {
 	}
 
 	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return c, fmt.Errorf("invalid connection protocol: %s", u.Scheme)
+		return c, fmt.Errorf("invalid_scheme: %s", u.Scheme)
 	}
 
 	c.RemoteHost = u.Hostname()

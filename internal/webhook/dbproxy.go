@@ -108,22 +108,16 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 		return fmt.Errorf("claim %q does not have secret name, this may resolve on its own", claimName)
 	}
 
-	// // Check if secret exists
-	// var secret corev1.Secret
-	// if err := p.k8sClient.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: secretName}, &secret); err != nil {
-	// 	log.Info("unable to find secret", "secretName", secretName, "error", err)
-	// 	return fmt.Errorf("unable to find secret mentioned in databaseclaim %q: %w", secretName, err)
-	// }
-
 	if *claim.Spec.Class != p.class {
 		log.Info("Skipping Pod, class mismatch", "claimClass", *claim.Spec.Class, "class", p.class)
 		return nil
 	}
+
 	err := mutatePod(ctx, pod, secretName, dsnKey, p.dbProxyImg)
 	if err == nil {
 		log.Info("mutated_pod")
 	}
-	return err
+	return nil
 }
 
 func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dsnKey string, dbProxyImg string) error {
