@@ -2,6 +2,7 @@ package databaseclaim
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,11 @@ import (
 )
 
 func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (ctrl.Result, error) {
+	// Class of errors that should stop the reconciliation loop
+	// but not cause a status change on the CR
+	if errors.Is(inErr, ErrDoNotUpdateStatus) {
+		return ctrl.Result{}, nil
+	}
 	return manageError(ctx, r.Client, dbClaim, inErr)
 }
 

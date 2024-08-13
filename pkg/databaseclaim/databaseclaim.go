@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
@@ -64,7 +63,10 @@ var (
 	operationalStatusActiveValue   string = "active"
 )
 
-var ErrMaxNameLen = fmt.Errorf("dbclaim name is too long. max length is 44 characters")
+var (
+	ErrMaxNameLen        = fmt.Errorf("dbclaim name is too long. max length is 44 characters")
+	ErrDoNotUpdateStatus = fmt.Errorf("do not update status for this error")
+)
 
 type input struct {
 
@@ -117,21 +119,18 @@ type DatabaseClaimReconciler struct {
 	Input *input
 }
 
-func isClassPermitted(ctrlClass, claimClass string) bool {
+// isClassPermitted can not modify the claim class as it can
+// cause k8s updates in cluster
+func isClassPermitted(ctrlClass string, ptrClaimClass *string) bool {
 
-	controllerClass := ctrlClass
-
-	if claimClass == "" {
+	var claimClass string
+	if ptrClaimClass == nil {
 		claimClass = "default"
-	}
-	if controllerClass == "" {
-		controllerClass = "default"
-	}
-	if claimClass != controllerClass {
-		return false
+	} else {
+		claimClass = *ptrClaimClass
 	}
 
-	return true
+	return claimClass == ctrlClass
 }
 
 // Get the type (nature) of the operation. If it's a new DB, sharedDB, useexisting, etc...
@@ -235,7 +234,6 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 
 // Load base values and configs to kick off the whole process
 func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "setReqInfo")
 
 	r.Input = &input{}
 	var (
@@ -296,7 +294,6 @@ func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.Da
 		r.Input.EnableReplicationRole = *dbClaim.Spec.EnableReplicationRole
 	}
 
-	logr.V(DebugLevel).Info("setup values of ", "DatabaseClaimReconciler", r)
 	return nil
 }
 
@@ -305,15 +302,7 @@ func Reconcile(r *DatabaseClaimReconciler, ctx context.Context, req ctrl.Request
 }
 
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", req.NamespacedName)
-
-	if r.Config == nil {
-		return ctrl.Result{}, fmt.Errorf("DatabaseClaimConfig is not set")
-	}
-
-	if r.Client == nil {
-		return ctrl.Result{}, fmt.Errorf("client is not set")
-	}
+	logr := log.FromContext(ctx)
 
 	var dbClaim v1.DatabaseClaim
 	if err := r.Get(ctx, req.NamespacedName, &dbClaim); err != nil {
@@ -326,16 +315,18 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	logr.Info("reconcile")
+	// Avoid updates to the claim until we know we should be looking at it
+
+	if !isClassPermitted(r.Config.Class, dbClaim.Spec.Class) {
+		logr.V(1).Info("class_not_owned", "class", dbClaim.Spec.Class)
+		return ctrl.Result{}, nil
+	}
 
 	if dbClaim.Spec.Class == nil {
 		dbClaim.Spec.Class = ptr.To("default")
 	}
 
-	if permitted := isClassPermitted(r.Config.Class, *dbClaim.Spec.Class); !permitted {
-		logr.V(1).Info("invalid_class", "spec", dbClaim.Spec)
-		return ctrl.Result{}, nil
-	}
+	logr.Info("reconcile")
 
 	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
 		dbClaim.Status.ActiveDB.ConnectionInfo = new(v1.DatabaseClaimConnectionInfo)
@@ -498,6 +489,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
+
 		dbClaim.Status.ActiveDB = *dbClaim.Status.NewDB.DeepCopy()
 		dbClaim.Status.NewDB = v1.Status{ConnectionInfo: &v1.DatabaseClaimConnectionInfo{}}
 
@@ -571,8 +563,20 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 
 }
 
+// reconcileUseExistingDB reconciles the existing db
+// bool indicates that object status should be updated
 func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileUseExistingDB")
+	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
+
+	activeDB := dbClaim.Status.ActiveDB
+	// Exit immediately if we have nothing to do
+	if activeDB.UserUpdatedAt != nil {
+		lastUpdateSince := time.Since(activeDB.UserUpdatedAt.Time)
+		if lastUpdateSince < r.getPasswordRotationTime() {
+			logr.Info("user updated recently, skipping reconcile", "elapsed", lastUpdateSince)
+			return ErrDoNotUpdateStatus
+		}
+	}
 
 	existingDBConnInfo, err := getExistingDSN(ctx, r.Client, dbClaim)
 	if err != nil {
@@ -609,7 +613,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	dbName := existingDBConnInfo.DatabaseName
 	updateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUserAndExtensions(ctx, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(ctx, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
 	if err != nil {
 		return err
 	}
@@ -629,6 +633,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -691,7 +696,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 		return ctrl.Result{}, err
 
 	}
-	err = r.manageUserAndExtensions(ctx, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(ctx, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1256,23 +1261,8 @@ func generateMasterPassword() (string, error) {
 	return pass, nil
 }
 
-func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
-	pred := predicate.GenerationChangedPredicate{}
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1.DatabaseClaim{}).WithEventFilter(pred).
-		Complete(r)
-}
-
 func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
-	prt := time.Duration(basefun.GetPasswordRotationPeriod(r.Config.Viper)) * time.Minute
-
-	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
-		log.Log.Info(fmt.Sprintf("password rotation time is out of range, should be between %d and %d min, use the default", basefun.GetMinRotationTime(), basefun.GetMaxRotationTime()))
-		return basefun.GetMinRotationTime()
-	}
-
-	return prt
+	return basefun.GetPasswordRotationPeriod(r.Config.Viper)
 }
 
 // FindStatusCondition finds the conditionType in conditions.
@@ -1425,8 +1415,7 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
-	logr := log.FromContext(ctx)
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
 
 	if status == nil {
 		return fmt.Errorf("status is nil")
@@ -1480,7 +1469,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, d
 	}
 
 	if status.UserUpdatedAt == nil || time.Since(status.UserUpdatedAt.Time) > rotationTime {
-		logr.Info("rotating users")
+		logger.Info("rotating_users", "rotationTime", rotationTime)
 
 		userPassword, err := r.generatePassword()
 		if err != nil {

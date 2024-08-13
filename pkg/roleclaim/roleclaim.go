@@ -442,14 +442,7 @@ func createRole(dbClient dbclient.Clienter, roleName string, log *logr.Logger, d
 }
 
 func (r *DbRoleClaimReconciler) getPasswordRotationTime() time.Duration {
-	prt := time.Duration(basefun.GetPasswordRotationPeriod(r.Config.Viper)) * time.Minute
-
-	if prt < basefun.GetMinRotationTime() || prt > basefun.GetMaxRotationTime() {
-		log.Log.Info("password rotation time is out of range, should be between 60 and 1440 min, use the default")
-		return basefun.GetMinRotationTime()
-	}
-
-	return prt
+	return basefun.GetPasswordRotationPeriod(r.Config.Viper)
 }
 
 func (r *DbRoleClaimReconciler) updateClientStatus(ctx context.Context, schemaUserClaim *v1.DbRoleClaim) error {
