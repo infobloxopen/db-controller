@@ -76,7 +76,6 @@ var _ = Describe("DatabaseClaim Controller", func() {
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
 					Class:                 ptr.To(""),
-					AppID:                 "sample-app",
 					DatabaseName:          "sample_app",
 					SecretName:            secretName,
 					Username:              parsedDSN.User.Username(),

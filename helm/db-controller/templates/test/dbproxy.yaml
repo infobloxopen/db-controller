@@ -17,6 +17,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "db-controller.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
 spec:
   class: {{ .Values.dbController.class }}
   databaseName: mydb
@@ -26,8 +29,6 @@ spec:
   userName: myuser
   appId: "removethispropertyfromcrd"
   type: "postgres"
-  # FIXME: remove this property
-  dsnName: "uri_dsn.txt"
   sourceDataFrom:
     type: database
     database:
@@ -82,8 +83,8 @@ metadata:
     persistance.atlas.infoblox.com/databaseclaim: {{ .Release.Name }}-dbproxy-test
     persistance.atlas.infoblox.com/class: {{ .Values.dbController.class | quote }}
   annotations:
-    "helm.sh/hook": test
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
 spec:
   initContainers:
     - name: init

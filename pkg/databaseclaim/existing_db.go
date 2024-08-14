@@ -9,8 +9,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
-	// FIXME: upgrade kubebuilder so this package will be removed
 )
+
+var ErrInvalidCredentialsPasswordMissing = fmt.Errorf("invalid_credentials_password_missing")
 
 func getExistingDSN(ctx context.Context, cli client.Reader, dbClaim *v1.DatabaseClaim) (*v1.DatabaseClaimConnectionInfo, error) {
 
@@ -33,12 +34,7 @@ func getExistingDSN(ctx context.Context, cli client.Reader, dbClaim *v1.Database
 
 func parseExistingDSN(secretData map[string][]byte, dbClaim *v1.DatabaseClaim) (*v1.DatabaseClaimConnectionInfo, error) {
 
-	if dbClaim.Spec.DSNName == "" {
-		dbClaim.Spec.DSNName = defaultDSNKey
-	}
-
-	// FIXME: remove usage of password key and only read dsn.txt
-	bsDSN, ok := secretData[dbClaim.Spec.DSNName]
+	bsDSN, ok := secretData[v1.DSNKey]
 	if ok {
 		uriDSN, err := v1.ParseUri(string(bsDSN))
 		if err == nil {

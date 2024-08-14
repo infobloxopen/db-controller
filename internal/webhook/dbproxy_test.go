@@ -140,7 +140,7 @@ var _ = Describe("pod webhook defaulting", func() {
 
 func makeMutatedPod(name, claimName, secretName string) *corev1.Pod {
 	pod := makePod(name, claimName)
-	Expect(mutatePod(context.TODO(), pod, secretName, "dsn.txt", sidecarImage)).To(Succeed())
+	Expect(mutatePod(context.TODO(), pod, secretName, sidecarImage)).To(Succeed())
 	return pod
 
 }

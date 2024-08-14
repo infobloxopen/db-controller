@@ -13,7 +13,6 @@ func TestExistingDSN(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
 		user       string
-		dsnKey     string
 		dsn        string
 		expected   string
 		secretData map[string][]byte
@@ -49,7 +48,6 @@ func TestExistingDSN(t *testing.T) {
 			claim := &v1.DatabaseClaim{
 				Spec: v1.DatabaseClaimSpec{
 					Username:          tt.user,
-					DSNName:           tt.dsnKey,
 					UseExistingSource: ptr.To(true),
 					SourceDataFrom: &v1.SourceDataFrom{
 						Type: "database",
