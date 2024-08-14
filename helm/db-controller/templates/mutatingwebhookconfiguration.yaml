@@ -25,7 +25,7 @@ webhooks:
       - key: "persistance.atlas.infoblox.com/class"
         operator: "In"
         values:
-            - {{ .Values.dbController.class | quote }}
+          - {{ .Values.dbController.class | quote }}
   rules:
   - apiGroups:
     - ""
@@ -49,6 +49,13 @@ webhooks:
   admissionReviewVersions: ["v1"]
   failurePolicy: Ignore
   name: dsnexec-injector.infoblox.com
+  objectSelector:
+    matchExpressions:
+      # Disable dsn-exec until we reimplement it in #PTEUDO-1385
+      - key: "donotenablethiswithoutwritingtests"
+        Operator: "In"
+        values:
+          - "mytestsareallpassing"
   rules:
   - apiGroups:
     - ""

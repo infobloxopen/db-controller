@@ -105,7 +105,8 @@ dbproxy:
     tag: ""
 
 dsnexec:
-  enabled: true
+  # Do not enable this without writing complete unit and integration tests using helm
+  enabled: false
   image:
     repository: "ghcr.io/infobloxopen/dsnexec"
     tag: ""
