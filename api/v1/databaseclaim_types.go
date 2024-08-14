@@ -27,6 +27,11 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+var (
+	DSNKey    = "dsn.txt"
+	DSNURIKey = "uri_dsn.txt"
+)
+
 type DatabaseType string
 
 const (
@@ -163,8 +168,10 @@ type DatabaseClaimSpec struct {
 	// +optional
 	DBVersion string `json:"dbVersion"`
 
-	// DSN key name.
-	// +optional
+	// DSN is used to name the secret key that contains old style DSN for postgres.
+	// This field is deprecated, update your code to access key "dsn.txt" or
+	// preferrably "uri_dsn.txt" as this field is not customizable any longer.
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=dsn.txt
 	DSNName string `json:"dsnName"`
 
