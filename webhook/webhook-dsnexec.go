@@ -31,13 +31,11 @@ var (
 func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 	remoteDbSecretName, ok := pod.Annotations["infoblox.com/remote-db-dsn-secret"]
 	if !ok {
-		dsnexecLog.V(1).Info("remote-db-dsn-secret can not be seen in the annotations.", pod.Name, pod.Annotations)
 		return false, "", ""
 	}
 
 	dsnExecConfigSecret, ok := pod.Annotations["infoblox.com/dsnexec-config-secret"]
 	if !ok {
-		dsnexecLog.V(1).Info("dsnexec-config-secret can not be seen in the annotations.", pod.Name, pod.Annotations)
 		return false, "", ""
 	}
 
