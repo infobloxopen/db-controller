@@ -13,21 +13,11 @@ import (
 )
 
 var (
-	minRotationTime = 60 * time.Minute // rotation time in minutes
-	maxRotationTime = 1440 * time.Minute
-	maxWaitTime     = 10 * time.Minute
-	defaultPassLen  = 32
-	defaultNumDig   = 10
-	defaultNumSimb  = 10
+	maxWaitTime    = 10 * time.Minute
+	defaultPassLen = 32
+	defaultNumDig  = 10
+	defaultNumSimb = 10
 )
-
-func GetMinRotationTime() time.Duration {
-	return minRotationTime
-}
-
-func GetMaxRotationTime() time.Duration {
-	return maxRotationTime
-}
 
 func GetMaxWaitTime() time.Duration {
 	return maxWaitTime
@@ -169,8 +159,8 @@ func GetSuperUserElevation(viperConfig *viper.Viper) bool {
 	return viperConfig.GetBool("supportSuperUserElevation")
 }
 
-func GetPasswordRotationPeriod(viperConfig *viper.Viper) int {
-	return viperConfig.GetInt("passwordconfig::passwordRotationPeriod")
+func GetPasswordRotationPeriod(viperConfig *viper.Viper) time.Duration {
+	return viperConfig.GetDuration("passwordconfig::passwordRotationPeriod")
 }
 
 func GetBackupRetentionDays(viperConfig *viper.Viper) int64 {

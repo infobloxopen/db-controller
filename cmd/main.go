@@ -178,6 +178,7 @@ func main() {
 		MetricsConfigYamlPath: metricsConfigYamlPath,
 	}
 
+	setupLog.Info("setup_ctrl", "dbClaimConfig", dbClaimConfig)
 	if err = (&controller.DatabaseClaimReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

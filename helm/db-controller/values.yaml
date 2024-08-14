@@ -146,7 +146,7 @@ controllerConfig:
   passwordConfig:
     passwordComplexity: enabled
     minPasswordLength: 15
-    passwordRotationPeriod: 60
+    passwordRotationPeriod: 60m
   pgTemp: "/pg-temp/"
   region: us-east-1
   storageType: gp3

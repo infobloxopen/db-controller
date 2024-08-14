@@ -21,6 +21,11 @@ webhooks:
     matchExpressions:
       - key: "persistance.atlas.infoblox.com/databaseclaim"
         operator: "Exists"
+        # Important to prevent multiple db-controllers from stepping on each other
+      - key: "persistance.atlas.infoblox.com/class"
+        operator: "In"
+        values:
+            - {{ .Values.dbController.class | quote }}
   rules:
   - apiGroups:
     - ""

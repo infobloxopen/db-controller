@@ -18,11 +18,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
@@ -57,9 +59,11 @@ func (r *DatabaseClaimReconciler) Reconciler() *databaseclaim.DatabaseClaimRecon
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.2/pkg/reconcile
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	return r.reconciler.Reconcile(ctx, req)
+	res, err := r.reconciler.Reconcile(ctx, req)
+	logger.V(1).Info("reconcile_done", "err", err, "res", res)
+	return res, err
 }
 
 func (r *DatabaseClaimReconciler) Setup() {
@@ -74,7 +78,17 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.Setup()
 
+	if r.Config == nil {
+		return fmt.Errorf("DatabaseClaimConfig is not set")
+	}
+
+	if r.Client == nil {
+		return fmt.Errorf("client is not set")
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
+		// Ignore status updates in objects being watched
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		For(&persistancev1.DatabaseClaim{}).
 		Complete(r)
 }

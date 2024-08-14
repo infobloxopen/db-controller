@@ -163,6 +163,7 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dsnKey s
 		Name:            ContainerName,
 		Image:           dbProxyImg,
 		ImagePullPolicy: corev1.PullIfNotPresent,
+
 		Env: []corev1.EnvVar{
 			{
 				Name:  "DBPROXY_CREDENTIAL",
@@ -172,6 +173,26 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dsnKey s
 				Name:  "DBPROXY_PASSWORD",
 				Value: fmt.Sprintf("/dbproxy/%s", "password"),
 			},
+		},
+		// Test pgbouncer
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"psql", "-h", "localhost", "-c", "'SELECT 1'"},
+				},
+			},
+			InitialDelaySeconds: 30,
+			PeriodSeconds:       15,
+		},
+		// Test connection to upstream database
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"psql", "\\$(cat /dbproxy/uri_dsn.txt)", "-c", "'SELECT 1'"},
+				},
+			},
+			InitialDelaySeconds: 30,
+			PeriodSeconds:       15,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{

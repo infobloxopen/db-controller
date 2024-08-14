@@ -80,6 +80,7 @@ metadata:
   labels:
     {{- include "db-controller.labels" . | nindent 4 }}
     persistance.atlas.infoblox.com/databaseclaim: {{ .Release.Name }}-dbproxy-test
+    persistance.atlas.infoblox.com/class: {{ .Values.dbController.class | quote }}
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded

@@ -4,6 +4,8 @@ controllerConfig:
   dbSubnetGroupNameRef: box-3
   providerConfig: box-3
   caCertificateIdentifier: "rds-ca-rsa2048-g1"
+  passwordConfig:
+    passwordRotationPeriod: 3m
 zapLogger:
   develMode: true
   level: debug
