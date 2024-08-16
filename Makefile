@@ -1,3 +1,8 @@
+## Location to install dependencies to
+## This must be above the include b/c it's used for
+## dependencies in Makefile.infoblox
+LOCALBIN ?= $(shell pwd)/bin
+
 include Makefile.infoblox
 
 # Image URL to use all building/pushing image targets
@@ -150,8 +155,6 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 ##@ Dependencies
 
-## Location to install dependencies to
-LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
