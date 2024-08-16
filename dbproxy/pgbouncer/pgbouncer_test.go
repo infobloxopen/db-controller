@@ -41,9 +41,10 @@ func TestParseURI(t *testing.T) {
 			wantErr: false,
 		},
 	}
+	var cfg PGBouncerConfig
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseURI(tt.dsn)
+			err := parseURI(&cfg, tt.dsn)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseURI() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -164,10 +164,6 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dbProxyI
 				Name:  "DBPROXY_CREDENTIAL",
 				Value: fmt.Sprintf("/dbproxy/%s", SecretKey),
 			},
-			{
-				Name:  "DBPROXY_PASSWORD",
-				Value: fmt.Sprintf("/dbproxy/%s", "password"),
-			},
 		},
 		// Test pgbouncer
 		ReadinessProbe: &corev1.Probe{
@@ -191,7 +187,7 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dbProxyI
 					},
 				},
 			},
-			InitialDelaySeconds: 30,
+			InitialDelaySeconds: 90,
 			PeriodSeconds:       15,
 		},
 		VolumeMounts: []corev1.VolumeMount{

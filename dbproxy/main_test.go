@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/infobloxopen/db-controller/dbproxy/pgbouncer"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
@@ -57,13 +56,6 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := ioutil.WriteFile(testDSNPath, []byte(oldDSN), 0644); err != nil {
-		panic(err)
-	}
-	cfg, err := pgbouncer.GenerateConfig(testDSN, "", 0)
-	if err != nil {
-		panic(err)
-	}
-	if err := ioutil.WriteFile(testPasswordPath, []byte(cfg.Password), 0644); err != nil {
 		panic(err)
 	}
 
