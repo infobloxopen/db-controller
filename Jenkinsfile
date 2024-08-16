@@ -4,6 +4,9 @@ pipeline {
   agent {
     label 'ubuntu_20_04_label'
   }
+  tools {
+    go "Go 1.22.4"
+  }
   stages {
     stage("Setup") {
       steps {
