@@ -787,8 +787,13 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	}
 	var sourceMasterConn *v1.DatabaseClaimConnectionInfo
 
-	if r.mode == M_MigrationInProgress ||
-		r.mode == M_MigrateExistingToNewDB {
+	if r.mode == M_MigrationInProgress || r.mode == M_MigrateExistingToNewDB {
+		if dbClaim.Spec.SourceDataFrom == nil {
+			return r.manageError(ctx, dbClaim, fmt.Errorf("sourceDataFrom is nil"))
+		}
+		if dbClaim.Spec.SourceDataFrom.Database == nil {
+			return r.manageError(ctx, dbClaim, fmt.Errorf("sourceDataFrom.Database is nil"))
+		}
 		sourceMasterConn, err = v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
