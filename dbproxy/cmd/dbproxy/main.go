@@ -20,21 +20,19 @@ import (
 
 var (
 	dbCredentialPath   = os.Getenv("DBPROXY_CREDENTIAL")
-	dbPasswordPath     = os.Getenv("DBPROXY_PASSWORD")
 	pbCredentialPath   string
 	pgbStartScriptPath string
 	pgbReloadScript    string
-	port               int
+	addr               string
 )
 
 func init() {
 	flag.StringVar(&dbCredentialPath, "dbc", dbCredentialPath, "Location of the DB Credentials")
-	flag.StringVar(&dbPasswordPath, "dbp", dbPasswordPath, "Location of the unescaped DB Password")
 	flag.StringVar(&pbCredentialPath, "pbc", "./pgbouncer.ini", "Location of the PGBouncer config file")
 
 	flag.StringVar(&pgbStartScriptPath, "pgbouncer-start-script", "/var/run/dbproxy/start-pgbouncer.sh", "Location of the PGBouncer start script")
 	flag.StringVar(&pgbReloadScript, "pgbouncer-reload-script", "/var/run/dbproxy/reload-pgbouncer.sh", "Location of the PGBouncer reload script")
-	flag.IntVar(&port, "port", 5432, "Port to listen on")
+	flag.StringVar(&addr, "addr", "0.0.0.0:5432", "address to listen to clients on")
 }
 
 func main() {
@@ -46,17 +44,12 @@ func main() {
 
 	flag.Parse()
 
-	if port < 1 || port > 65535 {
-		log.Fatal("Invalid port number")
-	}
-
 	mgr, err := dbproxy.New(context.TODO(), dbproxy.Config{
 		DBCredentialPath: dbCredentialPath,
-		DBPasswordPath:   dbPasswordPath,
 		PGCredentialPath: pbCredentialPath,
 		PGBStartScript:   pgbStartScriptPath,
 		PGBReloadScript:  pgbReloadScript,
-		Port:             port,
+		LocalAddr:        addr,
 	})
 
 	if err != nil {

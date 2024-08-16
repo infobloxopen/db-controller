@@ -15,11 +15,10 @@ func TestE2E(t *testing.T) {
 	defer cancel()
 	mgr, err := New(ctx, Config{
 		DBCredentialPath: testDSNURIPath,
-		DBPasswordPath:   testPasswordPath,
 		PGCredentialPath: filepath.Join(tempDir, "pgbouncer.ini"),
 		PGBStartScript:   "scripts/mock-start-pgbouncer.sh",
 		PGBReloadScript:  "scripts/mock-start-pgbouncer.sh",
-		Port:             5432,
+		LocalAddr:        "0.0.0.0:5432",
 	})
 
 	if err != nil {

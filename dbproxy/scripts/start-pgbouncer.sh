@@ -1,5 +1,10 @@
 #!/bin/sh -x
 
+# Needed to emit an error for unit tests to catch
+set -e
+command -v pgbouncer
+set +e
+
 until  timeout 10 psql "$(cat /dbproxy/uri_dsn.txt)" -c 'SELECT 1'; do
   echo "Waiting for PostgreSQL to be ready..."
   sleep 1
