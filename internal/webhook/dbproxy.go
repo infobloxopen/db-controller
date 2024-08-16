@@ -93,7 +93,7 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 	var claim v1.DatabaseClaim
 	if err := p.k8sClient.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: claimName}, &claim); err != nil {
 		log.Info("unable to find databaseclaim", "claimName", claimName, "error", err)
-		return fmt.Errorf("unable to find databaseclaim %q check label %s: %w", claimName, LabelCheck, err)
+		return fmt.Errorf("unable to find databaseclaim %q check label %s: %s", claimName, LabelCheck, err)
 	}
 
 	// This is the secret that db-controller manages

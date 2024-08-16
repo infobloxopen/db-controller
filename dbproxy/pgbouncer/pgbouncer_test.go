@@ -1,6 +1,13 @@
 package pgbouncer
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path"
+	"testing"
+
+	"github.com/go-logr/logr/testr"
+)
 
 func TestParseURI(t *testing.T) {
 	tests := []struct {
@@ -42,5 +49,28 @@ func TestParseURI(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+func TestStart(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testLogger := testr.New(t)
+
+	for _, script := range []string{"start-pgbouncer.sh", "reload-pgbouncer.sh"} {
+
+		script := path.Join(wd, "..", "scripts", script)
+
+		err := run(context.TODO(), script, testLogger)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+
+		// if !strings.Contains(out, "pgbouncer: not found") {
+		// 	t.Fatalf("expected pgbouncer not found got:\n%s", out)
+		// }
 	}
 }

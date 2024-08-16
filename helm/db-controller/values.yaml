@@ -17,6 +17,12 @@ db:
 dbController:
   class: default
 
+tools:
+  kubectl:
+    repository: bitnami/kubectl
+    pullPolicy: IfNotPresent
+    tag: 1.28.5
+
 image:
   repository: ghcr.io/infobloxopen/db-controller
   pullPolicy: Always

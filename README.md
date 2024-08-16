@@ -1,4 +1,4 @@
-# migration
+# output-dir
 // TODO(user): Add simple overview of use/purpose
 
 ## Description
@@ -16,7 +16,7 @@
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/migration:tag
+make docker-build docker-push IMG=<some-registry>/output-dir:tag
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.
@@ -32,7 +32,7 @@ make install
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=<some-registry>/migration:tag
+make deploy IMG=<some-registry>/output-dir:tag
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
@@ -73,7 +73,7 @@ Following are the steps to build the installer and distribute this project to us
 1. Build the installer for the image built and published in the registry:
 
 ```sh
-make build-installer IMG=<some-registry>/migration:tag
+make build-installer IMG=<some-registry>/output-dir:tag
 ```
 
 NOTE: The makefile target mentioned above generates an 'install.yaml'
@@ -86,7 +86,7 @@ its dependencies.
 Users can just run kubectl apply -f <URL for YAML BUNDLE> to install the project, i.e.:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/migration/<tag or branch>/dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/<org>/output-dir/<tag or branch>/dist/install.yaml
 ```
 
 ## Contributing
@@ -112,25 +112,3 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
-### Run integration tests
-
-1. Integration tests can only be run on box-3.
-
-2. If `.id` files causes issues, update it manually. Then, run:
-
-    make test-e2e
-
-3. If you want to run specific suites, use ginkgo cli:
-
-    cd test/e2e/
-    NAMESPACE=$(cat .id) go test -ginkgo.vv -ginkgo.focus 'AWS'
-
-To run tests without rebuilding the images, and redeploying the chart. Pass NODEPLOY
-
-    cd test/e2e/
-    NODEPLOY=1 NAMESPACE=$(cat .id) go test -ginkgo.vv -ginkgo.focus 'AWS'
-
-4. If you want to run a single test at a time replace It() by Fit() in the test class, this is a focused test and only this test will run (output shows failure, but this is intended, not to fool you that everything ran successfully)
-
-5. in case the tests failed in the middle, sometimes the resources are not deleted from the AWS account (actually it might takes a long time sometimes). So you can go in there and delete the RDSs that were created. They can be searched for by using the namespace you set in step 2.
