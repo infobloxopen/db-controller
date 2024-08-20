@@ -115,7 +115,7 @@ limitations under the License.
 
 ### Run integration tests
 
-1. Integration tests can only be run on box-3.
+1. Integration tests can only be run on box-3, kind or gcp-ddi-dev-use1.
 
 2. If `.id` files causes issues, update it manually. Then, run:
 
