@@ -116,11 +116,8 @@ zapLogger:
   timeEncoding: rfc3339nano
 
 controllerConfig:
-  athena-shared:
-    masterUsername: root
-  authSource: secret
-  # if aws authorization is used iam role must be provided
-  #iamRole: rds-role
+  #aws or gcp
+  cloud: gcp
   caCertificateIdentifier: "rds-ca-rsa2048-g1"
   dbMultiAZEnabled: false
   dbSubnetGroupNameRef:
@@ -148,7 +145,6 @@ controllerConfig:
     minPasswordLength: 15
     passwordRotationPeriod: 60m
   pgTemp: "/pg-temp/"
-  region: us-east-1
   storageType: gp3
   supportSuperUserElevation: true
   # system funtions are created as functions in the database. The prefix is used as the schema name.
@@ -158,3 +154,10 @@ controllerConfig:
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
   vpcSecurityGroupIDRefs:
+  aws:
+    region: us-east-1
+  gcp:
+    region: us-east1
+    allocatedIpRange: ddiaas-dev-use1-db-us-east1-alloy-psc-ip
+    network: "projects/gcp-eng-ddiaas-dev/global/networks/ddiaas-dev-use1-vpc"
+    numbackupstoretain: 3
