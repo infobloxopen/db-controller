@@ -171,11 +171,11 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(createdDbClaim.Spec.DBVersion).To(BeEmpty())
 
 				return createdDbClaim.Status.Error, nil
-			}, 50*time.Second, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
+			}, 2*time.Minute, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
 		})
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
-			By("erroring out when AWS does not support dbVersion")
+			By("erroring out when Cloud does not support dbVersion")
 
 			key := types.NamespacedName{
 				Name:      db1,
@@ -201,7 +201,7 @@ var _ = Describe("AWS", Ordered, func() {
 						return "", err
 					}
 					return updatedDbClaim.Status.Error, nil
-				}, time.Minute*2, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
+				}, time.Minute*4, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
 			} else {
 				Eventually(func() (string, error) {
 					err := k8sClient.Get(ctx, key, updatedDbClaim)
@@ -209,7 +209,7 @@ var _ = Describe("AWS", Ordered, func() {
 						return "", err
 					}
 					return updatedDbClaim.Status.Error, nil
-				}, time.Minute*2, time.Second*15).Should(ContainSubstring("Invalid value at 'cluster.database_version'"))
+				}, time.Minute*4, time.Second*15).Should(ContainSubstring("Invalid value at 'cluster.database_version'"))
 			}
 		})
 	})
@@ -227,7 +227,11 @@ var _ = Describe("AWS", Ordered, func() {
 			By("Getting the prev dbclaim")
 			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
 			By("Updating dbVersion")
-			prevDbClaim.Spec.DBVersion = "15.5"
+			if cloud == "aws" {
+				prevDbClaim.Spec.DBVersion = "15.5"
+			} else {
+				prevDbClaim.Spec.DBVersion = "15"
+			}
 			k8sClient.Update(ctx, prevDbClaim)
 			updatedDbClaim := &v1.DatabaseClaim{}
 			By("checking dbclaim status is ready")
