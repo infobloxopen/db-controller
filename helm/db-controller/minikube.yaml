@@ -2,7 +2,7 @@ controllerConfig:
   region: us-east-1
   vpcSecurityGroupIDRefs: 
   dbSubnetGroupNameRef: 
-  providerConfig: gcp-ddi-dev-use1
+  providerConfig: default
   caCertificateIdentifier: "rds-ca-rsa2048-g1"
   passwordConfig:
     passwordRotationPeriod: 3m
