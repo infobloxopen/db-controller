@@ -227,7 +227,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 	if err != nil {
 		logger.Error(err, "failed to run docker container")
 		logger.Info(cmd.String())
-		logger.Info("stderr", stderr.String())
+		logger.Info("stderr:" + stderr.String())
 		os.Exit(1)
 	}
 	logger.V(1).Info(string(out))

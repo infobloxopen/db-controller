@@ -10,6 +10,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
+	"k8s.io/utils/ptr"
 )
 
 var (
@@ -190,8 +191,27 @@ func GetIsPasswordComplexity(viperConfig *viper.Viper) bool {
 	return complEnabled == "enabled"
 }
 
+func GetCloud(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("cloud")
+}
+
 func GetRegion(viperConfig *viper.Viper) string {
-	return viperConfig.GetString("region")
+	return viperConfig.GetString(GetCloud(viperConfig) + "::region")
+}
+
+// GCP only
+func GetNetwork(viperConfig *viper.Viper) string {
+	return viperConfig.GetString(GetCloud(viperConfig) + "::network")
+}
+
+// GCP only
+func GetAllocatedIpRange(viperConfig *viper.Viper) string {
+	return viperConfig.GetString(GetCloud(viperConfig) + "::allocatedIpRange")
+}
+
+// GCP only
+func GetNumBackupsToRetain(viperConfig *viper.Viper) *float64 {
+	return ptr.To(viperConfig.GetFloat64(GetCloud(viperConfig) + "::numbackupstoretain"))
 }
 
 func GetMultiAZEnabled(viperConfig *viper.Viper) bool {

@@ -103,7 +103,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// The automated backup policy for this cluster. AutomatedBackupPolicy is disabled by default.
 					// Structure is documented below.
 					// +kubebuilder:validation:Optional
-					AutomatedBackupPolicy: &crossplanegcp.AutomatedBackupPolicyParameters{Enabled: ptr.To(true)}, // `json:"automatedBackupPolicy,omitempty" tf:"automated_backup_policy,omitempty"`
+					AutomatedBackupPolicy: &crossplanegcp.AutomatedBackupPolicyParameters{ // `json:"automatedBackupPolicy,omitempty" tf:"automated_backup_policy,omitempty"`
+						Enabled: ptr.To(true),
+					},
 
 					// The type of cluster. If not set, defaults to PRIMARY.
 					// Default value is PRIMARY.
@@ -165,10 +167,12 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// Structure is documented below.
 					// +kubebuilder:validation:Optional
 					MaintenanceUpdatePolicy: &crossplanegcp.MaintenanceUpdatePolicyParameters{ //  *MaintenanceUpdatePolicyParameters `json:"maintenanceUpdatePolicy,omitempty" tf:"maintenance_update_policy,omitempty"`
+
 						MaintenanceWindows: []crossplanegcp.MaintenanceWindowsParameters{
 							{
 								StartTime: &crossplanegcp.StartTimeParameters{
-									Hours:   ptr.To(float64(0)), //TODO: parse the maintenancewindow to this format
+
+									Hours:   ptr.To(float64(1)), //TODO: parse the maintenancewindow to this format
 									Minutes: ptr.To(float64(0)),
 								},
 								Day: ptr.To("SATURDAY"),

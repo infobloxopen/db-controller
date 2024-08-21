@@ -4,7 +4,7 @@
 * 3. Use existing RDS
 * 4. Migrate Use Existing RDS to a local RDS
 * 5. Migrate postgres RDS to Aurora RDS
-* The tests are run in box-3 cluster. The tests are skipped if the cluster is not box-3
+* The tests are run in , kind or gcp-ddi-dev-use1 cluster. The tests are skipped if the cluster is not box-3, kind or gcp-ddi-dev-use1
 * It runs in the namespace specified in .id + e2e file in the root directory (eg: bjeevan-e2e)
 * The tests create RDS resources in AWS. The resources are cleaned up after the tests are complete.
 * At this time these tests can be run manually only using:
@@ -20,13 +20,14 @@ import (
 	"path/filepath"
 	"time"
 
-	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,12 +50,12 @@ var (
 	db2                    string
 	db3                    string
 	ctx                    = context.Background()
+	cloud                  string
 )
 
 var _ = Describe("AWS", Ordered, func() {
 
 	var (
-		// equal to env ie. box-3
 		dbIdentifierPrefix string
 		db1                string
 		dbinstance1        string
@@ -71,8 +72,14 @@ var _ = Describe("AWS", Ordered, func() {
 		Expect(err).ToNot(HaveOccurred(), "unable to read kubeconfig")
 
 		env := rawConfig.CurrentContext
-		// Check if current context is box-3
-		Expect(env).To(Equal("box-3"), "This test can only run in box-3")
+		// Check if current context is box-3, kind or gcp-ddi-dev-use1
+		Expect(env).To(BeElementOf("box-3", "kind", "gcp-ddi-dev-use1"), "This test can only run in box-3, kind or gcp-ddi-dev-use1")
+
+		if env == "gcp-ddi-dev-use1" {
+			cloud = "gcp"
+		} else {
+			cloud = "aws"
+		}
 
 		dbIdentifierPrefix = env
 
@@ -90,7 +97,7 @@ var _ = Describe("AWS", Ordered, func() {
 	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
 	//creates db_1
-	Context("Creating a RDS", func() {
+	Context("Creating a DB", func() {
 
 		It("Creating a DBClaim", func() {
 
@@ -136,13 +143,20 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(err).ToNot(HaveOccurred())
 				dbinstance1 = fmt.Sprintf("%s-%s-%s", dbIdentifierPrefix, db1, hostParams.Hash())
 			}
-			By("Checking if dbinstance exists")
-			Expect(dbinstance1).NotTo(BeEmpty())
 
-			var dbinst crossplanerds.DBInstance
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
-			Expect(err).To(HaveOccurred())
-			Expect(errors.IsNotFound(err)).To(BeTrue())
+			if cloud == "aws" {
+				By("Checking if dbinstance exists")
+				Expect(dbinstance1).NotTo(BeEmpty())
+				var dbinst crossplaneaws.DBInstance
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+			} else {
+				var dbinst crossplanegcp.Instance
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+			}
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
@@ -191,8 +205,8 @@ var _ = Describe("AWS", Ordered, func() {
 	})
 
 	//update db_1
-	Context("Creating a Postgres RDS using a dbclaim ", func() {
-		It("should create a RDS in AWS", func() {
+	Context("Creating a Postgres DB using a dbclaim ", func() {
+		It("should create a DB in AWS/GCP", func() {
 			By("creating a new DB Claim")
 
 			key := types.NamespacedName{
@@ -265,7 +279,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-1d9fb876"))
+			Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
@@ -319,7 +333,7 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-1d9fb876"))
+			Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
@@ -335,6 +349,10 @@ var _ = Describe("AWS", Ordered, func() {
 	Context("Use Existing RDS", func() {
 		It("should use Existing RDS", func() {
 			By("setting up master secret to access existing RDS")
+			if cloud == "gcp" {
+				return
+			}
+
 			//copy secret from prev dbclaim and use it as master secret for existing rds usecase
 			key := types.NamespacedName{
 				Name:      newdbcMasterSecretName,
@@ -418,6 +436,10 @@ var _ = Describe("AWS", Ordered, func() {
 	Context("Migrate Use Existing RDS to a local RDS", func() {
 		It("should create a new RDS and migrate Existing database", func() {
 			By("deleting master secret to access existing RDS")
+			if cloud == "gcp" {
+				return
+			}
+
 			//delete master secret if it exists
 			k8sClient.Delete(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -455,7 +477,6 @@ var _ = Describe("AWS", Ordered, func() {
 			}, timeout_e2e, interval_e2e).Should(Equal(v1.UsingExistingDB))
 			//check if eventually the secret sample-secret-db2 is created
 			By("checking if the secret [sample-secret-db2] is created")
-			//box-3-end2end-test-2-dbclaim-1ec9b27c
 			newSecret := &corev1.Secret{}
 			Eventually(func() bool {
 				k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret-db2", Namespace: namespace}, newSecret)
@@ -471,6 +492,10 @@ var _ = Describe("AWS", Ordered, func() {
 	//updates db_2 to aurora
 	Context("Migrate postgres RDS to Aurora RDS", func() {
 		It("should create a new RDS and migrate postgres sample_db to new RDS", func() {
+			if cloud == "gcp" {
+				return
+			}
+
 			key := types.NamespacedName{
 				Name:      db2,
 				Namespace: namespace,
@@ -516,7 +541,7 @@ var _ = Describe("AWS", Ordered, func() {
 					return "", err
 				}
 				return string(secret.Data["hostname"]), nil
-			}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
+			}, time.Minute*20, interval_e2e).Should(ContainSubstring(dbIdentifierPrefix + "-" + db2 + "-b8487b9c"))
 
 			By("checking if the existing DBRoleClaim1 was copied to the new DB")
 			Eventually(func() error {
@@ -589,7 +614,7 @@ var _ = Describe("AWS", Ordered, func() {
 		// }
 
 		// // delete DBClaims within this namespace
-		// dbinstances := &crossplanerds.DBInstanceList{}
+		// dbinstances := &crossplaneaws.DBInstanceList{}
 		// if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
 		// 	Expect(err).To(BeNil())
 		// }
@@ -597,6 +622,17 @@ var _ = Describe("AWS", Ordered, func() {
 		// 	if strings.Contains(dbinstance.Name, namespace) {
 		// 		By("Deleting DBInstance: " + dbinstance.Name)
 		// 		k8sClient.Delete(ctx, &dbinstance)
+		// 	}
+		// }
+
+		// instances = &crossplanegcp.InstanceList{}
+		// if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, instance := range instances.Items {
+		// 	if strings.Contains(instance.Name, namespace) {
+		// 		By("Deleting Instance: " + instance.Name)
+		// 		k8sClient.Delete(ctx, &instance)
 		// 	}
 		// }
 
