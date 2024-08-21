@@ -53,7 +53,7 @@ var (
 	cloud                  string
 )
 
-var _ = Describe("AWS", Ordered, func() {
+var _ = Describe("AWS/GCP", Ordered, func() {
 
 	var (
 		dbIdentifierPrefix string
@@ -175,7 +175,7 @@ var _ = Describe("AWS", Ordered, func() {
 		})
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
-			By("erroring out when Cloud does not support dbVersion")
+			By("erroring out when AWS/GCP does not support dbVersion")
 
 			key := types.NamespacedName{
 				Name:      db1,
@@ -215,7 +215,7 @@ var _ = Describe("AWS", Ordered, func() {
 	})
 
 	//update db_1
-	Context("Creating a Postgres DB using a dbclaim ", func() {
+	Context("Creating a Postgres DB using a dbclaim", func() {
 		It("should create a DB in AWS/GCP", func() {
 			By("creating a new DB Claim")
 
