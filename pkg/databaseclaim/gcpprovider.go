@@ -88,6 +88,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 			return false, validationError
 		}
 		dbCluster = &crossplanegcp.Cluster{
+			TypeMeta: metav1.TypeMeta{APIVersion: "gcp.upbound.io/v1beta2"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   dbHostName,
 				Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
@@ -305,6 +306,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 				return false, validationError
 			}
 			dbInstance = &crossplanegcp.Instance{
+				TypeMeta: metav1.TypeMeta{APIVersion: "gcp.upbound.io/v1beta2"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource

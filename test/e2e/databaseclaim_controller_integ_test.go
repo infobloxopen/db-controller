@@ -23,7 +23,7 @@ var _ = Describe("db-controller", func() {
 	)
 
 	Context("When updating DB Claim Status", func() {
-		FIt("Should update DB Claim status", func() {
+		It("Should update DB Claim status", func() {
 			By("By creating a new DB Claim")
 			ctx := context.Background()
 			Expect(namespace).NotTo(Equal(""), "you must set the namespace")
