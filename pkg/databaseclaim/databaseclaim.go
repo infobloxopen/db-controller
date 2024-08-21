@@ -355,11 +355,20 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				//ignore delete request, continue to process rds migration
 				return r.executeDbClaimRequest(ctx, &dbClaim)
 			}
-			// our finalizer is present, so lets handle any external dependency
-			if err := r.deleteExternalResources(ctx, &dbClaim); err != nil {
-				// if fail to delete the external dependency here, return with error
-				// so that it can be retried
-				return ctrl.Result{}, err
+			if basefun.GetCloud(r.Config.Viper) == "aws" {
+				// our finalizer is present, so lets handle any external dependency
+				if err := r.deleteExternalResourcesAWS(ctx, &dbClaim); err != nil {
+					// if fail to delete the external dependency here, return with error
+					// so that it can be retried
+					return ctrl.Result{}, err
+				}
+			} else {
+				// our finalizer is present, so lets handle any external dependency
+				if err := r.deleteExternalResourcesGCP(ctx, &dbClaim); err != nil {
+					// if fail to delete the external dependency here, return with error
+					// so that it can be retried
+					return ctrl.Result{}, err
+				}
 			}
 			// remove our finalizer from the list and update it.
 			controllerutil.RemoveFinalizer(&dbClaim, dbFinalizerName)
@@ -431,10 +440,10 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 			logr.Error(err, "Failed updating or verifying operational tags")
 		}
 
-		if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
+		if err = r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
 			logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
 		}
-		if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
+		if err = r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
 			logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
 		}
 
@@ -443,10 +452,10 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 		// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
 		logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
 
-		if err = r.deleteCloudDatabase(dbInstanceName, ctx); err != nil {
+		if err = r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
 			logr.Error(err, "Could not delete crossplane  DBInstance/DBCLluster")
 		}
-		if err = r.deleteParameterGroup(ctx, dbParamGroupName); err != nil {
+		if err = r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
 			logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
 		}
 
@@ -1046,27 +1055,6 @@ func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.D
 func (r *DatabaseClaimReconciler) getMasterDefaultDsn() string {
 
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", url.QueryEscape(r.Input.MasterConnInfo.Username), url.QueryEscape(r.Input.MasterConnInfo.Password), r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, "postgres", r.Input.MasterConnInfo.SSLMode)
-}
-
-func (r *DatabaseClaimReconciler) deleteExternalResources(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
-	// delete any external resources associated with the dbClaim
-	// Only RDS Instance are managed for now
-	reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
-
-	if reclaimPolicy == "delete" {
-		dbHostName := r.getDynamicHostName(dbClaim)
-		pgName := r.getParameterGroupName(dbClaim)
-
-		// Delete
-		if err := r.deleteCloudDatabase(dbHostName, ctx); err != nil {
-			return err
-		}
-		return r.deleteParameterGroup(ctx, pgName)
-
-	}
-	// else reclaimPolicy == "retain" nothing to do!
-
-	return nil
 }
 
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {

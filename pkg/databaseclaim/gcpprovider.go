@@ -478,3 +478,85 @@ func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, dbClai
 
 	return true, nil
 }
+
+func (r *DatabaseClaimReconciler) deleteExternalResourcesGCP(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+	// delete any external resources associated with the dbClaim
+	// Only RDS Instance are managed for now
+	reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
+
+	if reclaimPolicy == "delete" {
+		dbHostName := r.getDynamicHostName(dbClaim)
+
+		// Delete
+		if err := r.deleteCloudDatabaseGCP(dbHostName, ctx); err != nil {
+			return err
+		}
+	}
+	// else reclaimPolicy == "retain" nothing to do!
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) deleteCloudDatabaseGCP(dbHostName string, ctx context.Context) error {
+
+	logr := log.FromContext(ctx)
+	dbInstance := &crossplanegcp.Instance{}
+	dbCluster := &crossplanegcp.Cluster{}
+
+	if basefun.GetMultiAZEnabled(r.Config.Viper) {
+		err := r.Client.Get(ctx, client.ObjectKey{
+			Name: dbHostName + "-2",
+		}, dbInstance)
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				return err
+			} // else not found - no action required
+		} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+				logr.Info("unable delete crossplane Instance resource", "Instance", dbHostName+"-2")
+				return err
+			} else {
+				logr.Info("deleted crossplane Instance resource", "Instance", dbHostName+"-2")
+			}
+		}
+	}
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbInstance)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		} // else not found - no action required
+	} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+			logr.Info("unable delete crossplane Instance resource", "Instance", dbHostName)
+			return err
+		} else {
+			logr.Info("deleted crossplane Instance resource", "Instance", dbHostName)
+		}
+	}
+
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName,
+	}, dbCluster)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil //nothing to delete
+		} else {
+			return err
+		}
+	}
+
+	if dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbCluster, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
+			logr.Info("unable delete crossplane Cluster resource", "Cluster", dbHostName)
+			return err
+		} else {
+			logr.Info("deleted crossplane Cluster resource", "Cluster", dbHostName)
+		}
+	}
+
+	return nil
+}

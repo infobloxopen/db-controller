@@ -727,7 +727,28 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	return pgName, nil
 }
 
-func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx context.Context) error {
+func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+	// delete any external resources associated with the dbClaim
+	// Only RDS Instance are managed for now
+	reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
+
+	if reclaimPolicy == "delete" {
+		dbHostName := r.getDynamicHostName(dbClaim)
+		pgName := r.getParameterGroupName(dbClaim)
+
+		// Delete
+		if err := r.deleteCloudDatabaseAWS(dbHostName, ctx); err != nil {
+			return err
+		}
+		return r.deleteParameterGroupAWS(ctx, pgName)
+
+	}
+	// else reclaimPolicy == "retain" nothing to do!
+
+	return nil
+}
+
+func (r *DatabaseClaimReconciler) deleteCloudDatabaseAWS(dbHostName string, ctx context.Context) error {
 
 	logr := log.FromContext(ctx)
 	dbInstance := &crossplaneaws.DBInstance{}
@@ -791,7 +812,7 @@ func (r *DatabaseClaimReconciler) deleteCloudDatabase(dbHostName string, ctx con
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) deleteParameterGroup(ctx context.Context, pgName string) error {
+func (r *DatabaseClaimReconciler) deleteParameterGroupAWS(ctx context.Context, pgName string) error {
 
 	logr := log.FromContext(ctx)
 
