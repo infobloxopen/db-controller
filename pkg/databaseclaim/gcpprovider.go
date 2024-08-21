@@ -166,32 +166,32 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// MaintenanceUpdatePolicy defines the policy for system updates.
 					// Structure is documented below.
 					// +kubebuilder:validation:Optional
-					MaintenanceUpdatePolicy: &crossplanegcp.MaintenanceUpdatePolicyParameters{ //  *MaintenanceUpdatePolicyParameters `json:"maintenanceUpdatePolicy,omitempty" tf:"maintenance_update_policy,omitempty"`
+					// MaintenanceUpdatePolicy: &crossplanegcp.MaintenanceUpdatePolicyParameters{ //  *MaintenanceUpdatePolicyParameters `json:"maintenanceUpdatePolicy,omitempty" tf:"maintenance_update_policy,omitempty"`
 
-						MaintenanceWindows: []crossplanegcp.MaintenanceWindowsParameters{
-							{
-								StartTime: &crossplanegcp.StartTimeParameters{
+					// 	MaintenanceWindows: []crossplanegcp.MaintenanceWindowsParameters{
+					// 		{
+					// 			StartTime: &crossplanegcp.StartTimeParameters{
 
-									Hours:   ptr.To(float64(1)), //TODO: parse the maintenancewindow to this format
-									Minutes: ptr.To(float64(0)),
-								},
-								Day: ptr.To("SATURDAY"),
-							},
-						},
-					},
+					// 				Hours:   ptr.To(float64(1)), //TODO: parse the maintenancewindow to this format
+					// 				Minutes: ptr.To(float64(0)),
+					// 			},
+					// 			Day: ptr.To("SATURDAY"),
+					// 		},
+					// 	},
+					// },
 
 					// The relative resource name of the VPC network on which the instance can be accessed. It is specified in the following form:
 					// "projects/{projectNumber}/global/networks/{network_id}".
 					// +crossplane:generate:reference:type=github.com/upbound/provider-gcp/apis/compute/v1beta1.Network
 					// +crossplane:generate:reference:extractor=github.com/crossplane/upjet/pkg/resource.ExtractResourceID()
 					// +kubebuilder:validation:Optional
-					Network: ptr.To(basefun.GetNetwork(r.Config.Viper)), // *string `json:"network,omitempty" tf:"network,omitempty"`
+					Network: (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""], // *string `json:"network,omitempty" tf:"network,omitempty"`
 
 					// Metadata related to network configuration.
 					// Structure is documented below.
 					// +kubebuilder:validation:Optional
 					NetworkConfig: &crossplanegcp.NetworkConfigParameters{ // *NetworkConfigParameters `json:"networkConfig,omitempty" tf:"network_config,omitempty"`
-						Network:          ptr.To(basefun.GetNetwork(r.Config.Viper)),
+						Network:          (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
 						AllocatedIPRange: ptr.To(basefun.GetAllocatedIpRange(r.Config.Viper)),
 					},
 
@@ -211,7 +211,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// Configuration for Private Service Connect (PSC) for the cluster.
 					// Structure is documented below.
 					// +kubebuilder:validation:Optional
-					//PscConfig *PscConfigParameters `json:"pscConfig,omitempty" tf:"psc_config,omitempty"`
+					PscConfig: &crossplanegcp.PscConfigParameters{ // *PscConfigParameters `json:"pscConfig,omitempty" tf:"psc_config,omitempty"`
+						PscEnabled: ptr.To(true),
+					},
 
 					// The source when restoring from a backup. Conflicts with 'restore_continuous_backup_source', both can't be set together.
 					// Structure is documented below.

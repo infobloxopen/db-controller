@@ -38,7 +38,7 @@ systemFunctions:
 aws:
   region: us-east-1
 gcp:
-  region: us-east1
+  region: us-central1
   allocatedIpRange: ddiaas-dev-use1-db-us-east1-alloy-psc-ip
-  network: "projects/gcp-eng-ddiaas-dev/global/networks/ddiaas-dev-use1-vpc"
+  network: ""
   numbackupstoretain: 3
