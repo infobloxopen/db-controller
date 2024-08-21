@@ -10,7 +10,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.4.12
 	github.com/aws/smithy-go v1.20.2
 	github.com/crossplane-contrib/provider-aws v0.48.1
-	github.com/crossplane-contrib/provider-gcp v0.22.0
 	github.com/crossplane/crossplane-runtime v1.16.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-logr/logr v1.4.1
@@ -20,6 +19,7 @@ require (
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sethvargo/go-password v0.3.0
 	github.com/spf13/viper v1.19.0
+	github.com/upbound/provider-gcp v1.7.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/text v0.16.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -116,7 +116,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tmccombs/hcl2json v0.3.3 // indirect
-	github.com/upbound/provider-gcp v1.7.0 // indirect
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
