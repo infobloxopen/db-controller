@@ -28,10 +28,6 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 		}
 	}
 
-	if dbClaim.Spec.Type != v1.AuroraPostgres {
-		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
-	}
-
 	log.FromContext(ctx).Info("dbcluster is ready. proceeding to manage dbinstance")
 	insReady, err := r.managePostgresDBInstanceGCP(ctx, dbHostIdentifier, dbClaim)
 	if err != nil {
