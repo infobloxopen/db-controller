@@ -98,7 +98,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// An object containing a list of "key": value pairs. Example: { "name": "wrench", "mass": "1.3kg", "count": "3" }.
 					// +kubebuilder:validation:Optional
 					// +mapType=granular
-					//Annotations map[string]*string `json:"annotations,omitempty" tf:"annotations,omitempty"`
+					Annotations: map[string]*string{"meta.upbound.io/resource-type": ptr.To("alloydb/v1beta1/cluster")}, //map[string]*string `json:"annotations,omitempty" tf:"annotations,omitempty"`
 
 					// The automated backup policy for this cluster. AutomatedBackupPolicy is disabled by default.
 					// Structure is documented below.
