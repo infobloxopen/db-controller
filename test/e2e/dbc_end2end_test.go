@@ -154,7 +154,6 @@ var _ = Describe("AWS", Ordered, func() {
 			} else {
 				var dbinst crossplanegcp.Instance
 				//var db crossplanegcp2.Cluster
-				dbinstance1 = "alloydb-test"
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
 				Expect(err).To(HaveOccurred())
 				Expect(errors.IsNotFound(err)).To(BeTrue())
