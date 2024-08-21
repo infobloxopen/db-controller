@@ -78,6 +78,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 	}, dbCluster)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
+			logr.Error(err, "error != notfound retrieving cluster")
 			return false, err
 		}
 
@@ -88,7 +89,6 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 			return false, validationError
 		}
 		dbCluster = &crossplanegcp.Cluster{
-			TypeMeta: metav1.TypeMeta{APIVersion: "alloydb.gcp.upbound.io/v1beta2", Kind: "Cluster"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   dbHostName,
 				Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
@@ -306,7 +306,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 				return false, validationError
 			}
 			dbInstance = &crossplanegcp.Instance{
-				TypeMeta: metav1.TypeMeta{APIVersion: "alloydb.gcp.upbound.io/v1beta2", Kind: "Cluster"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource

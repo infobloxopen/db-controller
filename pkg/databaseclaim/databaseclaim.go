@@ -656,13 +656,13 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	if cloud == "aws" {
 		isReady, err = r.manageCloudHostAWS(ctx, dbClaim)
 		if err != nil {
-			logr.Error(err, "manage_cloud_host")
+			logr.Error(err, "manage_cloud_host_AWS")
 			return ctrl.Result{}, err
 		}
 	} else {
 		isReady, err = r.manageCloudHostGCP(ctx, dbClaim)
 		if err != nil {
-			logr.Error(err, "manage_cloud_host")
+			logr.Error(err, "manage_cloud_host_GCP")
 			return ctrl.Result{}, err
 		}
 	}
