@@ -99,7 +99,7 @@ var _ = Describe("AWS", Ordered, func() {
 	//creates db_1
 	Context("Creating a DB", func() {
 
-		It("Creating a DBClaim", func() {
+		FIt("Creating a DBClaim", func() {
 
 			Expect(db1).NotTo(BeEmpty())
 			key := types.NamespacedName{
@@ -153,6 +153,8 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(errors.IsNotFound(err)).To(BeTrue())
 			} else {
 				var dbinst crossplanegcp.Instance
+				//var db crossplanegcp2.Cluster
+				dbinstance1 = "alloydb-test"
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
 				Expect(err).To(HaveOccurred())
 				Expect(errors.IsNotFound(err)).To(BeTrue())

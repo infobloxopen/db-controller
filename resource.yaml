@@ -1,0 +1,94 @@
+typemeta:
+  kind: Cluster
+  apiversion: alloydb.gcp.upbound.io/v1beta2
+objectmeta:
+  name: ""
+  generatename: ""
+  namespace: ""
+  selflink: ""
+  uid: ""
+  resourceversion: ""
+  generation: 0
+  creationtimestamp: "0001-01-01T00:00:00Z"
+  deletiontimestamp: null
+  deletiongraceperiodseconds: null
+  labels: {}
+  annotations: {}
+  ownerreferences: []
+  finalizers: []
+  managedfields: []
+spec:
+  resourcespec:
+    writeconnectionsecrettoreference: null
+    publishconnectiondetailsto: null
+    providerconfigreference: null
+    managementpolicies: []
+    deletionpolicy: ""
+  forprovider:
+    annotations: {}
+    availabilitytype: null
+    clientconnectionconfig: null
+    cluster: null
+    clusterref: null
+    clusterselector: null
+    databaseflags: {}
+    displayname: null
+    gcezone: null
+    instancetype: null
+    instancetyperef: null
+    instancetypeselector: null
+    labels: {}
+    machineconfig: null
+    networkconfig: null
+    pscinstanceconfig: null
+    queryinsightsconfig: null
+    readpoolconfig: null
+  initprovider:
+    annotations: {}
+    availabilitytype: null
+    clientconnectionconfig: null
+    databaseflags: {}
+    displayname: null
+    gcezone: null
+    instancetype: null
+    instancetyperef: null
+    instancetypeselector: null
+    labels: {}
+    machineconfig: null
+    networkconfig: null
+    pscinstanceconfig: null
+    queryinsightsconfig: null
+    readpoolconfig: null
+status:
+  resourcestatus:
+    conditionedstatus:
+      conditions: []
+    observedstatus:
+      observedgeneration: 0
+  atprovider:
+    annotations: {}
+    availabilitytype: null
+    clientconnectionconfig: null
+    cluster: null
+    createtime: null
+    databaseflags: {}
+    displayname: null
+    effectiveannotations: {}
+    effectivelabels: {}
+    gcezone: null
+    id: null
+    ipaddress: null
+    instancetype: null
+    labels: {}
+    machineconfig: null
+    name: null
+    networkconfig: null
+    pscinstanceconfig: null
+    publicipaddress: null
+    queryinsightsconfig: null
+    readpoolconfig: null
+    reconciling: null
+    state: null
+    terraformlabels: {}
+    uid: null
+    updatetime: null
