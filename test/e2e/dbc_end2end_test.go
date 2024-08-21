@@ -99,7 +99,7 @@ var _ = Describe("AWS", Ordered, func() {
 	//creates db_1
 	Context("Creating a DB", func() {
 
-		FIt("Creating a DBClaim", func() {
+		It("Creating a DBClaim", func() {
 
 			Expect(db1).NotTo(BeEmpty())
 			key := types.NamespacedName{
