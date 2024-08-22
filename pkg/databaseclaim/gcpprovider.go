@@ -86,7 +86,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		}
 		dbCluster = &crossplanegcp.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   dbHostName,
+				Name: dbHostName,
 				//Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			},
 			Spec: crossplanegcp.ClusterSpec{
@@ -118,7 +118,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 
 					// The database engine major version. This is an optional field and it's populated at the Cluster creation time. This field cannot be changed after cluster creation.
 					// +kubebuilder:validation:Optional
-					DatabaseVersion: &params.EngineVersion, // *string `json:"databaseVersion,omitempty" tf:"database_version,omitempty"`
+					DatabaseVersion: ptr.To("0"), // *string `json:"databaseVersion,omitempty" tf:"database_version,omitempty"`
 
 					// Policy to determine if the cluster should be deleted forcefully.
 					// Deleting a cluster forcefully, deletes the cluster and all its associated instances within the cluster.
