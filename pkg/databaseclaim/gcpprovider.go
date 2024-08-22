@@ -280,10 +280,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	// dbSecretInstance := xpv1.SecretReference{
-	// 	Name:      dbHostName,
-	// 	Namespace: serviceNS,
-	// }
+	dbSecretInstance := xpv1.SecretReference{
+		Name:      dbHostName + "_i",
+		Namespace: serviceNS,
+	}
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -433,9 +433,14 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						//ReadPoolConfig *ReadPoolConfigParameters `json:"readPoolConfig,omitempty" tf:"read_pool_config,omitempty"`
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						//WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference: &providerConfigReference,
-						DeletionPolicy:          params.DeletionPolicy,
+						WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference:          &providerConfigReference,
+						DeletionPolicy:                   params.DeletionPolicy,
+						PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
+							SecretStoreConfigRef: &xpv1.Reference{
+								Name: dbHostName + "_i",
+							},
+						},
 					},
 				},
 			}
