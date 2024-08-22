@@ -1,48 +1,94 @@
 # Database Controller Docs
 
 ## Introduction
-The motiviation for this project was to support dynamic creation of database resource
-and minimal downtime of services during password rotation or DB instance migration.
+The motivation for this project is declaration of databases in code. In addition, the controller manages credential rotation and zero downtime major database migrations.
 
-This project implements a database controller. It introduces a CRD that allows
-clients to create a database claim. That database claim will create a database in
-an existing postgres server, or it could create a cloud claim that will attach a
-database on demand. Additionally it will create user/password to the database and rotate them.
-The database controller will also be used as a proxy driver for connecting to databases.
+This project implements a kubebuilder based controller and a mutating webhook. The controller is responsible for lifecycle of the database. The mutating webhook injects helpful sidecars for communicating with the database.
 
-## Assumptions
-***TBD***
+Refer to the Go Doc for most up to date information: [godoc](https://pkg.go.dev/github.com/infobloxopen/db-controller)
 
 ## Operation
-The Dynamic Database Connection Reconfiguration (DDCR) will consist of three 
-components that will comprise the database claim pattern implemented by this project.  
-The first will be a db-controller that is responsible for managing the connection 
-information and associated database.  An application will create its intention 
-to have a database by adding a  DatabaseClaim Custom Resource (DBClaim).
-The second is a change to the service deployment that defines a Database Claim. 
-This claim will provision a k8s secret that replaces the static credentials
-created by deployment or dynamically retrieved from secret stores by
-operators like [SpaceController](https://github.com/seizadi/space-controller).   
-The third is a database driver that will be able to read the database connection
-information from the secrets files in the pod volume and construct the 
-connection string required for connecting through the real database driver.
-The driver will also be able to detect when the connection information 
-has changed and gracefully close any open database connections.  
-The closing of the connections will effectively drain the connection 
-pool as well as trigger a reconnect with the new connection string
-information by the client service.
+
+The controller will connect to an existing unmanaged database or create/manage a new database created by the controller. Once connected it will create schema specific users and rotate the password on those credentials. There is a [hotload](https://github.com/infobloxopen/hotload) library that is useful for making sure an application watches for these credential changes.
+
+In some situations, it makes sense to offload postgres connections to a sidecar for manageing rotating credentials and connecting to the database. The controller will set this up for you using dbproxy. dbproxy watches for credential changes and bounces internal postgres connectings using a library called pgbouncer. The app should not be aware of any credential or connection changes when using dbproxy. More instructions below on how to use it.
+
+dsnexec sidecar that enables reading sql exec statements from disk and executing them.
+
+## Quick Start
+
+Deploy db-controller. db-controller will need credentials to provision databases in the cloud. For credential and connection only management, it is possible db-controller does not need any credentials.
+
+    make deploy
+
+Create a databaseclaim describing the database. The sourceDataFrom field is used to connect to
+an existing database. Otherwise, db-controller will create the database for you.
+
+
+    apiVersion: persistance.atlas.infoblox.com/v1
+    kind: DatabaseClaim
+    metadata:
+      name: identity
+      namespace: default
+    spec:
+      class: default
+      databaseName: mydb
+      dbVersion: "15.2"
+      enableReplicationRole: false
+      enableSuperUser: false
+      minStorageGB: 0
+      secretName: identity-dsn
+      shape: ""
+      sourceDataFrom:
+        database:
+          dsn: postgres://root@name.hostname.region.rds.amazonaws.com:5432/mydb?sslmode=require
+          secretRef:
+            name: mydb-master
+            namespace: default
+        type: database
+      tags:
+      - key: Environment
+        value: dev-cluster
+      type: aurora-postgresql
+      useExistingSource: false
+      userName: identity-api
+
+To use the dbproxy mutating webhook, add labels to the pod:
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: dbproxy-test
+      namespace: default
+      labels:
+        persistance.atlas.infoblox.com/databaseclaim: "identity"
+        persistance.atlas.infoblox.com/class: "default"
+      containers:
+        - name: client
+          image: postgres
+          env:
+            - name: PGCONNECT_TIMEOUT
+              value: "2"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -x
+              until timeout 10 psql -h localhost -c 'SELECT 1'; do
+                echo "Waiting for sidecar to be ready..."
+                sleep 3
+              done
+              echo "Connection successful!"
+              sleep 10000
 
 ## Requirements
 | Requirements           | Description                                                                                   |
 |------------------------|-----------------------------------------------------------------------------------------------|
-| DDCR                   | Establish a pattern (and possible code) for apps to reload connection information from a file |
-| DDCR                   | Establish a pattern for mounting a secret that contains connection information in a secret    |
-| DDCR                   | Support dynamically changing the connection information                                       |
-| DDCR                   | Support labels for sharing of dynamically created databases                                   |
-| DDCR                   | Modify at least one Atlas app to show as an example of implementing this pattern              |
-| Cloud Provider Tagging | Cloud Resource must be tagged so that then can following organization guidelines.             |
-| DB Instance Migration  | CR Change create new database instance and migrate data and delete infrastructure CR          |
-| DB Instance Migration  | Migration should with Canary pattern once tests pass all traffic to the new database          |
+| controller             | Establish a pattern (and possible code) for apps to reload connection information from a file |
+| mutatingwebhook        | Establish a pattern for mounting a secret that contains connection information in a secret    |
+| controller             | Support dynamically changing the connection information                                       |
+| controller             | CR Change create new database instance and migrate data and delete infrastructure CR          |
+| controller             | Migration should with Canary pattern once tests pass all traffic to the new database          |
 
 ## Demo
 
@@ -167,9 +213,36 @@ client application. This pattern will allow us to make the database selection be
 pre-provisioned or dynamic on demand. It will also allow the database selction to
 be multi-cloud e.g. AWS or Azure.
 
-DatabaseClaim will 
-include properties such as the name, appID, Type, etc. During startup, 
-the db-controller will read the set of CR’s describing the DatabaseClaim and store 
+Secrets created by db-controller follow this format:
+
+    apiVersion: v1
+    data:
+      database: b64enc(mydb)
+      dsn.txt: b64enc(host=dbproxy-test.default.svc port=5432 user=myuser_a password=&#xmetlife1s35gj dbname=mydb sslmode=disable)
+      hostname: b64enc(dbproxy-test.default.svc)
+      password: b64enc(&#xmetlife1s35gj)
+      port: b64enc(5432)
+      sslmode: b64enc(disable)
+      uri_dsn.txt: b64enc(postgres://myuser_a:&#xmetlife1s35gj@dbproxy-test.default.svc:5432/mydb?sslmode=disable)
+      username: b64enc(myuser_a)
+    kind: Secret
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: db-controller
+      name: identity-dsn
+      namespace: default
+      ownerReferences:
+      - apiVersion: persistance.atlas.infoblox.com/v1
+        blockOwnerDeletion: true
+        controller: true
+        kind: DatabaseClaim
+        name: dbproxy-test
+        uid: 23042801-8076-435c-a9f6-a9bec9ac9c8b
+      resourceVersion: "1801545567"
+      uid: db5330b7-564d-4cc1-bf47-d907e7307465
+    type: Opaque
+
+DatabaseClaim will read the set of CR’s describing the DatabaseClaim and store 
 them in-memory. In the case of dynamic database provisioning
 a CR is created to request infrastructure operator to create the database instance.
 db-controller will check the CR satus and to make sure that the database is provisioned
@@ -214,24 +287,6 @@ stateDiagram
   Application --> DatabaseClaim : Manifest
   DatabaseClaim --> CloudDatabaseClaim : Claim Map
   CloudDatabaseClaim --> rdsInstance : create instance
-```
-Here is an example of what the CloudDatabaseClaim would look like if we used
-Crossplane. The compositionRef maps our CloudDatabaseClaim to a cloud specific 
-database instance defintion that is managed by Crossplane:
-```yaml
-apiVersion: database.infobloxopen.github.com/v1alpha1
-kind: CloudDatabaseClaim
-metadata:
-  name: db-controller-cloud-claim-database-some-app
-  namespace: db-controller-namespace
-spec:
-  parameters:
-    type: postgres
-    minStorage: 20GB
-  compositionRef:
-    name: cloud.database.infobloxopen.github.com
-  writeConnectionSecretToRef:
-    name: db-controller-postgres-con-some-app
 ```
 
 In this example db-controller-postgres-con-some-app Secret that is written by the
@@ -340,73 +395,6 @@ stringData:
 The DatabaseClaim custom resource describes the connection information for 
 a database instance.  It includes the following properties:
 
-DatabaseClaim:
-
-   * DatabaseClaimSpec:
-      - Class (optional): uses to run multiple instances of dbcontroller.
-      - SourceDataFrom (optional): specifies an existing database or backup to use when initially provisioning the database. *If the dbclaim has already provisioned a database, this field is ignored.
-      - UseExistingSource (optional): instructs the controller to perform user management on the database currently defined in the SourceDataFrom field.
-	      If sourceDataFrom is empty, this is ignored
-	      If this is set, .sourceDataFrom.Type and .type must match to use an existing source (since they must be the same)
-	      If this field was set and becomes unset, migration of data will commence.
-      - RestoreFrom (optional): Indicates the snapshot to restore the Database from. 
-      - EnableReplicationRole (optional): Will grant rds replication role to Username. This value is ignored if EnableSuperUser is set to true.
-      - EnableSuperUser (optional): Will grant rds_superuser and createrole role to Username. This value is ignored if {{ .Values.controllerConfig.supportSuperUserElevation }} is set to false.
-      - AppID: Application ID used for the application.
-      - SecretName: The name of the secret to use for storing the ConnectionInfo.  Must follow a naming convention that ensures it is unique.  The SecretName is Namespace scoped.
-      - Type: The type of the database instance. E.g. Postgres
-      - Username: The username that the application will use for accessing the database.
-      - DatabaseName: The name of the database instance. 
-      - DBVersion (optional): The version of the database.
-      - DBNameOverride: In most cases the AppID will match the database name. In some cases, however, we will need to provide an optional override.
-      - DSNName: The key used for the client dsn connection string in the Secret
-      - Host (optional): The optional host name where the database instance is located.
-      - Port (optional): The optional port to use for connecting to the host.
-      - Shape (optional): The optional Shape values are arbitrary and help drive instance selection
-      - MinStorageGB (optional): The optional MinStorageGB value requests the minimum database host storage capacity
-      - MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto. For auroraDB instance, this value is ignored.
-      - DeletePolicy (optional): The optional DeletePolicy value defines policy, default delete, possible values: delete, recycle
-      - BackupPolicy (optional): Specifies the duration at which db backups are taken.
-      - Tags (optional): Tags.
-
-   * DatabaseClaimStatus:
-      - Error: Any errors related to provisioning this claim.
-      - NewDB (type: Status): Track the status of new db in the process of being created.
-      - ActiveDB (type: Status): Track the status of the active db being used by the application.
-      - MigrationState: Tracks status of DB migration. if empty, not started. Non empty denotes migration in progress, unless it is S_Completed.
-      - OldDB (type: StatusForOldDB): Tracks the DB which is migrated and not more operational.
-
-    * StatusForOldDB
-	    - ConnectionInfo (type: DatabaseClaimConnectionInfo): Time the connection info was updated/created.
-      - DBVersion: Version of the provisioned Database.
-      - Shape: The optional Shape values are arbitrary and help drive instance selection.
-      - Type: Specifies the type of database to provision. Only postgres is supported.
-      - PostMigrationActionStartedAt: Time at the process of post migration actions initiated.
-      - DbState: DbState of the DB. inprogress, "", ready.
-      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity in GBytes.
-
-    * Status: 
-      - DbCreatedAt: Time the database was created.
-      - ConnectionInfo{} (data in connection info is projected into a secret)
-         - Username: The username that the application will use for accessing the database. 
-         - Password: The password associated with the Username.
-         - Host: The host name where the database instance is located.
-         - Port: The port to use for connecting to the host.
-         - DatabaseName: The name of the database instance.
-      - DBVersion: Version of the provisioned Database.
-      - Shape: The optional Shape values are arbitrary and help drive instance selection
-      - MinStorageGB: The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
-      - MaxStorageGB: If provided, marks auto storage scalling to true for postgres DBinstance. The value represents the maximum allowed storage to scale upto.
-      For auroraDB instance, this value is ignored.
-      - Type: Specifies the type of database to provision. Only postgres is supported.
-      - ConnectionInfoUpdatedAt: Time the connection info was updated/created.
-      - UserUpdatedAt: Time the user/password was updated/created
-      - DbState: DbState of the DB. inprogress, "", ready
-      - SourceDataFrom: SourceDataFrom specifies an existing database or backup to use when initially provisioning the database.
-      If the dbclaim has already provisioned a database, this field is ignored.
-      This field used when claim is use-existing-db and attempting to migrate to newdb
-      
-
 ## Secrets
 During the processing of each DatabaseClaim, the db-controller will generate the 
 connection info and also create a secret with the relevant information. The secret 
@@ -414,8 +402,8 @@ will have the same name as the DatabaseClaim, and contain keys that match the
 values of the properties under the DatabaseClaim *status.connectionInfo* property.
 
 The keys in the secret are shown below:
-* dsn : postgres dsn string value specified by DatabaseClaim
-* "uri_" + dsn : url path value is "uri_" prefix added to dsn
+* "dsn.txt" : postgres dsn string value specified by DatabaseClaim
+* "uri_dsn.txt" + dsn : url path value is "uri_" prefix added to dsn
 * "hostname" : postgres host of dsn
 * "port" : port used for connecting to the database
 * "database" : postgres database created on host
@@ -471,60 +459,6 @@ stateDiagram
 ***N/A***
 
 ## Implementation
-
-***TODO***
-***Document full implementation for now focused on claim pattern updates***
-
-This implementation will use the 
-[kubebuilder](https://book.kubebuilder.io/introduction.html) pattern
-for implementation of the db-controller. This implementation starts
-with building a project:
-```bash
-kubebuilder init --domain atlas.infoblox.com --repo github.com/infobloxopen/db-controller
-```
-This project was layed down by kubebuilder which depend on
-*sigs.k8s.io/controller-runtime* and supports an architecture
-[described here](https://book.kubebuilder.io/architecture.html).
-A key part of this architecture is the *Reconciler* that encapsulates
-the custom logic that runs when request are forwarded from Kubernetes
-API Server to this controller. Specifically it the DatabaseClaim
-resources that is served.
-
-There is a go method (class) defined for handling reconcile functions:
-```go
-// DatabaseClaimReconciler reconciles a DatabaseClaim object
-type DatabaseClaimReconciler struct {
-	client.Client
-	Log        logr.Logger
-	Scheme     *runtime.Scheme
-	Config     *viper.Viper
-	MasterAuth *rdsauth.MasterAuth
-}
-```
-Then the reconcile functions that are parts of the method class are
-defined with this signature:
-```go
-func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {...}
-func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *persistancev1.DatabaseClaim) (ctrl.Result, error) {...}
-```
-
-The following is the high level view of the reconcile logic:
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fffcbb', 'lineColor': '#ff0000', 'primaryBorderColor': '#ff0000'}}}%%
-graph TB
-A((Client)) --o B
-B[K8S API Server] --> C[db-controller]
-C--> D[Reconciler]
-D--> E{claim valid?}
-E -- No --> C
-E -- Yes -->F{Delete?}
-F -- No --> G[UpdateStatus]
-F -- Yes --> H[Clean Up Resources]
-H --> C
-G --> C
-C -->B
-B --> A
-```
 
 The DatabaseClaim
 Status is where keep the state used by the reconciler. The important part is:
