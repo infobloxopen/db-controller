@@ -48,10 +48,10 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		return false, err
 	}
 
-	dbSecretCluster := xpv1.SecretReference{
-		Name:      dbHostName,
-		Namespace: serviceNS,
-	}
+	// dbSecretCluster := xpv1.SecretReference{
+	// 	Name:      dbHostName,
+	// 	Namespace: serviceNS,
+	// }
 
 	dbMasterSecretCluster := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -229,9 +229,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					//SecondaryConfig *SecondaryConfigParameters `json:"secondaryConfig,omitempty" tf:"secondary_config,omitempty"`
 				},
 				ResourceSpec: xpv1.ResourceSpec{
-					WriteConnectionSecretToReference: &dbSecretCluster,
-					ProviderConfigReference:          &providerConfigReference,
-					DeletionPolicy:                   params.DeletionPolicy,
+					//WriteConnectionSecretToReference: &dbSecretCluster,
+					ProviderConfigReference: &providerConfigReference,
+					DeletionPolicy:          params.DeletionPolicy,
 				},
 			},
 		}
@@ -275,10 +275,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	// dbSecretInstance := xpv1.SecretReference{
-	// 	Name:      dbHostName,
-	// 	Namespace: serviceNS,
-	// }
+	dbSecretInstance := xpv1.SecretReference{
+		Name:      dbHostName,
+		Namespace: serviceNS,
+	}
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -428,9 +428,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						//ReadPoolConfig *ReadPoolConfigParameters `json:"readPoolConfig,omitempty" tf:"read_pool_config,omitempty"`
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						//WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference: &providerConfigReference,
-						DeletionPolicy:          params.DeletionPolicy,
+						WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference:          &providerConfigReference,
+						DeletionPolicy:                   params.DeletionPolicy,
 					},
 				},
 			}
