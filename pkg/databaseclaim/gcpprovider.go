@@ -87,7 +87,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		dbCluster = &crossplanegcp.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   dbHostName,
-				Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+				//Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			},
 			Spec: crossplanegcp.ClusterSpec{
 				ForProvider: crossplanegcp.ClusterParameters{
@@ -95,7 +95,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// An object containing a list of "key": value pairs. Example: { "name": "wrench", "mass": "1.3kg", "count": "3" }.
 					// +kubebuilder:validation:Optional
 					// +mapType=granular
-					Annotations: map[string]*string{"meta.upbound.io/resource-type": ptr.To("alloydb/v1beta1/cluster")}, //map[string]*string `json:"annotations,omitempty" tf:"annotations,omitempty"`
+					//Annotations: map[string]*string{"meta.upbound.io/resource-type": ptr.To("alloydb/v1beta1/cluster")}, //map[string]*string `json:"annotations,omitempty" tf:"annotations,omitempty"`
 
 					// The automated backup policy for this cluster. AutomatedBackupPolicy is disabled by default.
 					// Structure is documented below.
@@ -154,7 +154,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// Please refer to the field effective_labels for all of the labels present on the resource.
 					// +kubebuilder:validation:Optional
 					// +mapType=granular
-					Labels: map[string]*string{"app.kubernetes.io/managed-by": ptr.To("db-controller")}, // map[string]*string `json:"labels,omitempty" tf:"labels,omitempty"`
+					//Labels: map[string]*string{"app.kubernetes.io/managed-by": ptr.To("db-controller")}, // map[string]*string `json:"labels,omitempty" tf:"labels,omitempty"`
 
 					// The location where the alloydb cluster should reside.
 					// +kubebuilder:validation:Required
@@ -305,7 +305,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
-					Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+					//Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 				},
 				Spec: crossplanegcp.InstanceSpec{
 					ForProvider: crossplanegcp.InstanceParameters{
@@ -389,7 +389,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						// Please refer to the field effective_labels for all of the labels present on the resource.
 						// +kubebuilder:validation:Optional
 						// +mapType=granular
-						Labels: map[string]*string{"app.kubernetes.io/managed-by": ptr.To("db-controller")}, // map[string]*string `json:"labels,omitempty" tf:"labels,omitempty"`
+						//Labels: map[string]*string{"app.kubernetes.io/managed-by": ptr.To("db-controller")}, // map[string]*string `json:"labels,omitempty" tf:"labels,omitempty"`
 
 						// Configurations for the machines that host the underlying database engine.
 						// Structure is documented below.
