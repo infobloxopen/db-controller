@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	_ "github.com/lib/pq"
@@ -118,7 +119,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 
 					// The database engine major version. This is an optional field and it's populated at the Cluster creation time. This field cannot be changed after cluster creation.
 					// +kubebuilder:validation:Optional
-					DatabaseVersion: ptr.To("0"), // *string `json:"databaseVersion,omitempty" tf:"database_version,omitempty"`
+					DatabaseVersion: getAlloyDBVersion(&params.EngineVersion), // *string `json:"databaseVersion,omitempty" tf:"database_version,omitempty"`
 
 					// Policy to determine if the cluster should be deleted forcefully.
 					// Deleting a cluster forcefully, deletes the cluster and all its associated instances within the cluster.
@@ -258,6 +259,14 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 	}
 
 	return r.isResourceReady(dbCluster.Status.ResourceStatus)
+}
+
+// https://cloud.google.com/alloydb/docs/reference/rest/v1beta/DatabaseVersion
+func getAlloyDBVersion(engineVersion *string) *string {
+	if strings.HasPrefix(*engineVersion, "14") {
+		return ptr.To("POSTGRES_14")
+	}
+	return ptr.To("POSTGRES_15")
 }
 
 func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Context, dbHostName string, dbClaim *v1.DatabaseClaim) (bool, error) {
@@ -419,9 +428,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						//ReadPoolConfig *ReadPoolConfigParameters `json:"readPoolConfig,omitempty" tf:"read_pool_config,omitempty"`
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference:          &providerConfigReference,
-						DeletionPolicy:                   params.DeletionPolicy,
+						//WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
 					},
 				},
 			}
