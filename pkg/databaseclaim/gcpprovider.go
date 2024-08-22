@@ -281,7 +281,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 		return false, err
 	}
 	dbSecretInstance := xpv1.SecretReference{
-		Name:      dbHostName + "_i",
+		Name:      dbHostName + "-i",
 		Namespace: serviceNS,
 	}
 
@@ -438,7 +438,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						DeletionPolicy:                   params.DeletionPolicy,
 						PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
 							SecretStoreConfigRef: &xpv1.Reference{
-								Name: dbHostName + "_i",
+								Name: dbHostName + "-i",
 							},
 						},
 					},
