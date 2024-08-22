@@ -249,7 +249,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						InstanceType: ptr.To("PRIMARY"),
 
 						NetworkConfig: &crossplanegcp.InstanceNetworkConfigParameters{
-							EnablePublicIP: ptr.To(true),
+							EnablePublicIP: ptr.To(false),
 						},
 					},
 					ResourceSpec: xpv1.ResourceSpec{
