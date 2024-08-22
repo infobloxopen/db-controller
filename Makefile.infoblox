@@ -118,3 +118,6 @@ test/crd/%.yaml:
 clean:
 	chmod -R +w bin/
 	rm -rf $(shell git check-ignore -- *)
+
+docs-serve:
+	mkdocs serve -a '0.0.0.0:9000'
