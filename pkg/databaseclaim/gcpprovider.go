@@ -275,10 +275,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	dbSecretInstance := xpv1.SecretReference{
-		Name:      dbHostName,
-		Namespace: serviceNS,
-	}
+	// dbSecretInstance := xpv1.SecretReference{
+	// 	Name:      dbHostName,
+	// 	Namespace: serviceNS,
+	// }
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
