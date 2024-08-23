@@ -8,6 +8,7 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	_ "github.com/lib/pq"
 	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -150,6 +151,15 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 			},
 		}
 
+		clusterSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: serviceNS,
+				Name:      dbHostName,
+			},
+		}
+		logr.Info("creating cluster secret", "name", clusterSecret.Name, "namespace", clusterSecret.Namespace)
+		r.Client.Create(ctx, clusterSecret)
+
 		//create master password secret, before calling create on DBInstance
 		err := r.manageMasterPassword(ctx, &dbMasterSecretCluster)
 		if err != nil {
@@ -266,6 +276,15 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 					},
 				},
 			}
+
+			clusterSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: serviceNS,
+					Name:      dbHostName + "-i",
+				},
+			}
+			logr.Info("creating instance secret", "name", clusterSecret.Name, "namespace", clusterSecret.Namespace)
+			r.Client.Create(ctx, clusterSecret)
 
 			//create master password secret, before calling create on DBInstance
 			err := r.manageMasterPassword(ctx, &dbMasterSecretInstance)
