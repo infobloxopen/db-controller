@@ -49,10 +49,10 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		return false, err
 	}
 
-	// dbSecretCluster := xpv1.SecretReference{
-	// 	Name:      dbHostName,
-	// 	Namespace: serviceNS,
-	// }
+	dbSecretCluster := xpv1.SecretReference{
+		Name:      dbHostName,
+		Namespace: serviceNS,
+	}
 
 	dbMasterSecretCluster := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -139,28 +139,18 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					},
 				},
 				ResourceSpec: xpv1.ResourceSpec{
-					//WriteConnectionSecretToReference: &dbSecretCluster,
-					ProviderConfigReference: &providerConfigReference,
-					DeletionPolicy:          params.DeletionPolicy,
+					WriteConnectionSecretToReference: &dbSecretCluster,
+					ProviderConfigReference:          &providerConfigReference,
+					DeletionPolicy:                   params.DeletionPolicy,
 					PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
 						Name: dbHostName,
-						SecretStoreConfigRef: &xpv1.Reference{
-							Name: "default",
+						Metadata: &xpv1.ConnectionSecretMetadata{
+							Type: ptr.To(corev1.SecretTypeOpaque),
 						},
 					},
 				},
 			},
 		}
-
-		clusterSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: serviceNS,
-				Name:      dbHostName,
-			},
-		}
-		logr.Info("creating cluster secret", "name", clusterSecret.Name, "namespace", clusterSecret.Namespace)
-		r.Client.Create(ctx, clusterSecret)
-
 		//create master password secret, before calling create on DBInstance
 		err := r.manageMasterPassword(ctx, &dbMasterSecretCluster)
 		if err != nil {
@@ -200,10 +190,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	// dbSecretInstance := xpv1.SecretReference{
-	// 	Name:      dbHostName + "-i",
-	// 	Namespace: serviceNS,
-	// }
+	dbSecretInstance := xpv1.SecretReference{
+		Name:      dbHostName + "-i",
+		Namespace: serviceNS,
+	}
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -266,27 +256,18 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						},
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						//WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference: &providerConfigReference,
-						DeletionPolicy:          params.DeletionPolicy,
+						WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference:          &providerConfigReference,
+						DeletionPolicy:                   params.DeletionPolicy,
 						PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
 							Name: dbHostName + "-i",
-							SecretStoreConfigRef: &xpv1.Reference{
-								Name: "default",
+							Metadata: &xpv1.ConnectionSecretMetadata{
+								Type: ptr.To(corev1.SecretTypeOpaque),
 							},
 						},
 					},
 				},
 			}
-
-			clusterSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: serviceNS,
-					Name:      dbHostName + "-i",
-				},
-			}
-			logr.Info("creating instance secret", "name", clusterSecret.Name, "namespace", clusterSecret.Namespace)
-			r.Client.Create(ctx, clusterSecret)
 
 			//create master password secret, before calling create on DBInstance
 			err := r.manageMasterPassword(ctx, &dbMasterSecretInstance)
