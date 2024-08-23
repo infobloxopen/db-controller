@@ -72,10 +72,6 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 		"endpoint": []byte(*instance.Status.AtProvider.Name),
 		"port":     []byte("5432"),
 	}
-	secret.Data["username"] = []byte(dbclaim.Spec.Username)
-	secret.Data["password"] = []byte(pass)
-	secret.Data["endpoint"] = []byte(*instance.Status.AtProvider.Name)
-	secret.Data["port"] = []byte("5432")
 
 	log.FromContext(ctx).Info("updating conninfo secret", "name", secret.Name, "namespace", secret.Namespace)
 	return r.Client.Update(ctx, &secret)
