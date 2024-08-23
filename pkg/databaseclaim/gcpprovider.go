@@ -143,8 +143,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					ProviderConfigReference: &providerConfigReference,
 					DeletionPolicy:          params.DeletionPolicy,
 					PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
+						Name: dbHostName,
 						SecretStoreConfigRef: &xpv1.Reference{
-							Name: dbHostName,
+							Name: "default",
 						},
 					},
 				},
@@ -269,8 +270,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						ProviderConfigReference: &providerConfigReference,
 						DeletionPolicy:          params.DeletionPolicy,
 						PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
+							Name: dbHostName + "-i",
 							SecretStoreConfigRef: &xpv1.Reference{
-								Name: dbHostName + "-i",
+								Name: "default",
 							},
 						},
 					},
