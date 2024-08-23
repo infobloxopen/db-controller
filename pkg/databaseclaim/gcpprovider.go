@@ -190,10 +190,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	// dbSecretInstance := xpv1.SecretReference{
-	// 	Name:      dbHostName + "-i",
-	// 	Namespace: serviceNS,
-	// }
+	dbSecretInstance := xpv1.SecretReference{
+		Name:      dbHostName + "-i",
+		Namespace: serviceNS,
+	}
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -256,15 +256,15 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						},
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						//WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference: &providerConfigReference,
-						DeletionPolicy:          params.DeletionPolicy,
-						PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
-							Name: dbHostName + "-i",
-							Metadata: &xpv1.ConnectionSecretMetadata{
-								Type: ptr.To(corev1.SecretTypeOpaque),
-							},
-						},
+						WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference:          &providerConfigReference,
+						DeletionPolicy:                   params.DeletionPolicy,
+						// PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
+						// 	Name: dbHostName + "-i",
+						// 	Metadata: &xpv1.ConnectionSecretMetadata{
+						// 		Type: ptr.To(corev1.SecretTypeOpaque),
+						// 	},
+						// },
 					},
 				},
 			}
