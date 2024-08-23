@@ -49,10 +49,10 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		return false, err
 	}
 
-	dbSecretCluster := xpv1.SecretReference{
-		Name:      dbHostName,
-		Namespace: serviceNS,
-	}
+	// dbSecretCluster := xpv1.SecretReference{
+	// 	Name:      dbHostName,
+	// 	Namespace: serviceNS,
+	// }
 
 	dbMasterSecretCluster := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -139,9 +139,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					},
 				},
 				ResourceSpec: xpv1.ResourceSpec{
-					WriteConnectionSecretToReference: &dbSecretCluster,
-					ProviderConfigReference:          &providerConfigReference,
-					DeletionPolicy:                   params.DeletionPolicy,
+					//WriteConnectionSecretToReference: &dbSecretCluster,
+					ProviderConfigReference: &providerConfigReference,
+					DeletionPolicy:          params.DeletionPolicy,
 					PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
 						Name: dbHostName,
 						Metadata: &xpv1.ConnectionSecretMetadata{
@@ -190,10 +190,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	dbSecretInstance := xpv1.SecretReference{
-		Name:      dbHostName + "-i",
-		Namespace: serviceNS,
-	}
+	// dbSecretInstance := xpv1.SecretReference{
+	// 	Name:      dbHostName + "-i",
+	// 	Namespace: serviceNS,
+	// }
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -256,9 +256,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						},
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference:          &providerConfigReference,
-						DeletionPolicy:                   params.DeletionPolicy,
+						//WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
 						PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
 							Name: dbHostName + "-i",
 							Metadata: &xpv1.ConnectionSecretMetadata{
