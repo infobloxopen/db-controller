@@ -71,7 +71,7 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 	secret.Data["port"] = []byte("5432")
 
 	log.FromContext(ctx).Info("updating conninfo secret", "name", secret.Name, "namespace", secret.Namespace)
-	return r.Client.Create(ctx, &secret)
+	return r.Client.Update(ctx, &secret)
 }
 
 func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHostName string,
