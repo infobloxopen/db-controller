@@ -36,7 +36,42 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 		return false, err
 	}
 
+	err = r.createSecretWithConnInfo(ctx, dbHostIdentifier, dbClaim)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "error writing secret with conn info")
+		return false, err
+	}
+
 	return insReady, nil
+}
+
+func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, dbHostIdentifier string, dbclaim *v1.DatabaseClaim) error {
+
+	var instance crossplanegcp.Instance
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostIdentifier,
+	}, &instance)
+	if err != nil {
+		return err
+	}
+
+	var secret corev1.Secret
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name:      dbHostIdentifier,
+		Namespace: dbclaim.Namespace,
+	}, &secret)
+	if err != nil {
+		return err
+	}
+
+	pass := string(secret.Data["attribute.initial_user.0.password"])
+	secret.Data["attribute.initial_user.0.password"] = nil
+	secret.Data["password"] = []byte(pass)
+	secret.Data["endpoint"] = []byte(*instance.Status.AtProvider.Name)
+	secret.Data["port"] = []byte("5432")
+
+	log.FromContext(ctx).Info("updating conninfo secret", "name", secret.Name, "namespace", secret.Namespace)
+	return r.Client.Create(ctx, &secret)
 }
 
 func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHostName string,
@@ -49,10 +84,10 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		return false, err
 	}
 
-	// dbSecretCluster := xpv1.SecretReference{
-	// 	Name:      dbHostName,
-	// 	Namespace: serviceNS,
-	// }
+	dbSecretCluster := xpv1.SecretReference{
+		Name:      dbHostName,
+		Namespace: serviceNS,
+	}
 
 	dbMasterSecretCluster := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -139,15 +174,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					},
 				},
 				ResourceSpec: xpv1.ResourceSpec{
-					//WriteConnectionSecretToReference: &dbSecretCluster,
-					ProviderConfigReference: &providerConfigReference,
-					DeletionPolicy:          params.DeletionPolicy,
-					PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
-						Name: dbHostName,
-						Metadata: &xpv1.ConnectionSecretMetadata{
-							Type: ptr.To(corev1.SecretTypeOpaque),
-						},
-					},
+					WriteConnectionSecretToReference: &dbSecretCluster,
+					ProviderConfigReference:          &providerConfigReference,
+					DeletionPolicy:                   params.DeletionPolicy,
 				},
 			},
 		}
@@ -190,10 +219,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	dbSecretInstance := xpv1.SecretReference{
-		Name:      dbHostName + "-i",
-		Namespace: serviceNS,
-	}
+	// dbSecretInstance := xpv1.SecretReference{
+	// 	Name:      dbHostName,
+	// 	Namespace: serviceNS,
+	// }
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -256,9 +285,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						},
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						WriteConnectionSecretToReference: &dbSecretInstance,
-						ProviderConfigReference:          &providerConfigReference,
-						DeletionPolicy:                   params.DeletionPolicy,
+						//WriteConnectionSecretToReference: &dbSecretInstance,
+						ProviderConfigReference: &providerConfigReference,
+						DeletionPolicy:          params.DeletionPolicy,
 						// PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
 						// 	Name: dbHostName + "-i",
 						// 	Metadata: &xpv1.ConnectionSecretMetadata{

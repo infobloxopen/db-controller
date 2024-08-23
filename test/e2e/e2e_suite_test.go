@@ -54,7 +54,7 @@ var logger logr.Logger
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
-	namespace = "ecgto"
+	namespace = "ecgto2"
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting E2E suite\n")
 	RunSpecs(t, "e2e suite", Label("FailFast"))
