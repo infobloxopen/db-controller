@@ -1,3 +1,4 @@
+# TODO: should this move to a hook/crd install?
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
@@ -7,6 +8,8 @@ spec:
   names:
     kind: XNetworkRecord
     plural: xnetworkrecords
+    shortNames:
+      - xnr
   versions:
     - name: v1alpha1
       served: true

@@ -72,10 +72,10 @@ spec:
           providerConfigRef:
             name: {{ .Values.controllerConfig.providerConfig }}
       patches:
-        - fromFieldPath: "spec.parameters.pscDnsName"
+        - fromFieldPath: "spec.parameters.pscDNSName"
           toFieldPath: "spec.forProvider.name"
         - type: FromCompositeFieldPath
-          fromFieldPath: "status.managedzoneRef"
+          fromFieldPath: "status.managedZoneRef"
           toFieldPath: "spec.forProvider.managedZoneRef.name"
         - type: FromCompositeFieldPath
           fromFieldPath: "status.address"
