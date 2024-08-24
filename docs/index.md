@@ -650,51 +650,19 @@ Prometheus alerts based on errors from the db-controller.
 * Total DBClaims loaded
 * Time to load a DBClaim
 
-### Rate Limits
-***N/A***
-
-### UX/UI
-***N/A***
-
-### High Availability/Resiliency
-***TBD***
-
 ### Scalability
 The db-controller service needs to be able to scale out based on demand.
 
-### Backup
-***N/A***
-
-### Disaster Recovery
-***TBD***
-
-### Data Retention
-***N/A***
-
-## Testing
-### Test Plan
-***TBD***
-
-### Test Matrix
-***TBD***
-
-## Migration
-***N/A***
-
 ## Deployment Architecture
-***TBD***
 
-## Upgrades
-***N/A***
+GCP provisions databases using PSC and local IPs. Here is a diagram describing the necessary service objects that are required to conenct to it.
+
+![GCP Architecture](db-controller-gcp.png)
 
 ## Service Dependencies
 
 This service depends on these services:
 * kube-api-server
-* [SpaceController](https://github.com/seizadi/space-controller) or similar operator: updates the RDS root passwords that the db-controller can use
-
-These services depend on this service:
-***N/A***
 
 ## Service Killers
 
@@ -708,9 +676,3 @@ These services depend on this service:
 
 ## References
 [Hotload database driver](https://github.com/infobloxopen/hotload)
-
-
-
-
-
-
