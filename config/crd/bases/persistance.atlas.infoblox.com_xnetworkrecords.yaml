@@ -1,5 +1,5 @@
 apiVersion: apiextensions.crossplane.io/v1
-kind: CustomResourceDefinition
+kind: CompositeResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.15.0
@@ -10,7 +10,7 @@ spec:
     kind: XNetworkRecord
     listKind: XNetworkRecordList
     plural: xnetworkrecords
-    singular: XNetworkRecord
+    singular: xnetworkrecord
     shortNames:
       - xnr
   versions:
