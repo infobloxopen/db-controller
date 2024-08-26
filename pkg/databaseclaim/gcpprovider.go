@@ -44,10 +44,12 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 		return false, err
 	}
 
-	err = r.createSecretWithConnInfo(ctx, dbHostIdentifier, dbClaim)
-	if err != nil {
-		log.FromContext(ctx).Error(err, "error writing secret with conn info")
-		return false, err
+	if insReady {
+		err = r.createSecretWithConnInfo(ctx, dbHostIdentifier, dbClaim)
+		if err != nil {
+			log.FromContext(ctx).Error(err, "error writing secret with conn info")
+			return false, err
+		}
 	}
 
 	return insReady, nil
@@ -63,11 +65,11 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 		return err
 	}
 
-	var secret corev1.Secret
+	var secret = &corev1.Secret{}
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name:      dbHostIdentifier,
 		Namespace: dbclaim.Namespace,
-	}, &secret)
+	}, secret)
 	if err != nil {
 		return err
 	}
@@ -82,7 +84,7 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 	}
 
 	log.FromContext(ctx).Info("updating conninfo secret", "name", secret.Name, "namespace", secret.Namespace)
-	return r.Client.Update(ctx, &secret)
+	return r.Client.Update(ctx, secret)
 }
 
 func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHostName string) error {
