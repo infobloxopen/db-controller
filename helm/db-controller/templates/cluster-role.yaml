@@ -89,6 +89,32 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - xnetworkrecords
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - xnetworkrecords/finalizers
+    verbs:
+    - update
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - xnetworkrecords/status
+    verbs:
+    - get
+    - patch
+    - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
