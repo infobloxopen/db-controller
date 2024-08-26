@@ -105,7 +105,7 @@ func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHos
 
 		netRec := &persistanceinfobloxcomv1alpha1.XNetworkRecord{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      dbHostName + "psc-network",
+				Name:      dbHostName + "-psc-network",
 				Namespace: serviceNS,
 			},
 			Spec: persistanceinfobloxcomv1alpha1.XNetworkRecordSpec{
