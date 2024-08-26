@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Approved contexts
-approved_contexts=("box-3" "kind")
+approved_contexts=("box-3" "kind" "gcp-ddi-dev-use1")
 
 # Get the current kubectl context
 current_context=$(kubectl config current-context)

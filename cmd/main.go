@@ -46,6 +46,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 	dbwebhook "github.com/infobloxopen/db-controller/webhook"
 
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	// +kubebuilder:scaffold:imports
 
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
@@ -60,6 +61,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(persistancev1.AddToScheme(scheme))
+	utilruntime.Must(persistanceinfobloxcomv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	// Infrastructure provisioning using crossplane

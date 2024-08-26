@@ -66,3 +66,29 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - persistance.infoblox.com
+  resources:
+  - xnetworkrecords
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - persistance.infoblox.com
+  resources:
+  - xnetworkrecords/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - persistance.infoblox.com
+  resources:
+  - xnetworkrecords/status
+  verbs:
+  - get
+  - patch
+  - update
