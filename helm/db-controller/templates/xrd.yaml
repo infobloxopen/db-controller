@@ -2,7 +2,7 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xnetworkrecord.persistance.infoblox.com
+  name: xnetworkrecords.persistance.infoblox.com
 spec:
   group: persistance.infoblox.com
   names:
