@@ -19,10 +19,11 @@ import (
 
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim,
 	connInfo *v1.DatabaseClaimConnectionInfo) error {
-
+	logr := log.FromContext(ctx)
 	gs := &corev1.Secret{}
 	dbType := dbClaim.Spec.Type
 	secretName := dbClaim.Spec.SecretName
+	logr.Info("createOrUpdateSecret being executed. SecretName: " + secretName)
 	var dsn, dsnURI string
 
 	switch dbType {

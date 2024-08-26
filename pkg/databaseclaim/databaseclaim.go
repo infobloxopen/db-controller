@@ -702,7 +702,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 	logr.Info("cloud instance ready. reading generated master secret")
 	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 	if err != nil {
-		logr.Info("unable to read the complete secret. requeueing")
+		logr.Error(err, "unable to read the complete secret. requeueing")
 		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
 	}
 	r.Input.MasterConnInfo.Host = connInfo.Host
@@ -785,7 +785,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	logr.Info("cloud instance ready. reading generated master secret")
 	connInfo, err := r.readResourceSecret(ctx, r.Input.DbHostIdentifier)
 	if err != nil {
-		logr.Info("unable to read the complete secret. requeueing")
+		logr.Error(err, "unable to read the complete secret. requeueing")
 		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
 	}
 	r.Input.MasterConnInfo.Host = connInfo.Host
@@ -828,7 +828,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 
 		activeConnInfo, err := r.readResourceSecret(ctx, activeHost)
 		if err != nil {
-			logr.Info("unable to read the complete secret. requeueing")
+			logr.Error(err, "unable to read the complete secret. requeueing")
 			return r.manageError(ctx, dbClaim, err)
 		}
 		//copy over source app connection and replace userid and password with master userid and password
