@@ -214,7 +214,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 					// 	},
 					// },
 
-					Network: (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
+					//Network: (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
 
 					// NetworkConfig: &crossplanegcp.NetworkConfigParameters{
 					// 	Network:          (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
