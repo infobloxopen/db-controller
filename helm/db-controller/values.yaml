@@ -165,6 +165,7 @@ controllerConfig:
     region: us-east-1
   gcp:
     region: us-central1
-    allocatedIpRange: ddiaas-dev-use1-db-us-east1-alloy-psc-ip
-    network: ""
+    project: gcp-eng-ddiaas-dev
+    network: "ddiaas-dev-use1-vpc"
+    subnetwork: private-service-connect
     numbackupstoretain: 3

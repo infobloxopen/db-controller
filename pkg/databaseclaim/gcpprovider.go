@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 
@@ -23,11 +24,18 @@ import (
 func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClaim *v1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
-	if dbClaim.Spec.Type == v1.Postgres {
-		_, err := r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
-		if err != nil {
-			return false, err
-		}
+	if dbClaim.Spec.Type != v1.Postgres {
+		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
+	}
+
+	err := r.manageNetworkRecord(ctx, dbHostIdentifier)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
+	if err != nil {
+		return false, err
 	}
 
 	log.FromContext(ctx).Info("dbcluster is ready. proceeding to manage dbinstance")
@@ -75,6 +83,50 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 
 	log.FromContext(ctx).Info("updating conninfo secret", "name", secret.Name, "namespace", secret.Namespace)
 	return r.Client.Update(ctx, &secret)
+}
+
+func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHostName string) error {
+	var netRec persistanceinfobloxcomv1alpha1.XNetworkRecord
+	logr := log.FromContext(ctx)
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostName + "psc-network",
+	}, &netRec)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			logr.Error(err, "error != notfound retrieving XNetworkRecord")
+			return err
+		}
+
+		serviceNS, err := r.getServiceNamespace()
+		if err != nil {
+			return err
+		}
+
+		netRec := &persistanceinfobloxcomv1alpha1.XNetworkRecord{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dbHostName + "psc-network",
+				Namespace: serviceNS,
+			},
+			Spec: persistanceinfobloxcomv1alpha1.XNetworkRecordSpec{
+				Parameters: persistanceinfobloxcomv1alpha1.XNetworkRecordParameters{
+					PSCDNSName:            "",
+					ServiceAttachmentLink: "",
+					Region:                basefun.GetRegion(r.Config.Viper),
+					Subnetwork:            basefun.GetSubNetwork(r.Config.Viper),
+					Network:               basefun.GetNetwork(r.Config.Viper),
+				},
+			},
+		}
+
+		logr.Info("creating XNetworkRecord resource", "XNetworkRecord", netRec.Name)
+		if err := r.Client.Create(ctx, netRec); err != nil {
+			logr.Error(err, "crossplane_xnetwork_create")
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHostName string,
@@ -127,7 +179,6 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		dbCluster = &crossplanegcp.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: dbHostName,
-				//Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 			},
 			Spec: crossplanegcp.ClusterSpec{
 				ForProvider: crossplanegcp.ClusterParameters{
@@ -147,8 +198,6 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 						User:              &params.MasterUsername,
 					},
 
-					//Labels: map[string]*string{"app.kubernetes.io/managed-by": ptr.To("db-controller")},
-
 					Location: ptr.To(basefun.GetRegion(r.Config.Viper)), // *string `json:"location" tf:"location,omitempty"`
 
 					// MaintenanceUpdatePolicy: &crossplanegcp.MaintenanceUpdatePolicyParameters{
@@ -167,10 +216,10 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 
 					Network: (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
 
-					NetworkConfig: &crossplanegcp.NetworkConfigParameters{
-						Network:          (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
-						AllocatedIPRange: ptr.To(basefun.GetAllocatedIpRange(r.Config.Viper)),
-					},
+					// NetworkConfig: &crossplanegcp.NetworkConfigParameters{
+					// 	Network:          (map[bool]*string{true: ptr.To(basefun.GetNetwork(r.Config.Viper)), false: nil})[basefun.GetNetwork(r.Config.Viper) != ""],
+					// 	AllocatedIPRange: ptr.To(basefun.GetAllocatedIpRange(r.Config.Viper)),
+					// },
 
 					PscConfig: &crossplanegcp.PscConfigParameters{
 						PscEnabled: ptr.To(true),
@@ -222,10 +271,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	// dbSecretInstance := xpv1.SecretReference{
-	// 	Name:      dbHostName,
-	// 	Namespace: serviceNS,
-	// }
 
 	dbMasterSecretInstance := xpv1.SecretKeySelector{
 		SecretReference: xpv1.SecretReference{
@@ -244,7 +289,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 
 	params := &r.Input.HostParams
 	multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
-	// trueVal := true
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -260,8 +304,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 			dbInstance = &crossplanegcp.Instance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
-					// TODO - Figure out the proper labels for resource
-					//Labels: map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 				},
 				Spec: crossplanegcp.InstanceSpec{
 					ForProvider: crossplanegcp.InstanceParameters{
@@ -286,17 +328,16 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						NetworkConfig: &crossplanegcp.InstanceNetworkConfigParameters{
 							EnablePublicIP: ptr.To(false),
 						},
+
+						PscInstanceConfig: &crossplanegcp.PscInstanceConfigParameters{
+							AllowedConsumerProjects: []*string{ptr.To(basefun.GetProject(r.Config.Viper))},
+						},
+
+						DatabaseFlags: map[string]*string{"alloydb.iam_authentication": ptr.To("on")},
 					},
 					ResourceSpec: xpv1.ResourceSpec{
-						//WriteConnectionSecretToReference: &dbSecretInstance,
 						ProviderConfigReference: &providerConfigReference,
 						DeletionPolicy:          params.DeletionPolicy,
-						// PublishConnectionDetailsTo: &xpv1.PublishConnectionDetailsTo{
-						// 	Name: dbHostName + "-i",
-						// 	Metadata: &xpv1.ConnectionSecretMetadata{
-						// 		Type: ptr.To(corev1.SecretTypeOpaque),
-						// 	},
-						// },
 					},
 				},
 			}

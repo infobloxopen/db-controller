@@ -34,12 +34,8 @@ func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, dbClai
 		if err != nil {
 			return false, err
 		}
-	} else {
-		_, err := r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
-		if err != nil {
-			return false, err
-		}
 	}
+
 	log.FromContext(ctx).Info("dbcluster is ready. proceeding to manage dbinstance")
 	firstInsReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
 	if err != nil {

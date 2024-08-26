@@ -201,12 +201,17 @@ func GetRegion(viperConfig *viper.Viper) string {
 
 // GCP only
 func GetNetwork(viperConfig *viper.Viper) string {
-	return viperConfig.GetString(GetCloud(viperConfig) + "::network")
+	return fmt.Sprintf("projects/%s/global/networks/%s", GetProject(viperConfig), viperConfig.GetString(GetCloud(viperConfig)+"::network"))
 }
 
 // GCP only
-func GetAllocatedIpRange(viperConfig *viper.Viper) string {
-	return viperConfig.GetString(GetCloud(viperConfig) + "::allocatedIpRange")
+func GetSubNetwork(viperConfig *viper.Viper) string {
+	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", GetProject(viperConfig), GetRegion(viperConfig), viperConfig.GetString(GetCloud(viperConfig)+"::subnetwork"))
+}
+
+// GCP only
+func GetProject(viperConfig *viper.Viper) string {
+	return viperConfig.GetString(GetCloud(viperConfig) + "::project")
 }
 
 // GCP only
