@@ -71,8 +71,8 @@ var _ = Describe("AWS", Ordered, func() {
 		Expect(err).ToNot(HaveOccurred(), "unable to read kubeconfig")
 
 		env := rawConfig.CurrentContext
-		// Check if current context is box-3
-		Expect(env).To(Equal("box-3"), "This test can only run in box-3")
+		// Check if current context is box-3 or gcp-ddi-dev-use1
+		Expect(env).To(Or(Equal("box-3"), Equal("gcp-ddi-dev-use1")), "This test can only run in box-3 or gcp-ddi-dev-use1")
 
 		dbIdentifierPrefix = env
 
