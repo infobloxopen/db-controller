@@ -4,12 +4,23 @@ pipeline {
   agent {
     label 'ubuntu_20_04_label'
   }
+  tools {
+    go "Go 1.22.4"
+  }
   stages {
     stage("Setup") {
       steps {
         prepareBuild()
         sh '''
         echo "Setting up the environment"
+        '''
+      }
+    }
+    stage('Build') {
+      steps {
+        sh '''
+            make package-charts
+            make build-properties
         '''
       }
     }
@@ -22,11 +33,12 @@ pipeline {
         expression { !isPrBuild() }
       }
       steps {
+        script {
+          env.PUSH_IMAGE = true
+        }
         withAWS(region:'us-east-1', credentials:'CICD_HELM') {
           sh """
-            make package-charts
             make push-charts
-            make build-properties
           """
           archiveArtifacts artifacts: '*.tgz'
           archiveArtifacts artifacts: '*build.properties'
@@ -36,7 +48,11 @@ pipeline {
   }
   post {
     success {
-      finalizeBuild('', getFileList("*.properties"))
+      script {
+        if (env.PUSH_IMAGE) {
+          finalizeBuild('', getFileList("*.properties"))
+        }
+      }
     }
   }
 }

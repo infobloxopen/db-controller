@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
@@ -36,7 +37,6 @@ import (
 var (
 	maxNameLen                      = 44 // max length of dbclaim name
 	serviceNamespaceEnvVar          = "SERVICE_NAMESPACE"
-	defaultDSNKey                   = "dsn.txt"
 	defaultRestoreFromSource        = "Snapshot"
 	defaultBackupPolicyKey          = "Backup"
 	tempTargetPassword              = "targetPassword"
@@ -62,8 +62,8 @@ var (
 )
 
 var (
-	ErrMaxNameLen        = fmt.Errorf("dbclaim name is too long. max length is 44 characters")
-	ErrDoNotUpdateStatus = fmt.Errorf("do not update status for this error")
+	ErrMaxNameLen     = fmt.Errorf("dbclaim name is too long. max length is 44 characters")
+	ErrInvalidDSNName = fmt.Errorf("dsn name must be: %s", v1.DSNKey)
 )
 
 type input struct {
@@ -299,6 +299,19 @@ func Reconcile(r *DatabaseClaimReconciler, ctx context.Context, req ctrl.Request
 	return r.Reconcile(ctx, req)
 }
 
+// validateDBClaim should validate deprecated and or unsupported values in a claim object
+func validateDBClaim(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+	// envtest will send default values as empty strings, provide an in-process
+	// update to ensure downstream code works
+	if dbClaim.Spec.DSNName == "" {
+		dbClaim.Spec.DSNName = v1.DSNKey
+	}
+	if dbClaim.Spec.DSNName != v1.DSNKey {
+		return ErrInvalidDSNName
+	}
+	return nil
+}
+
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logr := log.FromContext(ctx)
 
@@ -318,6 +331,12 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !isClassPermitted(r.Config.Class, dbClaim.Spec.Class) {
 		logr.V(1).Info("class_not_owned", "class", dbClaim.Spec.Class)
 		return ctrl.Result{}, nil
+	}
+
+	if err := validateDBClaim(ctx, &dbClaim); err != nil {
+		res, err := r.manageError(ctx, &dbClaim, err)
+		// TerminalError, do not requeue
+		return res, reconcile.TerminalError(err)
 	}
 
 	if dbClaim.Spec.Class == nil {
@@ -409,7 +428,7 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DepYamlPath = r.Config.MetricsDepYamlPath
 	cfg.ConfigYamlPath = r.Config.MetricsConfigYamlPath
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
-	cfg.DatasourceFileName = dbClaim.Spec.DSNName
+	cfg.DatasourceFileName = v1.DSNKey
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 
@@ -787,8 +806,13 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	}
 	var sourceMasterConn *v1.DatabaseClaimConnectionInfo
 
-	if r.mode == M_MigrationInProgress ||
-		r.mode == M_MigrateExistingToNewDB {
+	if r.mode == M_MigrationInProgress || r.mode == M_MigrateExistingToNewDB {
+		if dbClaim.Spec.SourceDataFrom == nil {
+			return r.manageError(ctx, dbClaim, fmt.Errorf("sourceDataFrom is nil"))
+		}
+		if dbClaim.Spec.SourceDataFrom.Database == nil {
+			return r.manageError(ctx, dbClaim, fmt.Errorf("sourceDataFrom.Database is nil"))
+		}
 		sourceMasterConn, err = v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
@@ -1009,8 +1033,6 @@ func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, 
 	}
 
 }
-
-var ErrInvalidCredentialsPasswordMissing = fmt.Errorf("invalid_credentials_password_missing")
 
 func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
 
@@ -1391,98 +1413,6 @@ func (r *DatabaseClaimReconciler) rerouteTargetSecret(ctx context.Context, sourc
 
 	return nil
 }
-func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim,
-	connInfo *v1.DatabaseClaimConnectionInfo) error {
-
-	gs := &corev1.Secret{}
-	dbType := dbClaim.Spec.Type
-	secretName := dbClaim.Spec.SecretName
-	var dsn, dbURI string
-
-	switch dbType {
-	case v1.Postgres:
-		fallthrough
-	case v1.AuroraPostgres:
-		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
-		dbURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
-	default:
-		return fmt.Errorf("unknown DB type")
-	}
-
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Namespace: dbClaim.Namespace,
-		Name:      secretName,
-	}, gs)
-
-	if err != nil && errors.IsNotFound(err) {
-		if err := r.createSecret(ctx, dbClaim, dsn, dbURI, connInfo); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	return r.updateSecret(ctx, dbClaim.Spec.DSNName, dsn, dbURI, connInfo, gs)
-}
-
-func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
-
-	logr := log.FromContext(ctx)
-	secretName := dbClaim.Spec.SecretName
-	truePtr := true
-	dsnName := dbClaim.Spec.DSNName
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: dbClaim.Namespace,
-			Name:      secretName,
-			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "persistance.atlas.infoblox.com/v1",
-					Kind:               "DatabaseClaim",
-					Name:               dbClaim.Name,
-					UID:                dbClaim.UID,
-					Controller:         &truePtr,
-					BlockOwnerDeletion: &truePtr,
-				},
-			},
-		},
-		Data: map[string][]byte{
-			dsnName:       []byte(dsn),
-			"uri_dsn.txt": []byte(dbURI),
-			"hostname":    []byte(connInfo.Host),
-			"port":        []byte(connInfo.Port),
-			"database":    []byte(connInfo.DatabaseName),
-			"username":    []byte(connInfo.Username),
-			"password":    []byte(connInfo.Password),
-			"sslmode":     []byte(connInfo.SSLMode),
-		},
-	}
-	logr.Info("creating connection info SECRET: "+secret.Name, "secret", secret.Name, "namespace", secret.Namespace)
-
-	return r.Client.Create(ctx, secret)
-}
-
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsnName, dsn, dbURI string, connInfo *v1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
-
-	logr := log.FromContext(ctx)
-
-	if dsnName == "" {
-		dsnName = defaultDSNKey
-	}
-
-	exSecret.Data[dsnName] = []byte(dsn)
-	exSecret.Data["uri_dsn.txt"] = []byte(dbURI)
-	exSecret.Data["hostname"] = []byte(connInfo.Host)
-	exSecret.Data["port"] = []byte(connInfo.Port)
-	exSecret.Data["database"] = []byte(connInfo.DatabaseName)
-	exSecret.Data["username"] = []byte(connInfo.Username)
-	exSecret.Data["password"] = []byte(connInfo.Password)
-	exSecret.Data["sslmode"] = []byte(connInfo.SSLMode)
-	logr.Info("updating connection info SECRET: "+exSecret.Name, "secret", exSecret.Name, "namespace", exSecret.Namespace)
-
-	return r.Client.Update(ctx, exSecret)
-}
-
 func (r *DatabaseClaimReconciler) updateUserStatus(status *v1.Status, userName, userPassword string) {
 	timeNow := metav1.Now()
 	status.UserUpdatedAt = &timeNow
@@ -1563,8 +1493,6 @@ func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, db
 		return r.getSourceDsnFromTempSecret(ctx, dbClaim)
 	}
 
-	// get dsn from secret used by the app
-	dsn := "uri_" + dbClaim.Spec.DSNName
 	secretName := dbClaim.Spec.SecretName
 	gs := &corev1.Secret{}
 
@@ -1580,7 +1508,7 @@ func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, db
 		log.FromContext(ctx).Error(err, "getSrcAppPasswdFromSecret failed")
 		return "", err
 	}
-	return string(gs.Data[dsn]), nil
+	return string(gs.Data[v1.DSNURIKey]), nil
 
 }
 

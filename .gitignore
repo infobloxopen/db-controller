@@ -1,6 +1,7 @@
 /*.tgz
 /bin
 /test/crd
+/site
 
 # Test binary, build with `go test -c`
 *.test

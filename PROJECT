@@ -5,6 +5,7 @@
 domain: atlas.infoblox.com
 layout:
 - go.kubebuilder.io/v4
+multigroup: true
 projectName: migration
 repo: github.com/infobloxopen/db-controller
 resources:
@@ -26,4 +27,12 @@ resources:
   kind: DbRoleClaim
   path: github.com/infobloxopen/db-controller/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: atlas.infoblox.com
+  group: persistance.infoblox.com
+  kind: XNetworkRecords
+  path: github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1
+  version: v1alpha1
 version: "3"

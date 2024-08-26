@@ -1,8 +1,7 @@
 controllerConfig:
   region: us-east-1
-  vpcSecurityGroupIDRefs: 
-  dbSubnetGroupNameRef: 
-  providerConfig: default
+  vpcSecurityGroupIDRefs: box-3
+  dbSubnetGroupNameRef: box-3
   caCertificateIdentifier: "rds-ca-rsa2048-g1"
   passwordConfig:
     passwordRotationPeriod: 3m

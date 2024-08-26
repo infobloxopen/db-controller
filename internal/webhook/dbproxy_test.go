@@ -16,7 +16,7 @@ import (
 var _ = Describe("pod webhook defaulting", func() {
 	BeforeEach(func() {
 
-		By("creating the custom resource for the Kind FeatureFlag")
+		By("create dependent resources")
 
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -133,14 +133,13 @@ var _ = Describe("pod webhook defaulting", func() {
 		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjected, "true"))
 		Expect(pod.Spec.Volumes).To(HaveLen(1))
 		Expect(pod.Spec.Containers).To(HaveLen(2))
-
 	})
 
 })
 
 func makeMutatedPod(name, claimName, secretName string) *corev1.Pod {
 	pod := makePod(name, claimName)
-	Expect(mutatePod(context.TODO(), pod, secretName, "dsn.txt", sidecarImage)).To(Succeed())
+	Expect(mutatePod(context.TODO(), pod, secretName, sidecarImage)).To(Succeed())
 	return pod
 
 }

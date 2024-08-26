@@ -1,222 +1,81 @@
 package pgbouncer
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"io/ioutil"
+	"bufio"
+	"context"
+	"io"
 	"log"
-	"net/url"
-	"os"
 	"os/exec"
-	"strconv"
-	"strings"
-	"text/template"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
 )
 
-type PGBouncerConfig struct {
-	LocalDbName string
-	LocalHost   string
-	LocalPort   int16
-	RemoteHost  string
-	RemotePort  int16
-	UserName    string
-	Password    string
-	SSLMode     string
+var logger logr.Logger
+
+func init() {
+	cfg := zap.NewProductionConfig()
+	// Disable stack traces in this package
+	cfg.EncoderConfig.StacktraceKey = ""
+
+	zapLog, _ := cfg.Build()
+	logger = zapr.NewLogger(zapLog)
 }
 
-func (pgb PGBouncerConfig) String() string {
-	pass := pgb.Password
-	// Redact all but last 4 characters of password
-	if len(pass) > 4 {
-		pass = "****" + pass[len(pass)-4:]
-	}
-
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s", pgb.UserName, pass, pgb.RemoteHost, pgb.RemotePort, pgb.LocalDbName)
+// Reload tells pgbouncer to reload its configuration
+func Reload(ctx context.Context, scriptPath string) error {
+	log.Println("Reloading PG Bouncer config")
+	err := run(ctx, scriptPath, logger)
+	return err
 }
 
-func GenerateConfig(dsn string, passwordPath string, port int16) (PGBouncerConfig, error) {
-	cfg, err := parseURI(dsn)
-	if err != nil {
-		// Fall back to old style dsn
-		cfg, err = parseOldDSN(dsn, passwordPath)
-		if err != nil {
-			return cfg, err
-		}
-	}
-	cfg.LocalHost = "0.0.0.0"
-	cfg.LocalPort = port
-	return cfg, nil
+// Start executes a script to initialize pgbouncer
+func Start(ctx context.Context, scriptPath string) error {
+	log.Println("Starting PG Bouncer:", scriptPath)
+	err := run(ctx, scriptPath, logger)
+	return err
 }
 
-func parseOldDSN(content string, passwordPath string) (PGBouncerConfig, error) {
-	var cfg PGBouncerConfig
-	fields := strings.Split(string(content), " ")
+func run(ctx context.Context, scriptPath string, logger logr.Logger) error {
+	cmd := exec.CommandContext(ctx, scriptPath)
 
-	f := func(c rune) bool {
-		return (c == '=')
-	}
-
-	m := make(map[string]*string)
-
-	for _, field := range fields {
-		fieldPair := strings.FieldsFunc(field, f)
-		fieldPair = strings.SplitN(field, "=", 2)
-		if len(fieldPair) == 2 {
-			unquotedString := strings.Trim(fieldPair[1], `'`)
-			m[fieldPair[0]] = &unquotedString
-		} else if len(fieldPair) == 1 {
-			m[fieldPair[0]] = nil
-		}
-	}
-
-	passwordContent, err := ioutil.ReadFile(passwordPath)
-	if err != nil {
-		return cfg, err
-	}
-
-	// FIXME: password in dsn never gets updated, read from password key for rotated password
-	password := string(passwordContent)
-	m["password"] = &password
-
-	if m["host"] == nil {
-		return cfg, errors.New("host value not found in db credential")
-	}
-
-	if m["port"] == nil {
-		return cfg, errors.New("port value not found in db credential")
-	}
-
-	if m["dbname"] == nil {
-		return cfg, errors.New("dbname value not found in db credential")
-	}
-
-	if m["user"] == nil {
-		return cfg, errors.New("user value not found in db credential")
-	}
-
-	if m["password"] == nil {
-		return cfg, errors.New("password value not found in db credential")
-	}
-
-	cfg.RemoteHost = *m["host"]
-	cfg.UserName = *m["user"]
-	remotePort, _ := strconv.Atoi(*m["port"])
-	cfg.RemotePort = int16(remotePort)
-	cfg.Password = *m["password"]
-	cfg.LocalDbName = *m["dbname"]
-	cfg.SSLMode = *m["sslmode"]
-
-	return cfg, nil
-}
-
-func parseURI(dsn string) (PGBouncerConfig, error) {
-	c := PGBouncerConfig{}
-
-	u, err := url.Parse(dsn)
-	if err != nil {
-		return c, err
-	}
-
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return c, fmt.Errorf("invalid_scheme: %s", u.Scheme)
-	}
-
-	c.RemoteHost = u.Hostname()
-	c.UserName = u.User.Username()
-	remotePort, err := strconv.Atoi(u.Port())
-	if err != nil {
-		return c, err
-	}
-	c.RemotePort = int16(remotePort)
-	c.Password, _ = u.User.Password()
-	if u.Path != "" {
-		c.LocalDbName = u.Path[1:]
-	}
-
-	q := u.Query()
-	c.SSLMode = q.Get("sslmode")
-
-	return c, nil
-}
-
-func WritePGBouncerConfig(path string, config *PGBouncerConfig) error {
-	t, err := template.ParseFiles("./pgbouncer.template")
+	// Create pipes for stdout and stderr
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
-	if t == nil {
-		os.Stderr.WriteString("could not parse pgbouncer config template")
-	}
-
-	configFile, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer configFile.Close()
-
-	userFile, err := os.OpenFile("userlist.txt", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer userFile.Close()
-
-	err = t.Execute(configFile, *config)
+	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return err
 	}
 
-	userLine := strconv.Quote(config.UserName) + " \"" + strings.Replace(config.Password, "\"", "\"\"", -1) + "\""
-
-	userFile.Write([]byte(userLine))
-
-	return (nil)
-}
-
-func ReloadConfiguration() (ok bool, err error) {
-	fmt.Println("Reloading PG Bouncer config")
-
-	ok = true
-
-	cmd := exec.Command("/var/run/dbproxy/reload-pgbouncer.sh")
-
-	var stdOut, stdErr bytes.Buffer
-
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-
-	err = cmd.Run()
-	if err != nil {
-		ok = false
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return err
 	}
 
-	log.Println(stdOut.String())
-	log.Println(stdErr.String())
-
-	return ok, err
-}
-
-func Start() (ok bool, err error) {
-	fmt.Println("Starting PG Bouncer ...")
-
-	ok = true
-
-	cmd := exec.Command("/var/run/dbproxy/start-pgbouncer.sh")
-
-	var stdOut, stdErr bytes.Buffer
-
-	cmd.Stdout = &stdOut
-	cmd.Stderr = &stdErr
-
-	err = cmd.Run()
-	if err != nil {
-		ok = false
+	// Function to stream and log output
+	streamAndLog := func(pipe io.ReadCloser, logFunc func(string, ...interface{})) {
+		scanner := bufio.NewScanner(pipe)
+		for scanner.Scan() {
+			logFunc(scanner.Text())
+		}
+		if err := scanner.Err(); err != nil {
+			logger.Error(err, "Error reading output")
+		}
 	}
 
-	log.Println(stdOut.String())
-	log.Println(stdErr.String())
+	// Stream stdout and stderr concurrently
+	go streamAndLog(stdoutPipe, func(msg string, args ...interface{}) {
+		logger.Info(msg, args...)
+	})
+	go streamAndLog(stderrPipe, func(msg string, args ...interface{}) {
+		logger.Error(nil, msg, args...)
+	})
 
-	return ok, err
+	// Wait for the command to finish
+	err = cmd.Wait()
+
+	return err
 }

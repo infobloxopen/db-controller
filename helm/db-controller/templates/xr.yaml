@@ -1,0 +1,111 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: {{ include "db-controller.fullname" . }}-psc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+spec:
+  compositeTypeRef:
+    apiVersion: persistance.infoblox.com/v1alpha1
+    kind: XNetworkRecord
+  resources:
+    - name: managedzone
+      base:
+        apiVersion: dns.gcp.upbound.io/v1beta2
+        kind: ManagedZone
+        spec:
+          forProvider:
+            description: Managed DNS zone for PSC
+            dnsName: ""
+            visibility: private
+            privateVisibilityConfig:
+              # Specify the full network resource name
+              # ie. projects/gcp-eng-ddiaas-dev/global/networks/ddiaas-dev-use1-vpc
+              networks:
+                - networkUrl: ""
+          providerConfigRef:
+            name: {{ .Values.controllerConfig.providerConfig }}
+      patches:
+        - fromFieldPath: "spec.parameters.pscDNSName"
+          toFieldPath: "spec.forProvider.dnsName"
+        - type: ToCompositeFieldPath
+          fromFieldPath: "metadata.name"
+          toFieldPath: "status.managedZoneRef"
+        - fromFieldPath: "spec.parameters.network"
+          toFieldPath: "spec.forProvider.privateVisibilityConfig.networks[0].networkUrl"
+    - name: ipaddress
+      base:
+        apiVersion: compute.gcp.upbound.io/v1beta1
+        kind: Address
+        spec:
+          forProvider:
+            addressType: INTERNAL
+            region: ""
+            subnetwork: ""
+          providerConfigRef:
+            name: {{ .Values.controllerConfig.providerConfig }}
+      patches:
+        - fromFieldPath: "spec.parameters.region"
+          toFieldPath: "spec.forProvider.region"
+        - fromFieldPath: "spec.parameters.subnetwork"
+          toFieldPath: "spec.forProvider.subnetwork"
+        - type: ToCompositeFieldPath
+          fromFieldPath: "status.atProvider.address"
+          toFieldPath: "status.address"
+        - type: ToCompositeFieldPath
+          fromFieldPath: "status.atProvider.id"
+          toFieldPath: "status.addressID"
+    - name: recordset
+      base:
+        apiVersion: dns.gcp.upbound.io/v1beta1
+        kind: RecordSet
+        spec:
+          forProvider:
+            type: A
+            ttl: 300
+            managedZoneRef:
+              name: ""
+            name: ""
+            rrdatas:
+              - ""
+          providerConfigRef:
+            name: {{ .Values.controllerConfig.providerConfig }}
+      patches:
+        - fromFieldPath: "spec.parameters.pscDNSName"
+          toFieldPath: "spec.forProvider.name"
+        - type: FromCompositeFieldPath
+          fromFieldPath: "status.managedZoneRef"
+          toFieldPath: "spec.forProvider.managedZoneRef.name"
+        - type: FromCompositeFieldPath
+          fromFieldPath: "status.address"
+          toFieldPath: "spec.forProvider.rrdatas[0]"
+    - name: forwardingrule
+      base:
+        apiVersion: compute.gcp.upbound.io/v1beta1
+        kind: ForwardingRule
+        metadata:
+          name: alloydb-psc-test
+        spec:
+          forProvider:
+            loadBalancingScheme: ''
+            region: ""
+            network: ""
+            ipAddress: ""
+            target: ""
+            subnetwork: ""
+          providerConfigRef:
+            name: {{ .Values.controllerConfig.providerConfig }}
+      patches:
+        - fromFieldPath: "spec.parameters.region"
+          toFieldPath: "spec.forProvider.region"
+        - fromFieldPath: "spec.parameters.subnetwork"
+          toFieldPath: "spec.forProvider.subnetwork"
+        - fromFieldPath: "spec.parameters.network"
+          toFieldPath: "spec.forProvider.network"
+        - fromFieldPath: "spec.parameters.serviceAttachmentLink"
+          toFieldPath: "spec.forProvider.target"
+        - type: FromCompositeFieldPath
+          fromFieldPath: "status.addressID"
+          toFieldPath: "spec.forProvider.ipAddress"
+---

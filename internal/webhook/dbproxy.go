@@ -21,7 +21,7 @@ var (
 	MountPath          = "/dbproxy"
 	VolumeName         = "dbproxydsn"
 	ContainerName      = "dbproxy"
-	SecretKey          = "uri_dsn.txt"
+	SecretKey          = v1.DSNURIKey
 )
 
 // +kubebuilder:webhook:path=/mutate--v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=persistance.atlas.infoblox.com,sideEffects=None,admissionReviewVersions=v1
@@ -93,16 +93,11 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 	var claim v1.DatabaseClaim
 	if err := p.k8sClient.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: claimName}, &claim); err != nil {
 		log.Info("unable to find databaseclaim", "claimName", claimName, "error", err)
-		return fmt.Errorf("unable to find databaseclaim %q check label %s: %w", claimName, LabelCheck, err)
+		return fmt.Errorf("unable to find databaseclaim %q check label %s: %s", claimName, LabelCheck, err)
 	}
 
 	// This is the secret that db-controller manages
 	secretName := claim.Spec.SecretName
-	dsnKey := claim.Spec.DSNName
-	if dsnKey == "" {
-		// TODO: link to defaultDSNKey variable
-		dsnKey = SecretKey
-	}
 
 	if secretName == "" {
 		return fmt.Errorf("claim %q does not have secret name, this may resolve on its own", claimName)
@@ -113,14 +108,14 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 		return nil
 	}
 
-	err := mutatePod(ctx, pod, secretName, dsnKey, p.dbProxyImg)
+	err := mutatePod(ctx, pod, secretName, p.dbProxyImg)
 	if err == nil {
 		log.Info("mutated_pod")
 	}
 	return nil
 }
 
-func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dsnKey string, dbProxyImg string) error {
+func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dbProxyImg string) error {
 
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
@@ -167,11 +162,7 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dsnKey s
 		Env: []corev1.EnvVar{
 			{
 				Name:  "DBPROXY_CREDENTIAL",
-				Value: fmt.Sprintf("/dbproxy/%s", dsnKey),
-			},
-			{
-				Name:  "DBPROXY_PASSWORD",
-				Value: fmt.Sprintf("/dbproxy/%s", "password"),
+				Value: fmt.Sprintf("/dbproxy/%s", SecretKey),
 			},
 		},
 		// Test pgbouncer
@@ -188,10 +179,15 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dsnKey s
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"psql", "\\$(cat /dbproxy/uri_dsn.txt)", "-c", "'SELECT 1'"},
+					Command: []string{
+						"psql",
+						fmt.Sprintf("\\$(cat /dbproxy/%s)", SecretKey),
+						"-c",
+						"'SELECT 1'",
+					},
 				},
 			},
-			InitialDelaySeconds: 30,
+			InitialDelaySeconds: 90,
 			PeriodSeconds:       15,
 		},
 		VolumeMounts: []corev1.VolumeMount{

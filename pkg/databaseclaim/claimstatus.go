@@ -13,6 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+var (
+	ErrDoNotUpdateStatus = fmt.Errorf("do not update status for this error")
+)
+
 func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (ctrl.Result, error) {
 	// Class of errors that should stop the reconciliation loop
 	// but not cause a status change on the CR
