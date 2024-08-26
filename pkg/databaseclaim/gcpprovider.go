@@ -67,7 +67,7 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 	pass := string(secret.Data["attribute.initial_user.0.password"])
 
 	secret.Data = map[string][]byte{
-		"username": []byte(dbclaim.Spec.Username),
+		"username": []byte(r.Input.HostParams.MasterUsername),
 		"password": []byte(pass),
 		"endpoint": []byte(*instance.Status.AtProvider.Name),
 		"port":     []byte("5432"),
