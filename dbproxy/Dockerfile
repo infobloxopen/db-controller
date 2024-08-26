@@ -12,7 +12,7 @@ COPY pgbouncer/ pgbouncer/
 RUN go mod download
 RUN CGO_ENABLED=0 go build -o dbproxy ./cmd/dbproxy
 
-FROM alpine:3.20 AS PGBBUILDER
+FROM alpine:3.20 AS pgbbuilder
 
 ARG VERSION=1.17.0
 
@@ -53,4 +53,4 @@ WORKDIR /var/run/dbproxy
 USER bloxone
 
 # TODO: remove this entrypoint and hardcode it in mutating webhook
-ENTRYPOINT /usr/bin/dbproxy
+ENTRYPOINT ["/usr/bin/dbproxy"]

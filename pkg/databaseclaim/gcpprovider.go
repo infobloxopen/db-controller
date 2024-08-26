@@ -90,7 +90,7 @@ func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHos
 	logr := log.FromContext(ctx)
 
 	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostName + "psc-network",
+		Name: dbHostName + "-psc-network",
 	}, &netRec)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
