@@ -549,7 +549,7 @@ func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, err
 
 func (pc *client) AssignRoleToUser(username, rolename string) error {
 	db := pc.DB
-	if _, err := db.Exec(fmt.Sprintf("GRANT %s TO %s", pq.QuoteIdentifier(rolename), pq.QuoteIdentifier(username))); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("ALTER ROLE %s SET ROLE TO %s", pq.QuoteIdentifier(username), pq.QuoteIdentifier(rolename))); err != nil {
 		return err
 	}
 
