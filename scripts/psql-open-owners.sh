@@ -24,7 +24,7 @@ get_table_owners() {
     printf "Created: $(kubectl get databaseclaim "$claim_name" -n "$namespace" -o jsonpath='{.metadata.creationTimestamp}')\n"
     printf "Secret: $(kubectl get databaseclaim "$claim_name" -n "$namespace" -o jsonpath='{.spec.secretName}')\n"
     # Run psql command to find the owner of tables
-    kubectl exec deploy/db-controller -n db-controller -c manager -- psql "$dsn" -c '\dt' \
+    kubectl exec deploy/db-controller -n db-controller -c postgres -- psql "$dsn" -c '\dt' \
         | awk '{if(NR>2 && $4!="")print $7}' | sort | uniq -c | sort -nr
 }
 
