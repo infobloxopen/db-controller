@@ -1,3 +1,4 @@
+{{- if .Values.xrd.create }}
 # TODO: should this move to a hook/crd install?
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
@@ -61,3 +62,4 @@ spec:
                         ie. projects/gcp-eng-ddiaas-dev/regions/us-east1/subnetworks/private-service-connect'
                       type: string
 ---
+{{- end }}

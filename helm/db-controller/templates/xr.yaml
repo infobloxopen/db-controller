@@ -1,3 +1,4 @@
+{{- if .Values.xr.create }}
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -109,3 +110,4 @@ spec:
           fromFieldPath: "status.addressID"
           toFieldPath: "spec.forProvider.ipAddress"
 ---
+{{- end }}
