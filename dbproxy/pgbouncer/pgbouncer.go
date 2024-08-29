@@ -23,6 +23,10 @@ func init() {
 	logger = zapr.NewLogger(zapLog)
 }
 
+func SetLogger(l logr.Logger) {
+	logger = l
+}
+
 // Reload tells pgbouncer to reload its configuration
 func Reload(ctx context.Context, scriptPath string) error {
 	log.Println("Reloading PG Bouncer config")

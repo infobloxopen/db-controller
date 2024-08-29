@@ -10,3 +10,9 @@ zapLogger:
   level: debug
 dbproxy:
   enabled: true
+
+# Block XRDs and XRs in manual deploys
+xrd:
+  create: false
+xr:
+  create: false

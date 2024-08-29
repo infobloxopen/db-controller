@@ -24,6 +24,11 @@ func init() {
 	logger = zapr.NewLogger(zapLog)
 }
 
+func SetLogger(l logr.Logger) {
+	logger = l
+	pgbouncer.SetLogger(l)
+}
+
 type Config struct {
 	StartUpTime      time.Duration
 	DBCredentialPath string
