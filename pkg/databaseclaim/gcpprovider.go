@@ -28,12 +28,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
 	}
 
-	err := r.manageNetworkRecord(ctx, dbHostIdentifier)
-	if err != nil {
-		return false, err
-	}
-
-	_, err = r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
+	_, err := r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
 	if err != nil {
 		return false, err
 	}
@@ -45,6 +40,11 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 	}
 
 	if insReady {
+		err = r.manageNetworkRecord(ctx, dbHostIdentifier)
+		if err != nil {
+			return false, err
+		}
+
 		err = r.createSecretWithConnInfo(ctx, dbHostIdentifier, dbClaim)
 		if err != nil {
 			log.FromContext(ctx).Error(err, "error writing secret with conn info")
