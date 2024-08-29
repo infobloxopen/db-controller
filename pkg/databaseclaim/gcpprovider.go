@@ -85,12 +85,22 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 	return r.Client.Update(ctx, secret)
 }
 
-func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHostName string) error {
+func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHostIdentifier string) error {
 	var netRec persistanceinfobloxcomv1alpha1.XNetworkRecord
 	logr := log.FromContext(ctx)
 
+	var instance crossplanegcp.Instance
 	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostName + "-psc-network",
+		Name: dbHostIdentifier,
+	}, &instance)
+	if err != nil {
+		return err
+	}
+	pscDnsName := instance.Status.AtProvider.PscInstanceConfig.PscDNSName
+	serviceAttachmentLink := instance.Status.AtProvider.PscInstanceConfig.ServiceAttachmentLink
+
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name: dbHostIdentifier + "-psc-network",
 	}, &netRec)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
@@ -105,13 +115,13 @@ func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHos
 
 		netRec := &persistanceinfobloxcomv1alpha1.XNetworkRecord{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      dbHostName + "-psc-network",
+				Name:      dbHostIdentifier + "-psc-network",
 				Namespace: serviceNS,
 			},
 			Spec: persistanceinfobloxcomv1alpha1.XNetworkRecordSpec{
 				Parameters: persistanceinfobloxcomv1alpha1.XNetworkRecordParameters{
-					PSCDNSName:            "",
-					ServiceAttachmentLink: "",
+					PSCDNSName:            *pscDnsName,
+					ServiceAttachmentLink: *serviceAttachmentLink,
 					Region:                basefun.GetRegion(r.Config.Viper),
 					Subnetwork:            basefun.GetSubNetwork(r.Config.Viper),
 					Network:               basefun.GetNetwork(r.Config.Viper),
