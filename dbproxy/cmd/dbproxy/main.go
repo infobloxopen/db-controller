@@ -38,12 +38,13 @@ func init() {
 func main() {
 
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
+	dbproxy.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	mgr, err := dbproxy.New(context.TODO(), dbproxy.Config{
 		DBCredentialPath: dbCredentialPath,
 		PGCredentialPath: pbCredentialPath,

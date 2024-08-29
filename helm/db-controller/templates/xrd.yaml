@@ -1,3 +1,4 @@
+{{- if .Values.xrd.create }}
 # TODO: should this move to a hook/crd install?
 {{- if not (lookup "apiextensions.crossplane.io/v1" "CompositeResourceDefinition" "" "xnetworkrecords.persistance.infoblox.com") }}
 apiVersion: apiextensions.crossplane.io/v1
@@ -63,3 +64,4 @@ spec:
                       type: string
 {{- end }}
 ---
+{{- end }}
