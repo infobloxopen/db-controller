@@ -196,27 +196,27 @@ func GetCloud(viperConfig *viper.Viper) string {
 }
 
 func GetRegion(viperConfig *viper.Viper) string {
-	return viperConfig.GetString(GetCloud(viperConfig) + "::region")
+	return viperConfig.GetString("region")
 }
 
 // GCP only
 func GetNetwork(viperConfig *viper.Viper) string {
-	return fmt.Sprintf("projects/%s/global/networks/%s", GetProject(viperConfig), viperConfig.GetString(GetCloud(viperConfig)+"::network"))
+	return fmt.Sprintf("projects/%s/global/networks/%s", GetProject(viperConfig), viperConfig.GetString("network"))
 }
 
 // GCP only
 func GetSubNetwork(viperConfig *viper.Viper) string {
-	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", GetProject(viperConfig), GetRegion(viperConfig), viperConfig.GetString(GetCloud(viperConfig)+"::subnetwork"))
+	return fmt.Sprintf("projects/%s/regions/%s/subnetworks/%s", GetProject(viperConfig), GetRegion(viperConfig), viperConfig.GetString("subnetwork"))
 }
 
 // GCP only
 func GetProject(viperConfig *viper.Viper) string {
-	return viperConfig.GetString(GetCloud(viperConfig) + "::project")
+	return viperConfig.GetString("project")
 }
 
 // GCP only
 func GetNumBackupsToRetain(viperConfig *viper.Viper) *float64 {
-	return ptr.To(viperConfig.GetFloat64(GetCloud(viperConfig) + "::numbackupstoretain"))
+	return ptr.To(viperConfig.GetFloat64("numbackupstoretain"))
 }
 
 func GetMultiAZEnabled(viperConfig *viper.Viper) bool {

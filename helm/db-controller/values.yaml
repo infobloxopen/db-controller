@@ -149,6 +149,12 @@ controllerConfig:
   # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
   enableCloudwatchLogsExport: "none"
   providerConfig: default
+  vpcSecurityGroupIDRefs:
+  region: us-east-1
+  project: gcp-eng-ddiaas-dev
+  network: "ddiaas-dev-use1-vpc"
+  subnetwork: private-service-connect
+  numbackupstoretain: 3
   # The number of days for which automated backups are retained. Setting this parameter to a positive number enables backups.
   # Setting this parameter to 0 disables automated backups (in case of Aurora, 0 is N/A and will be set to 1 by default).
   # Possible values (0-35)
@@ -166,12 +172,4 @@ controllerConfig:
     ib_realm: "{{ .Values.ib.realm }}"
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
-  vpcSecurityGroupIDRefs:
-  aws:
-    region: us-east-1
-  gcp:
-    region: us-central1
-    project: gcp-eng-ddiaas-dev
-    network: "ddiaas-dev-use1-vpc"
-    subnetwork: private-service-connect
-    numbackupstoretain: 3
+
