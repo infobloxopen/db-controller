@@ -24,7 +24,8 @@ storageType: gp3
 supportSuperUserElevation: true
 vpcSecurityGroupIDRefs: demo-box-1
 dbSubnetGroupNameRef: demo-box-1
-region: us-east-1
+#AWS us-east-1 GCP us-east1
+region: us-east1
 project: gcp-eng-ddiaas-dev
 network: "ddiaas-dev-use1-vpc"
 subnetwork: private-service-connect
