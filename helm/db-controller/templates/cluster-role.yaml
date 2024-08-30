@@ -101,6 +101,56 @@ rules:
     - patch
     - update
     - watch
+
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - forwardingrules
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - recordsets
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - addresses
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - managedzones
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+
   - apiGroups:
     - persistance.infoblox.com
     resources:
