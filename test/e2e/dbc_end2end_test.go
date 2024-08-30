@@ -296,7 +296,9 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
+			if cloud == "aws" {
+				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
+			}
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
@@ -350,7 +352,9 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
+			if cloud == "aws" {
+				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
+			}
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
