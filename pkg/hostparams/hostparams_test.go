@@ -503,7 +503,7 @@ func TestNew(t *testing.T) {
 				Shape:         "db.t4g.medium",
 				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  42,
-				EngineVersion: "15.5",
+				EngineVersion: "15.3",
 			},
 			wantErr: false,
 		},

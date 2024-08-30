@@ -90,7 +90,7 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
-		rds1 = env + "-" + db1 + "-1d9fb876"
+		rds1 = env + "-" + db1 + "-1ec9b27c"
 		newdbcMasterSecretName = rds1 + "-master"
 
 		// createNamespace()
@@ -299,7 +299,7 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
 			if cloud == "aws" {
-				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
+				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1ec9b27c"))
 			}
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
@@ -355,7 +355,7 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
 			if cloud == "aws" {
-				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1d9fb876"))
+				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1ec9b27c"))
 			}
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
