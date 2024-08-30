@@ -21,6 +21,10 @@ import (
 // logger is used since some times we run from testing.M and testing.T is not available
 var logger logr.Logger
 
+// DebugLevel is used to set V level to 1 as suggested by official docs
+// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+const debugLevel = 1
+
 func init() {
 	// Use zap logger
 	opts := zap.Options{
@@ -71,32 +75,32 @@ func StartNetwork(networkName string) func() {
 
 	// List any containers attached to the network and stop then remove them
 	cmd := exec.Command("docker", "ps", "-q", "-a", "--filter", fmt.Sprintf("network=%s", networkName))
-	logger.V(1).Info(cmd.String())
+	logger.V(debugLevel).Info(cmd.String())
 	cmd.Stderr = &errBuf
 	out, err := cmd.Output()
 	if err != nil {
 		logger.Error(err, errBuf.String())
 		os.Exit(1)
 	}
-	logger.V(1).Info(string(out))
+	logger.V(debugLevel).Info(string(out))
 
 	if len(out) > 0 {
 		// Containers are attached to the network, remove them
 		cmd = exec.Command("docker", "rm", "-f", string(out))
-		logger.V(1).Info("removing containers attached to network", "cmd", cmd.String())
+		logger.V(debugLevel).Info("removing containers attached to network", "cmd", cmd.String())
 		cmd.Stderr = &errBuf
 		bs, err := cmd.Output()
 		if err != nil {
 			logger.Error(err, "failed to remove containers attached to network", "buf", errBuf.String())
 			os.Exit(1)
 		}
-		logger.V(1).Info(string(bs))
+		logger.V(debugLevel).Info(string(bs))
 	}
 
 	// Check if network already exists
 	cmd = exec.Command("docker", "network", "inspect", "pgctl")
 	cmd.Stderr = &errBuf
-	logger.V(1).Info(cmd.String())
+	logger.V(debugLevel).Info(cmd.String())
 	err = cmd.Run()
 	if err != nil {
 		// Daemons report different errors for network not found
@@ -117,7 +121,7 @@ func StartNetwork(networkName string) func() {
 	return func() {
 		now := time.Now()
 		defer func() {
-			logger.V(1).Info("network_cleanup_took", "duration", time.Since(now))
+			logger.V(debugLevel).Info("network_cleanup_took", "duration", time.Since(now))
 		}()
 
 		var errBuf bytes.Buffer
@@ -143,13 +147,13 @@ func StartNetwork(networkName string) func() {
 					continue
 				}
 				cmd = exec.Command("docker", "network", "disconnect", "pgctl", container)
-				logger.V(1).Info(cmd.String())
+				logger.V(debugLevel).Info(cmd.String())
 				cmd.Stderr = &errBuf
 				buf, err := cmd.Output()
 				if err != nil {
 					logger.Error(err, "failed to disconnect container", "container", container, "stderr", errBuf.String())
 				}
-				logger.V(1).Info(string(buf))
+				logger.V(debugLevel).Info(string(buf))
 			}
 
 		}
@@ -220,7 +224,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 
 	// Run PostgreSQL in Docker
 	cmd := exec.Command("docker", append(args, ctrArgs...)...)
-	logger.V(1).Info(cmd.String())
+	logger.V(debugLevel).Info(cmd.String())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -230,13 +234,13 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		logger.Info("stderr:" + stderr.String())
 		os.Exit(1)
 	}
-	logger.V(1).Info(string(out))
+	logger.V(debugLevel).Info(string(out))
 	container := string(out[:len(out)-1]) // remove newline
 
 	// Exercise hotload
 	//hotload.RegisterSQLDriver("pgx", stdlib.GetDefaultDriver())
 	dsn := fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", url.QueryEscape(cfg.Username), url.QueryEscape(cfg.Password), port, cfg.Database)
-	logger.V(1).Info(dsn)
+	logger.V(debugLevel).Info(dsn)
 	f, err := os.CreateTemp("", "dsn.txt")
 	if err != nil {
 		panic(err)
@@ -278,7 +282,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		// Cleanup container on close, dont exit without trying all steps first
 		now := time.Now()
 		defer func() {
-			logger.V(1).Info("container_cleanup_took", "duration", time.Since(now))
+			logger.V(debugLevel).Info("container_cleanup_took", "duration", time.Since(now))
 		}()
 
 		err := os.Remove(f.Name())
@@ -290,7 +294,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		// This take 10 seconds to run, and we don't care if
 		// it was successful. So use Start() to not wait for
 		// it to finish.
-		logger.V(1).Info(cmd.String())
+		logger.V(debugLevel).Info(cmd.String())
 		if err := cmd.Start(); err != nil {
 			logger.Error(err, "failed to remove container")
 		}

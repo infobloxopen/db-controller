@@ -19,6 +19,10 @@ import (
 
 var logger logr.Logger
 
+// DebugLevel is used to set V level to 1 as suggested by official docs
+// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+const debugLevel = 1
+
 func init() {
 	zapLog, _ := zap.NewDevelopment()
 	logger = zapr.NewLogger(zapLog)
@@ -151,7 +155,7 @@ func (m *mgr) Start(ctx context.Context) error {
 				if !ok {
 					return
 				}
-				logger.V(1).Info("received_update", "event", event)
+				logger.V(debugLevel).Info("received_update", "event", event)
 				// FIXME: check if file change is one we actually care about
 				err := watcher.Remove(cfg.DBCredentialPath)
 				if err != nil {
@@ -174,14 +178,14 @@ func (m *mgr) Start(ctx context.Context) error {
 
 				err = pgbCfg.Write()
 				if errors.Is(err, pgbouncer.ErrDuplicateWrite) {
-					logger.V(1).Info("ignoring duplicate write")
+					logger.V(debugLevel).Info("ignoring duplicate write")
 					continue
 				} else if err != nil {
 					log.Println("parseWritePGBConfig failed:", err)
 					continue
 				}
 
-				logger.V(1).Info("reload_pgbouncer")
+				logger.V(debugLevel).Info("reload_pgbouncer")
 				if err := pgbouncer.Reload(context.TODO(), cfg.PGBReloadScript); err != nil {
 					logger.Error(err, "reload_pgbouncer_error")
 				}

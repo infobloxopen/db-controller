@@ -44,12 +44,12 @@ var (
 	cachedMasterPasswdForExistingDB = "cachedMasterPasswdForExistingDB"
 	masterSecretSuffix              = "-master"
 	masterPasswordKey               = "password"
-	// InfoLevel is used to set V level to 0 as suggested by official docs
+	// infoLevel is used to set V level to 0 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	InfoLevel = 0
-	// DebugLevel is used to set V level to 1 as suggested by official docs
+	infoLevel = 0
+	// debugLevel is used to set V level to 1 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	DebugLevel = 1
+	debugLevel = 1
 
 	// FIXME: remove references to private variables
 	OperationalStatusTagKey        string = "operational-status"
@@ -155,7 +155,7 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 				log.Info("upgrade requested for a shared host. shared host upgrades are not supported. ignoring upgrade request")
 			}
 		}
-		log.V(DebugLevel).Info("selected mode for shared db host", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
+		log.V(debugLevel).Info("selected mode for shared db host", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
 
 		return M_UseNewDB
 	}
@@ -163,7 +163,7 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 	// use existing is true
 	if *dbClaim.Spec.UseExistingSource {
 		if dbClaim.Spec.SourceDataFrom != nil && dbClaim.Spec.SourceDataFrom.Type == "database" {
-			log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "use existing db")
+			log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "use existing db")
 			return M_UseExistingDB
 		} else {
 			return M_NotSupported
@@ -174,10 +174,10 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 		if dbClaim.Spec.SourceDataFrom.Type == "database" {
 			if dbClaim.Status.ActiveDB.DbState == v1.UsingExistingDB {
 				if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-					log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
+					log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
 					return M_MigrateExistingToNewDB
 				} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-					log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
+					log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
 					return M_MigrationInProgress
 				}
 			}
@@ -192,10 +192,10 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 			if dbClaim.Status.ActiveDB.SourceDataFrom != nil {
 				dbClaim.Spec.SourceDataFrom = dbClaim.Status.ActiveDB.SourceDataFrom.DeepCopy()
 				if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-					log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
+					log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrateExistingToNewDB")
 					return M_MigrateExistingToNewDB
 				} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-					log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
+					log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_MigrationInProgress")
 					return M_MigrationInProgress
 				}
 			} else {
@@ -215,17 +215,17 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 				dbClaim.Status.MigrationState = ""
 			}
 			if dbClaim.Status.MigrationState == "" || dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-				log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_InitiateDBUpgrade")
+				log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_InitiateDBUpgrade")
 				return M_InitiateDBUpgrade
 			} else if dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
-				log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UpgradeDBInProgress")
+				log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UpgradeDBInProgress")
 				return M_UpgradeDBInProgress
 
 			}
 		}
 	}
 
-	log.V(DebugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
+	log.V(debugLevel).Info("selected mode for", "dbclaim", dbClaim.Spec, "selected mode", "M_UseNewDB")
 
 	return M_UseNewDB
 }
@@ -329,7 +329,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Avoid updates to the claim until we know we should be looking at it
 
 	if !isClassPermitted(r.Config.Class, dbClaim.Spec.Class) {
-		logr.V(1).Info("class_not_owned", "class", dbClaim.Spec.Class)
+		logr.V(debugLevel).Info("class_not_owned", "class", dbClaim.Spec.Class)
 		return ctrl.Result{}, nil
 	}
 
@@ -526,7 +526,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 		logr.Info("migrate to new  db reconcile started")
 		//check if existingDB has been already reconciled, else reconcileUseExistingDB
 		existing_db_conn, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
-		logr.V(DebugLevel).Info("DSN", "M_MigrateExistingToNewDB", basefun.SanitizeDsn(dbClaim.Spec.SourceDataFrom.Database.DSN))
+		logr.V(debugLevel).Info("DSN", "M_MigrateExistingToNewDB", basefun.SanitizeDsn(dbClaim.Spec.SourceDataFrom.Database.DSN))
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -843,8 +843,8 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		err := fmt.Errorf("unsupported mode %v", r.mode)
 		return r.manageError(ctx, dbClaim, err)
 	}
-	logr.V(DebugLevel).Info("DSN", "sourceAppDsn", sourceAppDsn)
-	logr.V(DebugLevel).Info("DSN", "sourceMasterConn", sourceMasterConn)
+	logr.V(debugLevel).Info("DSN", "sourceAppDsn", sourceAppDsn)
+	logr.V(debugLevel).Info("DSN", "sourceMasterConn", sourceMasterConn)
 
 	config := pgctl.Config{
 		Log:              log.FromContext(ctx),
@@ -855,7 +855,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		ExportFilePath:   basefun.GetPgTempFolder(r.Config.Viper),
 	}
 
-	logr.V(DebugLevel).Info("DSN", "config", config)
+	logr.V(debugLevel).Info("DSN", "config", config)
 
 	s, err := pgctl.GetReplicatorState(migrationState, config)
 	if err != nil {
@@ -1069,7 +1069,7 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, db
 func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
 
-	logr.V(DebugLevel).Info("GET DBCLIENT", "DSN", basefun.SanitizeDsn(r.getMasterDefaultDsn()))
+	logr.V(debugLevel).Info("GET DBCLIENT", "DSN", basefun.SanitizeDsn(r.getMasterDefaultDsn()))
 	updateHostPortStatus(&dbClaim.Status.NewDB, r.Input.MasterConnInfo.Host, r.Input.MasterConnInfo.Port, r.Input.MasterConnInfo.SSLMode)
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: r.getMasterDefaultDsn()})
 }

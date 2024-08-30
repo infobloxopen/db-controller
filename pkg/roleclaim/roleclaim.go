@@ -42,12 +42,12 @@ const (
 	dbClaimField           = ".spec.sourceDatabaseClaim.name"
 	finalizerName          = "dbroleclaims.persistance.atlas.infoblox.com/finalizer"
 	serviceNamespaceEnvVar = "SERVICE_NAMESPACE"
-	// InfoLevel is used to set V level to 0 as suggested by official docs
+	// infoLevel is used to set V level to 0 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	InfoLevel = 0
-	// DebugLevel is used to set V level to 1 as suggested by official docs
+	infoLevel = 0
+	// debugLevel is used to set V level to 1 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	DebugLevel = 1
+	debugLevel = 1
 )
 
 type dbcBaseConfig struct {
@@ -357,7 +357,7 @@ func (r *DbRoleClaimReconciler) getSourceSecret(ctx context.Context, secretName 
 			return nil, err
 		}
 	}
-	log.V(1).Info("dbclaim secret", "secret name", secretName, "secret namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
+	log.V(debugLevel).Info("dbclaim secret", "secret name", secretName, "secret namespace", dbRoleClaim.Spec.SourceDatabaseClaim.Namespace)
 
 	dbRoleClaim.Status.SourceSecret = sourceSecret.Namespace + "/" + sourceSecret.Name
 	return sourceSecret, nil
@@ -506,8 +506,6 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 		log.Error(err, "reading resource secret")
 		return errors.New("reading resource secret")
 	}
-
-	//log.V(DebugLevel).Info("Full URI DELETE EXTERNAL RES: " + masterUserDBConnInfo.Uri())
 
 	// get client to DB
 	dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, log)

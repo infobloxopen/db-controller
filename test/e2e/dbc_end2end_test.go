@@ -18,9 +18,11 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -613,66 +615,113 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 
 	var _ = AfterAll(func() {
 
-		// //delete DBRoleClaims within this namespace
-		// dbRoleClaims := &v1.DbRoleClaimList{}
-		// if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, dbrc := range dbRoleClaims.Items {
-		// 	By("Deleting DBRoleClaim: " + dbrc.Name)
-		// 	k8sClient.Delete(ctx, &dbrc)
-		// }
+		//delete DBRoleClaims within this namespace
+		dbRoleClaims := &v1.DbRoleClaimList{}
+		if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, dbrc := range dbRoleClaims.Items {
+			By("Deleting DBRoleClaim: " + dbrc.Name)
+			k8sClient.Delete(ctx, &dbrc)
+		}
 
-		// // delete DBClaims within this namespace
-		// dbClaims := &v1.DatabaseClaimList{}
-		// if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, dbc := range dbClaims.Items {
-		// 	By("Deleting DatabaseClaim: " + dbc.Name)
-		// 	k8sClient.Delete(ctx, &dbc)
-		// }
+		// delete DBClaims within this namespace
+		dbClaims := &v1.DatabaseClaimList{}
+		if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, dbc := range dbClaims.Items {
+			By("Deleting DatabaseClaim: " + dbc.Name)
+			k8sClient.Delete(ctx, &dbc)
+		}
 
-		// // delete DBClaims within this namespace
-		// dbinstances := &crossplaneaws.DBInstanceList{}
-		// if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, dbinstance := range dbinstances.Items {
-		// 	if strings.Contains(dbinstance.Name, namespace) {
-		// 		By("Deleting DBInstance: " + dbinstance.Name)
-		// 		k8sClient.Delete(ctx, &dbinstance)
-		// 	}
-		// }
+		// delete DBClaims within this namespace
+		dbinstances := &crossplaneaws.DBInstanceList{}
+		if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, dbinstance := range dbinstances.Items {
+			if strings.Contains(dbinstance.Name, namespace) {
+				By("Deleting DBInstance: " + dbinstance.Name)
+				k8sClient.Delete(ctx, &dbinstance)
+			}
+		}
 
-		// instances = &crossplanegcp.InstanceList{}
-		// if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, instance := range instances.Items {
-		// 	if strings.Contains(instance.Name, namespace) {
-		// 		By("Deleting Instance: " + instance.Name)
-		// 		k8sClient.Delete(ctx, &instance)
-		// 	}
-		// }
+		if cloud == "aws" {
+			instances := &crossplaneaws.DBInstanceList{}
+			if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, instance := range instances.Items {
+				if strings.Contains(instance.Name, namespace) {
+					By("Deleting Instance: " + instance.Name)
+					k8sClient.Delete(ctx, &instance)
+				}
+			}
 
-		// // delete Secrets within this namespace
-		// secrets := &corev1.SecretList{}
-		// if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, secret := range secrets.Items {
-		// 	By("Deleting Secret: " + secret.Name)
-		// 	k8sClient.Delete(ctx, &secret)
-		// }
+			clusters := &crossplaneaws.DBClusterList{}
+			if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, cluster := range clusters.Items {
+				if strings.Contains(cluster.Name, namespace) {
+					By("Deleting Cluster: " + cluster.Name)
+					k8sClient.Delete(ctx, &cluster)
+				}
+			}
 
-		// //delete the namespace
-		// By("deleting the namespace")
-		// k8sClient.Delete(ctx, &corev1.Namespace{
-		// 	ObjectMeta: metav1.ObjectMeta{
-		// 		Name: namespace,
-		// 	},
-		// })
+		} else { //gcp
+			instances := &crossplanegcp.InstanceList{}
+			if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, instance := range instances.Items {
+				if strings.Contains(instance.Name, namespace) {
+					By("Deleting Instance: " + instance.Name)
+					k8sClient.Delete(ctx, &instance)
+				}
+			}
+
+			clusters := &crossplanegcp.ClusterList{}
+			if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, cluster := range clusters.Items {
+				if strings.Contains(cluster.Name, namespace) {
+					By("Deleting Cluster: " + cluster.Name)
+					k8sClient.Delete(ctx, &cluster)
+				}
+			}
+
+			xnetworkrecord := &persistanceinfobloxcomv1alpha1.XNetworkRecordList{}
+			if err := k8sClient.List(ctx, xnetworkrecord, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, xnetrec := range xnetworkrecord.Items {
+				if strings.Contains(xnetrec.Name, namespace) {
+					By("Deleting XNetworkRecord: " + xnetrec.Name)
+					k8sClient.Delete(ctx, &xnetrec)
+				}
+			}
+		}
+
+		// delete Secrets within this namespace
+		secrets := &corev1.SecretList{}
+		if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, secret := range secrets.Items {
+			By("Deleting Secret: " + secret.Name)
+			k8sClient.Delete(ctx, &secret)
+		}
+
+		//delete the namespace
+		By("deleting the namespace")
+		k8sClient.Delete(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		})
 
 	})
 })
