@@ -89,6 +89,14 @@ func TestHostParams_Hash(t *testing.T) {
 				EngineVersion: "15.5",
 			},
 		},
+		{name: "test_Execute_postgres_15.3_tg4.medium", want: "1ec9b27c",
+			fields: fields{Engine: "postgres",
+				Shape:         "db.t4g.medium",
+				InstanceClass: "db.t4g.medium",
+				MinStorageGB:  20000,
+				EngineVersion: "15.3",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -479,7 +487,7 @@ func TestNew(t *testing.T) {
 				Shape:         "db.t4g.medium",
 				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  42,
-				EngineVersion: "15.5",
+				EngineVersion: "15.3",
 			},
 			wantErr: false,
 		},
