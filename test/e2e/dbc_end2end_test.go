@@ -177,16 +177,14 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
 			By("erroring out when AWS/GCP does not support dbVersion")
-			if cloud == "gcp" {
-				Expect(true).To(BeTrue())
-				return
-			}
-
 			key := types.NamespacedName{
 				Name:      db1,
 				Namespace: namespace,
 			}
 			invalidVersion := "15.3"
+			if cloud == "gcp" {
+				invalidVersion = "15.1"
+			}
 			prevDbClaim := &v1.DatabaseClaim{}
 			By("Getting the prev dbclaim")
 			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
@@ -633,18 +631,6 @@ var _ = Describe("AWS/GCP", Ordered, func() {
 		for _, dbc := range dbClaims.Items {
 			By("Deleting DatabaseClaim: " + dbc.Name)
 			k8sClient.Delete(ctx, &dbc)
-		}
-
-		// delete DBClaims within this namespace
-		dbinstances := &crossplaneaws.DBInstanceList{}
-		if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, dbinstance := range dbinstances.Items {
-			if strings.Contains(dbinstance.Name, namespace) {
-				By("Deleting DBInstance: " + dbinstance.Name)
-				k8sClient.Delete(ctx, &dbinstance)
-			}
 		}
 
 		if cloud == "aws" {
