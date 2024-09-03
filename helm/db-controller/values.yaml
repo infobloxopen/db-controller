@@ -133,6 +133,8 @@ controllerConfig:
     masterUsername: root
   authSource: secret
   #aws or gcp
+  # FIXME: change me to `cloud_provider` and update DC kubevela workflow to populate the field
+  # https://github.com/Infoblox-CTO/deployment-configurations/pull/61446/files#diff-796b260c9364c2558037d151b9450f8b72904b41ccb90b2f1da7aff36e97e141R9-R24
   cloud: aws
   caCertificateIdentifier: "rds-ca-rsa2048-g1"
   dbMultiAZEnabled: false
