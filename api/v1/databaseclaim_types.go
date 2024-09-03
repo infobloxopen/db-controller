@@ -68,31 +68,6 @@ type SourceDataFrom struct {
 	Database *Database `json:"database,omitempty"`
 }
 
-// S3BackupConfiguration defines the details of the S3 backup to restore from.
-type S3BackupConfiguration struct {
-	// +required
-	Region string `json:"region"`
-
-	// +required
-	Bucket string `json:"bucket"`
-
-	// Prefix is the path prefix of the S3 bucket within which the backup to restore is located.
-	// +optional
-	Prefix *string `json:"prefix,omitempty"`
-
-	// SourceEngine is the engine used to create the backup.
-	SourceEngine *SQLEngine `json:"sourceEngine"`
-
-	// SourceEngineVersion is the version of the engine used to create the backup.
-	// Example: "5.7.30"
-	SourceEngineVersion *string `json:"sourceEngineVersion"`
-
-	// SecretRef specifies a secret to use for connecting to the s3 bucket via AWS client
-	// TODO: document/validate the secret format required
-	// +optional
-	SecretRef *SecretRef `json:"secretRef,omitempty"`
-}
-
 // Database defines the details of an existing database to use as a backup restoration source
 type Database struct {
 	// DSN is the connection string used to reach the postgres database
@@ -102,7 +77,6 @@ type Database struct {
 	DSN string `json:"dsn"`
 
 	// SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
-	// TODO: document/validate the secret format required
 	// +optional
 	SecretRef *SecretRef `json:"secretRef,omitempty"`
 }

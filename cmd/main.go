@@ -50,6 +50,7 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 )
 
 var (
@@ -66,6 +67,8 @@ func init() {
 
 	// Infrastructure provisioning using crossplane
 	utilruntime.Must(crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme))
+
+	utilruntime.Must(crossplanegcpv1beta2.SchemeBuilder.AddToScheme(scheme))
 }
 
 func main() {

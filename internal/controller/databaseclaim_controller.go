@@ -30,6 +30,10 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 )
 
+// DebugLevel is used to set V level to 1 as suggested by official docs
+// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+const debugLevel = 1
+
 // DatabaseClaimReconciler reconciles a DatabaseClaim object
 type DatabaseClaimReconciler struct {
 	client.Client
@@ -62,7 +66,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	logger := log.FromContext(ctx)
 
 	res, err := r.reconciler.Reconcile(ctx, req)
-	logger.V(1).Info("reconcile_done", "err", err, "res", res)
+	logger.V(debugLevel).Info("reconcile_done", "err", err, "res", res)
 	return res, err
 }
 

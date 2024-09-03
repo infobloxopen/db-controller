@@ -4,6 +4,7 @@
 resources:
 - bases/persistance.atlas.infoblox.com_databaseclaims.yaml
 - bases/persistance.atlas.infoblox.com_dbroleclaims.yaml
+- bases/persistance.infoblox.com_xnetworkrecords.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

@@ -37,7 +37,7 @@ var _ = Describe("db-controller", func() {
 					Namespace: namespace,
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
-					Class:                 ptr.To(""),
+					Class:                 ptr.To(namespace),
 					AppID:                 "sample-app",
 					DatabaseName:          "sample_app",
 					SecretName:            "sample-secret",

@@ -14,7 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// DsnExecInjector annotates Pods
+// DebugLevel is used to set V level to 1 as suggested by official docs
+// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
+const debugLevel = 1
 
 type DsnExecInjector struct {
 	Name                 string
@@ -42,11 +44,11 @@ func dsnExecSideCarInjectionRequired(pod *corev1.Pod) (bool, string, string) {
 	alreadyInjected, err := strconv.ParseBool(pod.Annotations["infoblox.com/dsnexec-injected"])
 
 	if err == nil && alreadyInjected {
-		dsnexecLog.V(1).Info("DsnExec sidecar already injected: ", pod.Name, pod.Annotations)
+		dsnexecLog.V(debugLevel).Info("DsnExec sidecar already injected: ", pod.Name, pod.Annotations)
 		return false, remoteDbSecretName, dsnExecConfigSecret
 	}
 
-	dsnexecLog.V(1).Info("DsnExec sidecar Injection required: ", pod.Name, pod.Annotations)
+	dsnexecLog.V(debugLevel).Info("DsnExec sidecar Injection required: ", pod.Name, pod.Annotations)
 
 	return true, remoteDbSecretName, dsnExecConfigSecret
 }
@@ -89,7 +91,7 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 	shoudInjectDsnExec, remoteDbSecretName, dsnExecConfigSecret := dsnExecSideCarInjectionRequired(pod)
 
 	if shoudInjectDsnExec {
-		dsnexecLog.V(1).Info("Injecting sidecar...")
+		dsnexecLog.V(debugLevel).Info("Injecting sidecar...")
 
 		dbpi.DsnExecSidecarConfig.Containers[0].Image = sidecarImageForDsnExec
 		dbpi.DsnExecSidecarConfig.Volumes[0].Secret.SecretName = remoteDbSecretName
@@ -102,10 +104,10 @@ func (dbpi *DsnExecInjector) Handle(ctx context.Context, req admission.Request) 
 		shareProcessNamespace := true
 		pod.Spec.ShareProcessNamespace = &shareProcessNamespace
 
-		dsnexecLog.V(1).Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
+		dsnexecLog.V(debugLevel).Info("sidecar ontainer for ", dbpi.Name, " injected.", pod.Name, pod.APIVersion)
 
 	} else {
-		dsnexecLog.V(1).Info("dsnexec sidecar not needed.", pod.Name, pod.APIVersion)
+		dsnexecLog.V(debugLevel).Info("dsnexec sidecar not needed.", pod.Name, pod.APIVersion)
 	}
 	marshaledPod, err := json.Marshal(pod)
 

@@ -176,9 +176,8 @@ spec:
                           Deprecated: Use SecretRef dsn.txt instead
                         type: string
                       secretRef:
-                        description: |-
-                          SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
-                          TODO: document/validate the secret format required
+                        description: SecretRef specifies a secret to use for connecting
+                          to the postgresdb (should be master/root)
                         properties:
                           name:
                             type: string
@@ -297,9 +296,8 @@ spec:
                               Deprecated: Use SecretRef dsn.txt instead
                             type: string
                           secretRef:
-                            description: |-
-                              SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
-                              TODO: document/validate the secret format required
+                            description: SecretRef specifies a secret to use for connecting
+                              to the postgresdb (should be master/root)
                             properties:
                               name:
                                 type: string
@@ -396,9 +394,8 @@ spec:
                               Deprecated: Use SecretRef dsn.txt instead
                             type: string
                           secretRef:
-                            description: |-
-                              SecretRef specifies a secret to use for connecting to the postgresdb (should be master/root)
-                              TODO: document/validate the secret format required
+                            description: SecretRef specifies a secret to use for connecting
+                              to the postgresdb (should be master/root)
                             properties:
                               name:
                                 type: string

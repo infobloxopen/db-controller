@@ -4,7 +4,7 @@
 * 3. Use existing RDS
 * 4. Migrate Use Existing RDS to a local RDS
 * 5. Migrate postgres RDS to Aurora RDS
-* The tests are run in box-3 cluster. The tests are skipped if the cluster is not box-3
+* The tests are run in , kind or gcp-ddi-dev-use1 cluster. The tests are skipped if the cluster is not box-3, kind or gcp-ddi-dev-use1
 * It runs in the namespace specified in .id + e2e file in the root directory (eg: bjeevan-e2e)
 * The tests create RDS resources in AWS. The resources are cleaned up after the tests are complete.
 * At this time these tests can be run manually only using:
@@ -18,15 +18,18 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
-	crossplanerds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,12 +52,12 @@ var (
 	db2                    string
 	db3                    string
 	ctx                    = context.Background()
+	cloud                  string
 )
 
-var _ = Describe("AWS", Ordered, func() {
+var _ = Describe("AWS/GCP", Ordered, func() {
 
 	var (
-		// equal to env ie. box-3
 		dbIdentifierPrefix string
 		db1                string
 		dbinstance1        string
@@ -71,8 +74,14 @@ var _ = Describe("AWS", Ordered, func() {
 		Expect(err).ToNot(HaveOccurred(), "unable to read kubeconfig")
 
 		env := rawConfig.CurrentContext
-		// Check if current context is box-3 or gcp-ddi-dev-use1
-		Expect(env).To(Or(Equal("box-3"), Equal("gcp-ddi-dev-use1")), "This test can only run in box-3 or gcp-ddi-dev-use1")
+		// Check if current context is box-3, kind or gcp-ddi-dev-use1
+		Expect(env).To(BeElementOf("box-3", "kind", "gcp-ddi-dev-use1"), "This test can only run in box-3, kind or gcp-ddi-dev-use1")
+
+		if env == "gcp-ddi-dev-use1" {
+			cloud = "gcp"
+		} else {
+			cloud = "aws"
+		}
 
 		dbIdentifierPrefix = env
 
@@ -81,7 +90,7 @@ var _ = Describe("AWS", Ordered, func() {
 		db1 = namespace + "-db-1"
 		db2 = namespace + "-db-2"
 		db3 = namespace + "-db-3"
-		rds1 = env + "-" + db1 + "-1d9fb876"
+		rds1 = env + "-" + db1 + "-1ec9b27c"
 		newdbcMasterSecretName = rds1 + "-master"
 
 		// createNamespace()
@@ -90,7 +99,7 @@ var _ = Describe("AWS", Ordered, func() {
 	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
 	//creates db_1
-	Context("Creating a RDS", func() {
+	Context("Creating a DB", func() {
 
 		It("Creating a DBClaim", func() {
 
@@ -135,13 +144,21 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(err).ToNot(HaveOccurred())
 				dbinstance1 = fmt.Sprintf("%s-%s-%s", dbIdentifierPrefix, db1, hostParams.Hash())
 			}
-			By("Checking if dbinstance exists")
-			Expect(dbinstance1).NotTo(BeEmpty())
 
-			var dbinst crossplanerds.DBInstance
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
-			Expect(err).To(HaveOccurred())
-			Expect(errors.IsNotFound(err)).To(BeTrue())
+			if cloud == "aws" {
+				By("Checking if dbinstance exists")
+				Expect(dbinstance1).NotTo(BeEmpty())
+				var dbinst crossplaneaws.DBInstance
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &dbinst)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+			} else {
+				By("Checking if instance exists")
+				var inst crossplanegcp.Instance
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, &inst)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+			}
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
@@ -155,17 +172,19 @@ var _ = Describe("AWS", Ordered, func() {
 				Expect(createdDbClaim.Spec.DBVersion).To(BeEmpty())
 
 				return createdDbClaim.Status.Error, nil
-			}, 50*time.Second, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
+			}, 2*time.Minute, 100*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
 		})
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
-			By("erroring out when AWS does not support dbVersion")
-
+			By("erroring out when AWS/GCP does not support dbVersion")
 			key := types.NamespacedName{
 				Name:      db1,
 				Namespace: namespace,
 			}
 			invalidVersion := "15.3"
+			if cloud == "gcp" {
+				invalidVersion = "15.1"
+			}
 			prevDbClaim := &v1.DatabaseClaim{}
 			By("Getting the prev dbclaim")
 			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
@@ -178,20 +197,29 @@ var _ = Describe("AWS", Ordered, func() {
 			Expect(updatedDbClaim.Spec.DBVersion).To(Equal(invalidVersion))
 
 			By("checking dbclaim status.error message is not empty")
+			//if cloud == "aws" {
 			Eventually(func() (string, error) {
 				err := k8sClient.Get(ctx, key, updatedDbClaim)
 				if err != nil {
 					return "", err
 				}
 				return updatedDbClaim.Status.Error, nil
-			}, time.Minute*2, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
-
+			}, time.Minute*4, time.Second*15).Should(Equal("requested database version(15.3) is not available"))
+			// } else {
+			// 	Eventually(func() (string, error) {
+			// 		err := k8sClient.Get(ctx, key, updatedDbClaim)
+			// 		if err != nil {
+			// 			return "", err
+			// 		}
+			// 		return updatedDbClaim.Status.Error, nil
+			// 	}, time.Minute*4, time.Second*15).Should(ContainSubstring("Invalid value at 'cluster.database_version'"))
+			// }
 		})
 	})
 
 	//update db_1
-	Context("Creating a Postgres RDS using a dbclaim ", func() {
-		It("should create a RDS in AWS", func() {
+	Context("Creating a Postgres DB using a dbclaim", func() {
+		It("should create a DB in AWS/GCP", func() {
 			By("creating a new DB Claim")
 
 			key := types.NamespacedName{
@@ -202,7 +230,11 @@ var _ = Describe("AWS", Ordered, func() {
 			By("Getting the prev dbclaim")
 			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
 			By("Updating dbVersion")
-			prevDbClaim.Spec.DBVersion = "15.5"
+			if cloud == "aws" {
+				prevDbClaim.Spec.DBVersion = "15.5"
+			} else {
+				prevDbClaim.Spec.DBVersion = "15"
+			}
 			k8sClient.Update(ctx, prevDbClaim)
 			updatedDbClaim := &v1.DatabaseClaim{}
 			By("checking dbclaim status is ready")
@@ -264,7 +296,9 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-1d9fb876"))
+			if cloud == "aws" {
+				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1ec9b27c"))
+			}
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
@@ -318,7 +352,9 @@ var _ = Describe("AWS", Ordered, func() {
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
-			Expect(string(secret.Data["hostname"])).Should(ContainSubstring("box-3-" + namespace + "-db-1-1d9fb876"))
+			if cloud == "aws" {
+				Expect(string(secret.Data["hostname"])).Should(ContainSubstring(dbIdentifierPrefix + "-" + namespace + "-db-1-1ec9b27c"))
+			}
 			Expect(string(secret.Data["password"])).ShouldNot(BeNil())
 			Expect(string(secret.Data["port"])).Should(Equal("5432"))
 			Expect(string(secret.Data["sslmode"])).Should(Equal("require"))
@@ -334,6 +370,10 @@ var _ = Describe("AWS", Ordered, func() {
 	Context("Use Existing RDS", func() {
 		It("should use Existing RDS", func() {
 			By("setting up master secret to access existing RDS")
+			if cloud == "gcp" {
+				return
+			}
+
 			//copy secret from prev dbclaim and use it as master secret for existing rds usecase
 			key := types.NamespacedName{
 				Name:      newdbcMasterSecretName,
@@ -416,6 +456,10 @@ var _ = Describe("AWS", Ordered, func() {
 	Context("Migrate Use Existing RDS to a local RDS", func() {
 		It("should create a new RDS and migrate Existing database", func() {
 			By("deleting master secret to access existing RDS")
+			if cloud == "gcp" {
+				return
+			}
+
 			//delete master secret if it exists
 			k8sClient.Delete(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -453,7 +497,6 @@ var _ = Describe("AWS", Ordered, func() {
 			}, timeout_e2e, interval_e2e).Should(Equal(v1.UsingExistingDB))
 			//check if eventually the secret sample-secret-db2 is created
 			By("checking if the secret [sample-secret-db2] is created")
-			//box-3-end2end-test-2-dbclaim-1ec9b27c
 			newSecret := &corev1.Secret{}
 			Eventually(func() bool {
 				k8sClient.Get(ctx, types.NamespacedName{Name: "sample-secret-db2", Namespace: namespace}, newSecret)
@@ -469,6 +512,10 @@ var _ = Describe("AWS", Ordered, func() {
 	//updates db_2 to aurora
 	Context("Migrate postgres RDS to Aurora RDS", func() {
 		It("should create a new RDS and migrate postgres sample_db to new RDS", func() {
+			if cloud == "gcp" {
+				return
+			}
+
 			key := types.NamespacedName{
 				Name:      db2,
 				Namespace: namespace,
@@ -514,7 +561,7 @@ var _ = Describe("AWS", Ordered, func() {
 					return "", err
 				}
 				return string(secret.Data["hostname"]), nil
-			}, time.Minute*20, interval_e2e).Should(ContainSubstring("box-3-" + db2 + "-b8487b9c"))
+			}, time.Minute*20, interval_e2e).Should(ContainSubstring(dbIdentifierPrefix + "-" + db2 + "-b8487b9c"))
 
 			By("checking if the existing DBRoleClaim1 was copied to the new DB")
 			Eventually(func() error {
@@ -566,55 +613,101 @@ var _ = Describe("AWS", Ordered, func() {
 
 	var _ = AfterAll(func() {
 
-		// //delete DBRoleClaims within this namespace
-		// dbRoleClaims := &v1.DbRoleClaimList{}
-		// if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, dbrc := range dbRoleClaims.Items {
-		// 	By("Deleting DBRoleClaim: " + dbrc.Name)
-		// 	k8sClient.Delete(ctx, &dbrc)
-		// }
+		//delete DBRoleClaims within this namespace
+		dbRoleClaims := &v1.DbRoleClaimList{}
+		if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, dbrc := range dbRoleClaims.Items {
+			By("Deleting DBRoleClaim: " + dbrc.Name)
+			k8sClient.Delete(ctx, &dbrc)
+		}
 
-		// // delete DBClaims within this namespace
-		// dbClaims := &v1.DatabaseClaimList{}
-		// if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, dbc := range dbClaims.Items {
-		// 	By("Deleting DatabaseClaim: " + dbc.Name)
-		// 	k8sClient.Delete(ctx, &dbc)
-		// }
+		// delete DBClaims within this namespace
+		dbClaims := &v1.DatabaseClaimList{}
+		if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, dbc := range dbClaims.Items {
+			By("Deleting DatabaseClaim: " + dbc.Name)
+			k8sClient.Delete(ctx, &dbc)
+		}
 
-		// // delete DBClaims within this namespace
-		// dbinstances := &crossplanerds.DBInstanceList{}
-		// if err := k8sClient.List(ctx, dbinstances, &client.ListOptions{}); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, dbinstance := range dbinstances.Items {
-		// 	if strings.Contains(dbinstance.Name, namespace) {
-		// 		By("Deleting DBInstance: " + dbinstance.Name)
-		// 		k8sClient.Delete(ctx, &dbinstance)
-		// 	}
-		// }
+		if cloud == "aws" {
+			instances := &crossplaneaws.DBInstanceList{}
+			if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, instance := range instances.Items {
+				if strings.Contains(instance.Name, namespace) {
+					By("Deleting Instance: " + instance.Name)
+					k8sClient.Delete(ctx, &instance)
+				}
+			}
 
-		// // delete Secrets within this namespace
-		// secrets := &corev1.SecretList{}
-		// if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
-		// 	Expect(err).To(BeNil())
-		// }
-		// for _, secret := range secrets.Items {
-		// 	By("Deleting Secret: " + secret.Name)
-		// 	k8sClient.Delete(ctx, &secret)
-		// }
+			clusters := &crossplaneaws.DBClusterList{}
+			if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, cluster := range clusters.Items {
+				if strings.Contains(cluster.Name, namespace) {
+					By("Deleting Cluster: " + cluster.Name)
+					k8sClient.Delete(ctx, &cluster)
+				}
+			}
 
-		// //delete the namespace
-		// By("deleting the namespace")
-		// k8sClient.Delete(ctx, &corev1.Namespace{
-		// 	ObjectMeta: metav1.ObjectMeta{
-		// 		Name: namespace,
-		// 	},
-		// })
+		} else { //gcp
+			instances := &crossplanegcp.InstanceList{}
+			if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, instance := range instances.Items {
+				if strings.Contains(instance.Name, namespace) {
+					By("Deleting Instance: " + instance.Name)
+					k8sClient.Delete(ctx, &instance)
+				}
+			}
+
+			clusters := &crossplanegcp.ClusterList{}
+			if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, cluster := range clusters.Items {
+				if strings.Contains(cluster.Name, namespace) {
+					By("Deleting Cluster: " + cluster.Name)
+					k8sClient.Delete(ctx, &cluster)
+				}
+			}
+
+			xnetworkrecord := &persistanceinfobloxcomv1alpha1.XNetworkRecordList{}
+			if err := k8sClient.List(ctx, xnetworkrecord, &client.ListOptions{}); err != nil {
+				Expect(err).To(BeNil())
+			}
+			for _, xnetrec := range xnetworkrecord.Items {
+				if strings.Contains(xnetrec.Name, namespace) {
+					By("Deleting XNetworkRecord: " + xnetrec.Name)
+					k8sClient.Delete(ctx, &xnetrec)
+				}
+			}
+		}
+
+		// delete Secrets within this namespace
+		secrets := &corev1.SecretList{}
+		if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
+			Expect(err).To(BeNil())
+		}
+		for _, secret := range secrets.Items {
+			By("Deleting Secret: " + secret.Name)
+			k8sClient.Delete(ctx, &secret)
+		}
+
+		//delete the namespace
+		By("deleting the namespace")
+		k8sClient.Delete(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+			},
+		})
 
 	})
 })

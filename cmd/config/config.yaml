@@ -1,13 +1,10 @@
-# master credentials source can be 'aws' or 'secret'
-#authSource: aws
+athena-shared:
+  masterUsername: root
 authSource: secret
+#aws or gcp
+cloud: aws
 pgTemp: "/tmp/"
-# if aws authorization is used iam role must be provided
-#iamRole: rds-role
 dbMultiAZEnabled: false
-region: us-east-1
-vpcSecurityGroupIDRefs: demo-box-1
-dbSubnetGroupNameRef: demo-box-1
 dynamicHostWaitTimeMin: 1
 defaultShape: db.t4g.medium
 defaultMinStorageGB: 20
@@ -17,6 +14,7 @@ defaultMasterPort: 5432
 defaultSslMode: disable
 defaultMasterUsername: postgres
 defaultReclaimPolicy: delete
+providerConfig: default
 # For Production this should be false and if SnapShot is not taken it will not be deleted
 defaultSkipFinalSnapshotBeforeDeletion: true
 defaultPubliclyAccessible: false
@@ -25,8 +23,26 @@ defaultBackupPolicyValue: Bronze
 backupRetentionDays: 0
 enablePerfInsight: false
 enableCloudwatchLogsExport: "none"
+storageType: gp3
+supportSuperUserElevation: true
+vpcSecurityGroupIDRefs: demo-box-1
+dbSubnetGroupNameRef: demo-box-1
+#AWS us-east-1 GCP us-east1
+region: us-east-1
+project: gcp-eng-ddiaas-dev
+network: "ddiaas-dev-use1-vpc"
+subnetwork: private-service-connect
+numbackupstoretain: 3
 
 passwordConfig:
   passwordComplexity: enabled
   minPasswordLength: 15
   passwordRotationPeriod: 60
+
+systemFunctions:
+  ib_realm: "{{ .Values.ib.realm }}"
+  ib_env: "{{ .Values.env }}"
+  ib_lifecycle: "{{ .Values.lifecycle }}"
+  
+
+

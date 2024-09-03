@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 )
 
 var (
@@ -46,7 +44,7 @@ func TestMain(m *testing.M) {
 	testPasswordPath = fmt.Sprintf("%s/password.txt", tempDir)
 	testDSNPath = fmt.Sprintf("%s/dsn.txt", tempDir)
 
-	if err := ioutil.WriteFile(testDSNURIPath, []byte(testDSN), 0644); err != nil {
+	if err := os.WriteFile(testDSNURIPath, []byte(testDSN), 0644); err != nil {
 		panic(err)
 	}
 
@@ -55,7 +53,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	if err := ioutil.WriteFile(testDSNPath, []byte(oldDSN), 0644); err != nil {
+	if err := os.WriteFile(testDSNPath, []byte(oldDSN), 0644); err != nil {
 		panic(err)
 	}
 
@@ -150,7 +148,7 @@ func Run(cfg RunConfig) (*sql.DB, string, func()) {
 
 	// Run PostgreSQL in Docker
 	cmd := exec.Command("docker", append(args, ctrArgs...)...)
-	logger.V(1).Info(cmd.String())
+	logger.V(debugLevel).Info(cmd.String())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -160,13 +158,13 @@ func Run(cfg RunConfig) (*sql.DB, string, func()) {
 		logger.Info("stderr", stderr.String())
 		os.Exit(1)
 	}
-	logger.V(1).Info(string(out))
+	logger.V(debugLevel).Info(string(out))
 	container := string(out[:len(out)-1]) // remove newline
 
 	// Exercise hotload
 	//hotload.RegisterSQLDriver("pgx", stdlib.GetDefaultDriver())
 	dsn := fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", url.QueryEscape(cfg.Username), url.QueryEscape(cfg.Password), port, cfg.Database)
-	logger.V(1).Info(dsn)
+	logger.V(debugLevel).Info(dsn)
 	f, err := os.CreateTemp("", "dsn.txt")
 	if err != nil {
 		panic(err)
@@ -202,13 +200,13 @@ func Run(cfg RunConfig) (*sql.DB, string, func()) {
 		os.Exit(1)
 	}
 	// TODO: change this to debug logging, just timing jenkins for now
-	logger.Info("db_connected", "duration", time.Since(now))
+	logger.V(debugLevel).Info("db_connected", "duration", time.Since(now))
 
 	return conn, dsn, func() {
 		// Cleanup container on close, dont exit without trying all steps first
 		now := time.Now()
 		defer func() {
-			logger.V(1).Info("container_cleanup_took", "duration", time.Since(now))
+			logger.V(debugLevel).Info("container_cleanup_took", "duration", time.Since(now))
 		}()
 
 		err := os.Remove(f.Name())

@@ -132,8 +132,10 @@ controllerConfig:
   athena-shared:
     masterUsername: root
   authSource: secret
-  # if aws authorization is used iam role must be provided
-  #iamRole: rds-role
+  #aws or gcp
+  # FIXME: change me to `cloud_provider` and update DC kubevela workflow to populate the field
+  # https://github.com/Infoblox-CTO/deployment-configurations/pull/61446/files#diff-796b260c9364c2558037d151b9450f8b72904b41ccb90b2f1da7aff36e97e141R9-R24
+  cloud: aws
   caCertificateIdentifier: "rds-ca-rsa2048-g1"
   dbMultiAZEnabled: false
   dbSubnetGroupNameRef:
@@ -152,6 +154,13 @@ controllerConfig:
   # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
   enableCloudwatchLogsExport: "none"
   providerConfig: default
+  vpcSecurityGroupIDRefs:
+  #AWS us-east-1 GCP us-east1
+  region: us-east-1
+  project: gcp-eng-ddiaas-dev
+  network: "ddiaas-dev-use1-vpc"
+  subnetwork: private-service-connect
+  numbackupstoretain: 3
   # The number of days for which automated backups are retained. Setting this parameter to a positive number enables backups.
   # Setting this parameter to 0 disables automated backups (in case of Aurora, 0 is N/A and will be set to 1 by default).
   # Possible values (0-35)
@@ -161,7 +170,6 @@ controllerConfig:
     minPasswordLength: 15
     passwordRotationPeriod: 60m
   pgTemp: "/pg-temp/"
-  region: us-east-1
   storageType: gp3
   supportSuperUserElevation: true
   # system funtions are created as functions in the database. The prefix is used as the schema name.
@@ -170,4 +178,4 @@ controllerConfig:
     ib_realm: "{{ .Values.ib.realm }}"
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
-  vpcSecurityGroupIDRefs:
+

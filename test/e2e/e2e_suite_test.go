@@ -28,6 +28,7 @@ import (
 	"github.com/go-logr/logr/funcr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/test/utils"
+	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -53,7 +54,6 @@ var logger logr.Logger
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
-
 	RegisterFailHandler(Fail)
 	fmt.Fprintf(GinkgoWriter, "Starting E2E suite\n")
 	RunSpecs(t, "e2e suite", Label("FailFast"))
@@ -82,6 +82,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = crossplanegcpv1beta2.SchemeBuilder.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	k8sClient, err = client.New(config.GetConfigOrDie(), client.Options{})
