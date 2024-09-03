@@ -184,20 +184,20 @@ func mutatePod(ctx context.Context, pod *corev1.Pod, secretName string, dbProxyI
 		// FIXME: turn these back on when timeouts can be tuned. It was restarting
 		// the pod too often.
 		// Test connection to upstream database
-		// LivenessProbe: &corev1.Probe{
-		// 	ProbeHandler: corev1.ProbeHandler{
-		// 		Exec: &corev1.ExecAction{
-		// 			Command: []string{
-		// 				"/bin/sh",
-		// 				"-c",
-		// 				fmt.Sprintf("psql \"$(cat /dbproxy/%s)\" -c \"SELECT 1\"", SecretKey),
-		// 			},
-		// 		},
-		// 	},
-		// 	InitialDelaySeconds: 30,
-		// 	PeriodSeconds:       15,
-		// 	TimeoutSeconds:      5,
-		// },
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						fmt.Sprintf("psql \"$(cat /dbproxy/%s)\" -c \"SELECT 1\"", SecretKey),
+					},
+				},
+			},
+			InitialDelaySeconds: 30,
+			PeriodSeconds:       15,
+			TimeoutSeconds:      5,
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      VolumeName,

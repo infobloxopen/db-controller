@@ -129,6 +129,9 @@ zapLogger:
   timeEncoding: rfc3339nano
 
 controllerConfig:
+  athena-shared:
+    masterUsername: root
+  authSource: secret
   #aws or gcp
   cloud: aws
   caCertificateIdentifier: "rds-ca-rsa2048-g1"

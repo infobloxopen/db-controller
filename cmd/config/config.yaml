@@ -1,3 +1,6 @@
+athena-shared:
+  masterUsername: root
+authSource: secret
 #aws or gcp
 cloud: aws
 pgTemp: "/tmp/"
