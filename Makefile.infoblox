@@ -97,6 +97,7 @@ push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 		--wait --wait-for-jobs \
 		--create-namespace \
 		-f helm/db-controller/minikube.yaml \
+		-f helm/db-controller/gcp.yaml \
 		--set dbController.class=`cat .id` \
 		--set env=`cat .env` \
 		${HELM_SETFLAGS}
