@@ -98,6 +98,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					AppID:                 "sample-app",
 					DatabaseName:          "sample_db",
 					SecretName:            "newdb-secret-db1",
+					DeletionPolicy:        "orphan",
 					Username:              "sample_user",
 					Type:                  "postgres",
 					EnableReplicationRole: ptr.To(false),
@@ -124,7 +125,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			Expect(dbinstance1).NotTo(BeEmpty())
 			dbInst := utils.DBInstanceType(cloud)
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, dbInst)
-			Expect(errors.IsNotFound(err)).To(BeTrue(), "dbinstance.rds %s exists, please delete", dbinstance1)
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "crossplane cr: %s exists, please delete", dbinstance1)
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
@@ -182,17 +183,37 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 			updatedDbClaim := &v1.DatabaseClaim{}
 			By(fmt.Sprintf("checking dbclaim %s status is ready", db1))
-			Eventually(func() (v1.DbState, error) {
-				err := k8sClient.Get(ctx, key, updatedDbClaim)
-				if err != nil {
-					Fail(err.Error(), 1)
-				}
-				return updatedDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
+			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
+			// FIXME: replace this hash naming scheme
+			{
+				wd, err := utils.GetProjectDir()
+				Expect(err).ToNot(HaveOccurred())
+
+				viperconfig := config.NewConfig(filepath.Join(wd, "cmd", "config", "config.yaml"))
+				hostParams, err := hostparams.New(viperconfig, updatedDbClaim)
+				Expect(err).ToNot(HaveOccurred())
+				dbinstance1update = fmt.Sprintf("%s-%s-%s", env, db1, hostParams.Hash())
+			}
+
+			By("Check Crossplane CR is created: " + dbinstance1update)
+			Eventually(func() error {
+				dbInst := utils.DBInstanceType(cloud)
+				return k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1update}, dbInst)
+			}, timeout_e2e, interval_e2e).Should(Succeed())
+			By("Check Crossplane CR is ready: " + dbinstance1update)
+			Eventually(func() bool {
+				dbInst := utils.DBInstanceType(cloud)
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1update}, dbInst)).Should(Succeed())
+
+				status, err := getResourceStatus(dbInst)
+				Expect(err).ToNot(HaveOccurred())
+				return isResourceReady(status) && isResourceSynced(status)
+			}, timeout_e2e, interval_e2e).Should(BeTrue())
 
 			var creds corev1.Secret
-			masterName := fmt.Sprintf("%s-master", dbinstance1)
-			By(fmt.Sprintf("checking crossplane secret: %s", masterName))
+			masterName := fmt.Sprintf("%s-master", dbinstance1update)
+			By(fmt.Sprintf("checking master crossplane secret: %s", masterName))
+
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: masterName, Namespace: namespace}, &creds)
 			}).Should(BeNil())
@@ -200,16 +221,38 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				return string(creds.Data["password"])
 			}).ShouldNot(BeEmpty())
 
-			By(fmt.Sprintf("checking crossplane secret: %s", dbinstance1))
+			// On GCP, this password is created by db-controller and takes longer to provision
+			By(fmt.Sprintf("checking crossplane secret: %s", dbinstance1update))
 			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1, Namespace: namespace}, &creds)
-			}).Should(BeNil())
-			// TODO: this secret is empty
+				return k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1update, Namespace: namespace}, &creds)
+			}, 30*time.Second, 500*time.Millisecond).Should(BeNil())
+			// TODO: this secret is empty on aws
 			// Eventually(func() string {
 			// 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1, Namespace: namespace}, &creds)).Should(Succeed())
 			// 	fmt.Printf("%#v\n", creds.Data)
 			// 	return string(creds.Data["password"])
 			// }, 100*time.Second, 500*time.Millisecond).ShouldNot(BeEmpty())
+
+			By("waiting for db-controller to poll to find out the instance is ready")
+			Eventually(func() (v1.DbState, error) {
+				err := k8sClient.Get(ctx, key, updatedDbClaim)
+				if err != nil {
+					Fail(err.Error(), 1)
+				}
+				// If error is not empty, check for not ready else fail
+				if updatedDbClaim.Status.Error != "" {
+					// Ignore certain errors, otherwise fail
+					errMsg := updatedDbClaim.Status.Error
+					switch {
+					case strings.Contains(errMsg, "resource is not ready"): // Ignore cluster provisioning errors
+					case strings.Contains(errMsg, "dial tcp: lookup"): // Ignore xnetworkrecord not ready errors
+					default:
+						Expect(updatedDbClaim.Status.Error).To(BeEmpty())
+					}
+				}
+
+				return updatedDbClaim.Status.ActiveDB.DbState, nil
+			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
 
 			nname := types.NamespacedName{Namespace: namespace, Name: updatedDbClaim.Spec.SecretName}
 			By(fmt.Sprintf("checking db-controller secret is created: %s", nname.Name))

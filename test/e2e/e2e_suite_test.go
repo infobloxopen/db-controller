@@ -132,11 +132,7 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 	By("Helm upgrading the manager")
-	args := []string{"deploy"}
-	if cloud == "gcp" {
-		args = append(args, "HELM_SETFLAGS='-f helm/db-controller/minikube_gcp.yaml'")
-	}
-	cmd = exec.Command("make", args...)
+	cmd = exec.Command("make", "deploy")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 

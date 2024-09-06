@@ -9,7 +9,6 @@ current_context=$(kubectl config current-context)
 # Check if the current context is one of the approved values
 is_approved=false
 for context in "${approved_contexts[@]}"; do
-    echo "Context: $context"
     if [[ "$current_context" == "$context" ]]; then
         is_approved=true
         break
@@ -17,9 +16,13 @@ for context in "${approved_contexts[@]}"; do
 done
 
 if $is_approved; then
-    echo "Current context is valid: $current_context"
-    exit 0
+    echo "Current context is valid: $current_context" >&2
 else
-    echo "Error: Current context is invalid: $current_context"
+    echo "Error: Current context is invalid: $current_context" >&2
     exit 1
+fi
+
+# if current context has gcp in it, export HELM_SETFLAGS
+if [[ "$current_context" == *"gcp"* ]]; then
+    echo "$HELM_SETFLAGS -f helm/db-controller/minikube_gcp.yaml"
 fi

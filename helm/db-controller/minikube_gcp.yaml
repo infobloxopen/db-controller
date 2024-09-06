@@ -1,2 +1,3 @@
 controllerConfig:
   region: us-east1
+  cloud: gcp
