@@ -1141,8 +1141,7 @@ func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceSt
 			//Cannot find version 15.3 for postgres\n\tstatus code: 400, request id:
 			if strings.Contains(condition.Message, "InvalidParameterCombination: Cannot find version") {
 				// extract the version from the message and update the dbClaim
-				return false, fmt.Errorf("requested database version(%s) is not available",
-					extractVersion(condition.Message))
+				return false, fmt.Errorf("%w: requested version %s", v1.ErrInvalidDBVersion, extractVersion(condition.Message))
 			}
 			return false, fmt.Errorf("resource is not ready: %s", condition.Message)
 		}

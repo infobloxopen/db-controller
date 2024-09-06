@@ -25,7 +25,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
 	if dbClaim.Spec.Type != v1.Postgres {
-		return false, fmt.Errorf("%w: %q must be one of %s", ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres})
+		return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres})
 	}
 
 	_, err := r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
