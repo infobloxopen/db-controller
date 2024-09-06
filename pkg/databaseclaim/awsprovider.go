@@ -28,7 +28,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, dbClai
 		return r.managePostgresDBInstanceAWS(ctx, dbHostIdentifier, dbClaim)
 	}
 
-	return false, fmt.Errorf("%w: %q must be one of %s", ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
+	return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
 
 }
 
