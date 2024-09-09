@@ -63,6 +63,108 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups:
+      - "alloydb.gcp.upbound.io"
+    resources:
+      - instances
+      - clusters
+      - backups
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - xnetworkrecords
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - forwardingrules
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - recordsets
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - addresses
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - managedzones
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - xnetworkrecords/finalizers
+    verbs:
+    - update
+  - apiGroups:
+    - persistance.infoblox.com
+    resources:
+    - xnetworkrecords/status
+    verbs:
+    - get
+    - patch
+    - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

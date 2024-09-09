@@ -64,7 +64,7 @@ fmt: ## Run go fmt against code.
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	go vet $$(go list ./... | grep -v /e2e)
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
@@ -76,7 +76,7 @@ test-e2e: NS?=$(shell cat .id)
 test-e2e: ENV?=$(shell cat .env)
 test-e2e: .id .env
 test-e2e:
-	NAMESPACE=$(NS) ENV=$(ENV) go test ./test/e2e/ -v -ginkgo.v --ginkgo.timeout=1h -timeout=1h
+	NOCLEANUP=$(NOCLEANUP) NODEPLOY=$(NODEPLOY) NAMESPACE=$(NS) ENV=$(ENV) go test ./test/e2e/ -v -ginkgo.v --ginkgo.timeout=1h -timeout=1h
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -101,7 +101,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

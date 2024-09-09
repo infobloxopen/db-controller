@@ -9,6 +9,7 @@ current_context=$(kubectl config current-context)
 # Check if the current context is one of the approved values
 is_approved=false
 for context in "${approved_contexts[@]}"; do
+    echo "Context: $context"
     if [[ "$current_context" == "$context" ]]; then
         is_approved=true
         break

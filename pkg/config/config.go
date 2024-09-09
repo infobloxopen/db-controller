@@ -8,11 +8,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const (
-	AWSAuthSourceType    = "aws"
-	SecretAuthSourceType = "secret"
-)
-
 var configLog = ctrl.Log.WithName("configLog")
 
 // NewConfig creates a new db-controller config

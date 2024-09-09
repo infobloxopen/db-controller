@@ -24,17 +24,17 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// XNetworkRecordsSpec defines the desired state of XNetworkRecords
-type XNetworkRecordsSpec struct {
+// XNetworkRecordSpec defines the desired state of XNetworkRecord
+type XNetworkRecordSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	xpv1.ResourceSpec `json:",inline"`
 
 	// Parameters are used to configured the XR, all are required
-	Parameters XNetworkRecordsParameters `json:"parameters"`
+	Parameters XNetworkRecordParameters `json:"parameters"`
 }
 
-type XNetworkRecordsParameters struct {
+type XNetworkRecordParameters struct {
 	// Network is the VPC network to provision IP addresses for
 	// PSC
 	// ie. projects/gcp-eng-ddiaas-dev/global/networks/alloydb-psc-network
@@ -57,8 +57,8 @@ type XNetworkRecordsParameters struct {
 	Subnetwork string `json:"subnetwork"`
 }
 
-// XNetworkRecordsStatus defines the observed state of XNetworkRecords
-type XNetworkRecordsStatus struct {
+// XNetworkRecordStatus defines the observed state of XNetworkRecord
+type XNetworkRecordStatus struct {
 	xpv1.ResourceStatus `json:",inline"`
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -78,22 +78,22 @@ type XNetworkRecordsStatus struct {
 
 // Generate RBAC for these types
 
-// +kubebuilder:rbac:groups=persistance.infoblox.com,resources=xnetworkrecords,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=persistance.infoblox.com,resources=xnetworkrecords/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=persistance.infoblox.com,resources=xnetworkrecords/finalizers,verbs=update
+// +kubebuilder:rbac:groups=persistance.infoblox.com,resources=xnetworkrecord,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=persistance.infoblox.com,resources=xnetworkrecord/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=persistance.infoblox.com,resources=xnetworkrecord/finalizers,verbs=update
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=xnr
 // +kubebuilder:subresource:status
 // +kubebuilder:noskip
 
-// XNetworkRecords is the Schema for the xnetworkrecords API
-type XNetworkRecords struct {
+// XNetworkRecord is the Schema for the xnetworkrecord API
+type XNetworkRecord struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   XNetworkRecordsSpec   `json:"spec,omitempty"`
-	Status XNetworkRecordsStatus `json:"status,omitempty"`
+	Spec   XNetworkRecordSpec   `json:"spec,omitempty"`
+	Status XNetworkRecordStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -101,13 +101,13 @@ type XNetworkRecords struct {
 // https://github.com/crossplane/crossplane-tools
 // +kubebuilder:skip
 
-// XNetworkRecordsList contains a list of XNetworkRecords
-type XNetworkRecordsList struct {
+// XNetworkRecordList contains a list of XNetworkRecord
+type XNetworkRecordList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []XNetworkRecords `json:"items"`
+	Items           []XNetworkRecord `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&XNetworkRecords{}, &XNetworkRecordsList{})
+	SchemeBuilder.Register(&XNetworkRecord{}, &XNetworkRecordList{})
 }

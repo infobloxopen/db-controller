@@ -32,7 +32,7 @@ resources:
     namespaced: true
   domain: atlas.infoblox.com
   group: persistance.infoblox.com
-  kind: XNetworkRecords
+  kind: XNetworkRecord
   path: github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1
   version: v1alpha1
 version: "3"

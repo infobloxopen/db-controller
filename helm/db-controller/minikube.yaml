@@ -1,4 +1,5 @@
 controllerConfig:
+  #AWS us-east-1 GCP us-east1
   region: us-east-1
   vpcSecurityGroupIDRefs: box-3
   dbSubnetGroupNameRef: box-3
@@ -10,3 +11,9 @@ zapLogger:
   level: debug
 dbproxy:
   enabled: true
+
+# Block XRDs and XRs in manual deploys
+xrd:
+  create: false
+xr:
+  create: false
