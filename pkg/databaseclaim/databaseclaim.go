@@ -44,9 +44,6 @@ var (
 	cachedMasterPasswdForExistingDB = "cachedMasterPasswdForExistingDB"
 	masterSecretSuffix              = "-master"
 	masterPasswordKey               = "password"
-	// infoLevel is used to set V level to 0 as suggested by official docs
-	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	infoLevel = 0
 	// debugLevel is used to set V level to 1 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	debugLevel = 1

@@ -154,6 +154,10 @@ type DatabaseClaimSpec struct {
 	// +optional
 	Shape string `json:"shape"`
 
+	// The optional number of CPUs to provision the instance with (GCP only)
+	// +optional
+	CPUCount string `json:"cpuCount"`
+
 	// The optional MinStorageGB value requests the minimum database host storage capacity in GBytes
 	// +optional
 	MinStorageGB int `json:"minStorageGB"`

@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -350,6 +351,19 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 						DeletionPolicy:          params.DeletionPolicy,
 					},
 				},
+			}
+
+			//CPUCount is optional
+			if dbClaim.Spec.CPUCount != "" {
+
+				if cpuCount, parseErr := strconv.ParseFloat(dbClaim.Spec.CPUCount, 64); parseErr == nil {
+					dbInstance.Spec.ForProvider.MachineConfig = &crossplanegcp.MachineConfigParameters{
+						CPUCount: ptr.To(cpuCount),
+					}
+				} else {
+					return false, parseErr
+				}
+
 			}
 
 			//create master password secret, before calling create on DBInstance

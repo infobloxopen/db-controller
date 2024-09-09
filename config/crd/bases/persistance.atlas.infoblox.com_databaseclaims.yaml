@@ -72,6 +72,10 @@ spec:
                 default: default
                 description: Class is used to run multiple instances of dbcontroller.
                 type: string
+              cpuCount:
+                description: The optional number of CPUs to provision the instance
+                  with (GCP only)
+                type: string
               databaseName:
                 description: The name of the database.
                 type: string
