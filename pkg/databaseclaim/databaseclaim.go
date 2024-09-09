@@ -288,14 +288,14 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 			if basefun.GetCloud(r.Config.Viper) == "aws" {
 				// our finalizer is present, so lets handle any external dependency
-				if err := r.deleteExternalResourcesAWS(ctx, &dbClaim); err != nil {
+				if err := r.deleteExternalResourcesAWS(ctx, &reqInfo, &dbClaim); err != nil {
 					// if fail to delete the external dependency here, return with error
 					// so that it can be retried
 					return ctrl.Result{}, err
 				}
 			} else {
 				// our finalizer is present, so lets handle any external dependency
-				if err := r.deleteExternalResourcesGCP(ctx, &dbClaim); err != nil {
+				if err := r.deleteExternalResourcesGCP(ctx, &reqInfo, &dbClaim); err != nil {
 					// if fail to delete the external dependency here, return with error
 					// so that it can be retried
 					return ctrl.Result{}, err
@@ -584,13 +584,13 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	isReady := false
 	var err error
 	if cloud == "aws" {
-		isReady, err = r.manageCloudHostAWS(ctx, dbClaim)
+		isReady, err = r.manageCloudHostAWS(ctx, reqInfo, dbClaim, operationalMode)
 		if err != nil {
 			logr.Error(err, "manage_cloud_host_AWS")
 			return ctrl.Result{}, err
 		}
 	} else {
-		isReady, err = r.manageCloudHostGCP(ctx, dbClaim)
+		isReady, err = r.manageCloudHostGCP(ctx, reqInfo, dbClaim)
 		if err != nil {
 			logr.Error(err, "manage_cloud_host_GCP")
 			return ctrl.Result{}, err

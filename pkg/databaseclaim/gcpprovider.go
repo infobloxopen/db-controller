@@ -21,20 +21,20 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClaim *v1.DatabaseClaim) (bool, error) {
-	dbHostIdentifier := r.Input.DbHostIdentifier
+func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (bool, error) {
+	dbHostIdentifier := reqInfo.DbHostIdentifier
 
 	if dbClaim.Spec.Type != v1.Postgres {
 		return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres})
 	}
 
-	_, err := r.manageDBClusterGCP(ctx, dbHostIdentifier, dbClaim)
+	_, err := r.manageDBClusterGCP(ctx, reqInfo, dbHostIdentifier, dbClaim)
 	if err != nil {
 		return false, err
 	}
 
 	log.FromContext(ctx).Info("dbcluster is ready. proceeding to manage dbinstance")
-	insReady, err := r.managePostgresDBInstanceGCP(ctx, dbHostIdentifier, dbClaim)
+	insReady, err := r.managePostgresDBInstanceGCP(ctx, reqInfo, dbHostIdentifier, dbClaim)
 	if err != nil {
 		return false, err
 	}
@@ -45,7 +45,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 			return false, err
 		}
 
-		err = r.createSecretWithConnInfo(ctx, dbHostIdentifier, dbClaim)
+		err = r.createSecretWithConnInfo(ctx, reqInfo, dbHostIdentifier, dbClaim)
 		if err != nil {
 			log.FromContext(ctx).Error(err, "error writing secret with conn info")
 			return false, err
@@ -55,7 +55,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, dbClai
 	return insReady, nil
 }
 
-func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, dbHostIdentifier string, dbclaim *v1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, reqInfo *requestInfo, dbHostIdentifier string, dbclaim *v1.DatabaseClaim) error {
 
 	var instance crossplanegcp.Instance
 	err := r.Client.Get(ctx, client.ObjectKey{
@@ -76,7 +76,7 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 
 	pass := string(secret.Data["attribute.initial_user.0.password"])
 
-	secret.Data["username"] = []byte(r.Input.HostParams.MasterUsername)
+	secret.Data["username"] = []byte(reqInfo.HostParams.MasterUsername)
 	secret.Data["password"] = []byte(pass)
 	secret.Data["endpoint"] = []byte(*instance.Status.AtProvider.PscInstanceConfig.PscDNSName)
 	secret.Data["port"] = []byte("5432")
@@ -139,7 +139,7 @@ func (r *DatabaseClaimReconciler) manageNetworkRecord(ctx context.Context, dbHos
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHostName string,
+func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInfo *requestInfo, dbHostName string,
 	dbClaim *v1.DatabaseClaim) (bool, error) {
 
 	logr := log.FromContext(ctx)
@@ -167,7 +167,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 
-	params := &r.Input.HostParams
+	params := &reqInfo.HostParams
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -259,7 +259,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, dbHost
 		logr.Error(err, "dbCluster", "dbHostIdentifier", dbHostName)
 		return false, err
 	}
-	_, err = r.updateDBClusterGCP(ctx, dbClaim, dbCluster)
+	_, err = r.updateDBClusterGCP(ctx, reqInfo, dbClaim, dbCluster)
 	if err != nil {
 		return false, err
 	}
@@ -275,7 +275,7 @@ func getAlloyDBVersion(engineVersion *string) *string {
 	return ptr.To("POSTGRES_15")
 }
 
-func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Context, dbHostName string, dbClaim *v1.DatabaseClaim) (bool, error) {
+func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Context, reqInfo *requestInfo, dbHostName string, dbClaim *v1.DatabaseClaim) (bool, error) {
 	logr := log.FromContext(ctx)
 	serviceNS, err := r.getServiceNamespace()
 	if err != nil {
@@ -297,7 +297,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	}
 	dbInstance := &crossplanegcp.Instance{}
 
-	params := &r.Input.HostParams
+	params := &reqInfo.HostParams
 	multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
@@ -376,7 +376,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
-func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, dbClaim *v1.DatabaseClaim, dbCluster *crossplanegcp.Cluster) (bool, error) {
+func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, dbCluster *crossplanegcp.Cluster) (bool, error) {
 
 	logr := log.FromContext(ctx)
 
@@ -385,7 +385,7 @@ func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, dbClai
 
 	// Update DBCluster
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
-	if r.Input.BackupRetentionDays != 0 {
+	if reqInfo.BackupRetentionDays != 0 {
 		dbCluster.Spec.ForProvider.AutomatedBackupPolicy = &crossplanegcp.AutomatedBackupPolicyParameters{
 			Enabled: ptr.To(true),
 			QuantityBasedRetention: &crossplanegcp.QuantityBasedRetentionParameters{
@@ -393,7 +393,7 @@ func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, dbClai
 			},
 		}
 	}
-	dbCluster.Spec.DeletionPolicy = r.Input.HostParams.DeletionPolicy
+	dbCluster.Spec.DeletionPolicy = reqInfo.HostParams.DeletionPolicy
 
 	logr.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 	err := r.Client.Patch(ctx, dbCluster, patchDBCluster)
@@ -404,13 +404,13 @@ func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, dbClai
 	return true, nil
 }
 
-func (r *DatabaseClaimReconciler) deleteExternalResourcesGCP(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) deleteExternalResourcesGCP(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) error {
 	// delete any external resources associated with the dbClaim
 	// Only RDS Instance are managed for now
 	reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
 
 	if reclaimPolicy == "delete" {
-		dbHostName := r.getDynamicHostName(dbClaim)
+		dbHostName := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
 
 		// Delete
 		if err := r.deleteCloudDatabaseGCP(dbHostName, ctx); err != nil {

@@ -18,37 +18,37 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, dbClaim *v1.DatabaseClaim) (bool, error) {
-	dbHostIdentifier := r.Input.DbHostIdentifier
+func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
+	dbHostIdentifier := reqInfo.DbHostIdentifier
 
 	switch dbClaim.Spec.Type {
 	case v1.AuroraPostgres:
-		return r.manageAuroraDBInstances(ctx, dbHostIdentifier, dbClaim, false)
+		return r.manageAuroraDBInstances(ctx, reqInfo, dbHostIdentifier, dbClaim, false, operationalMode)
 	case v1.Postgres:
-		return r.managePostgresDBInstanceAWS(ctx, dbHostIdentifier, dbClaim)
+		return r.managePostgresDBInstanceAWS(ctx, reqInfo, dbHostIdentifier, dbClaim, operationalMode)
 	}
 
 	return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
 
 }
 
-func (r *DatabaseClaimReconciler) manageAuroraDBInstances(ctx context.Context, dbHostIdentifier string, dbClaim *v1.DatabaseClaim, isSecondIns bool) (bool, error) {
+func (r *DatabaseClaimReconciler) manageAuroraDBInstances(ctx context.Context, reqInfo *requestInfo, dbHostIdentifier string, dbClaim *v1.DatabaseClaim, isSecondIns bool, operationalMode ModeEnum) (bool, error) {
 
 	if basefun.GetCloud(r.Config.Viper) == "aws" {
-		_, err := r.manageDBClusterAWS(ctx, dbHostIdentifier, dbClaim)
+		_, err := r.manageDBClusterAWS(ctx, dbHostIdentifier, reqInfo, dbClaim, operationalMode)
 		if err != nil {
 			return false, err
 		}
 	}
 
 	log.FromContext(ctx).Info("dbcluster is ready. proceeding to manage dbinstance")
-	firstInsReady, err := r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, false)
+	firstInsReady, err := r.manageAuroraDBInstance(ctx, reqInfo, dbHostIdentifier, dbClaim, false)
 	if err != nil {
 		return false, err
 	}
 	secondInsReady := true
 	if basefun.GetMultiAZEnabled(r.Config.Viper) {
-		secondInsReady, err = r.manageAuroraDBInstance(ctx, dbHostIdentifier, dbClaim, true)
+		secondInsReady, err = r.manageAuroraDBInstance(ctx, reqInfo, dbHostIdentifier, dbClaim, true)
 		if err != nil {
 			return false, err
 		}
@@ -56,12 +56,12 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstances(ctx context.Context, d
 	return firstInsReady && secondInsReady, nil
 }
 
-func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHostName string,
-	dbClaim *v1.DatabaseClaim) (bool, error) {
+func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHostName string, reqInfo *requestInfo,
+	dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
 
 	logr := log.FromContext(ctx)
 
-	pgName, err := r.manageClusterParamGroup(ctx, dbClaim)
+	pgName, err := r.manageClusterParamGroup(ctx, reqInfo, dbClaim)
 	if err != nil {
 		logr.Error(err, "parameter group setup failed")
 		return false, err
@@ -89,13 +89,13 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
 
-	params := &r.Input.HostParams
+	params := &reqInfo.HostParams
 	restoreFromSource := defaultRestoreFromSource
 	encryptStrg := true
 
 	var auroraBackupRetentionPeriod *int64
-	if r.Input.BackupRetentionDays != 0 {
-		auroraBackupRetentionPeriod = &r.Input.BackupRetentionDays
+	if reqInfo.BackupRetentionDays != 0 {
+		auroraBackupRetentionPeriod = &reqInfo.BackupRetentionDays
 	} else {
 		auroraBackupRetentionPeriod = nil
 	}
@@ -149,7 +149,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 					StorageEncrypted:                &encryptStrg,
 					StorageType:                     &params.StorageType,
 					Port:                            &params.Port,
-					EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
+					EnableCloudwatchLogsExports:     reqInfo.EnableCloudwatchLogsExport,
 					IOPS:                            nil,
 					PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
 				},
@@ -160,7 +160,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 				},
 			},
 		}
-		if r.mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+		if operationalMode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
 			snapshotID := dbClaim.Spec.RestoreFrom
 			dbCluster.Spec.ForProvider.CustomDBClusterParameters.RestoreFrom = &crossplaneaws.RestoreDBClusterBackupConfiguration{
 				Snapshot: &crossplaneaws.SnapshotRestoreBackupConfiguration{
@@ -186,7 +186,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		logr.Error(err, "dbCluster", "dbHostIdentifier", dbHostName)
 		return false, err
 	}
-	_, err = r.updateDBClusterAWS(ctx, dbClaim, dbCluster)
+	_, err = r.updateDBClusterAWS(ctx, reqInfo, dbClaim, dbCluster)
 	if err != nil {
 		return false, err
 	}
@@ -194,7 +194,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 	return r.isResourceReady(dbCluster.Status.ResourceStatus)
 }
 
-func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Context, dbHostName string, dbClaim *v1.DatabaseClaim) (bool, error) {
+func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Context, reqInfo *requestInfo, dbHostName string, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
 	logr := log.FromContext(ctx)
 	serviceNS, err := r.getServiceNamespace()
 	if err != nil {
@@ -213,7 +213,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 		Key: masterPasswordKey,
 	}
 
-	pgName, err := r.managePostgresParamGroup(ctx, dbClaim)
+	pgName, err := r.managePostgresParamGroup(ctx, reqInfo, dbClaim)
 	if err != nil {
 		logr.Error(err, "parameter group setup failed")
 		return false, err
@@ -226,7 +226,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 	restoreFromSource := defaultRestoreFromSource
 	dbInstance := &crossplaneaws.DBInstance{}
 
-	params := &r.Input.HostParams
+	params := &reqInfo.HostParams
 	ms64 := int64(params.MinStorageGB)
 	multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
 	trueVal := true
@@ -258,7 +258,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
-						CACertificateIdentifier: &r.Input.CACertificateIdentifier,
+						CACertificateIdentifier: &reqInfo.CACertificateIdentifier,
 						Region:                  region,
 						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
@@ -286,9 +286,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
 						EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
-						EnablePerformanceInsights:       &r.Input.EnablePerfInsight,
-						EnableCloudwatchLogsExports:     r.Input.EnableCloudwatchLogsExport,
-						BackupRetentionPeriod:           &r.Input.BackupRetentionDays,
+						EnablePerformanceInsights:       &reqInfo.EnablePerfInsight,
+						EnableCloudwatchLogsExports:     reqInfo.EnableCloudwatchLogsExport,
+						BackupRetentionPeriod:           &reqInfo.BackupRetentionDays,
 						StorageEncrypted:                &trueVal,
 						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
@@ -301,7 +301,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 					},
 				},
 			}
-			if r.mode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
+			if operationalMode == M_UseNewDB && dbClaim.Spec.RestoreFrom != "" {
 				snapshotID := dbClaim.Spec.RestoreFrom
 				dbInstance.Spec.ForProvider.CustomDBInstanceParameters.RestoreFrom = &crossplaneaws.RestoreDBInstanceBackupConfiguration{
 					Snapshot: &crossplaneaws.SnapshotRestoreBackupConfiguration{
@@ -333,14 +333,14 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 		return false, err
 	}
 
-	_, err = r.updateDBInstance(ctx, dbClaim, dbInstance)
+	_, err = r.updateDBInstance(ctx, reqInfo, dbClaim, dbInstance)
 	if err != nil {
 		return false, err
 	}
 	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
-func (r *DatabaseClaimReconciler) updateDBClusterAWS(ctx context.Context, dbClaim *v1.DatabaseClaim, dbCluster *crossplaneaws.DBCluster) (bool, error) {
+func (r *DatabaseClaimReconciler) updateDBClusterAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, dbCluster *crossplaneaws.DBCluster) (bool, error) {
 
 	logr := log.FromContext(ctx)
 
@@ -350,11 +350,11 @@ func (r *DatabaseClaimReconciler) updateDBClusterAWS(ctx context.Context, dbClai
 	// Update DBCluster
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbCluster.Spec.ForProvider.Tags = DBClaimTags(dbClaim.Spec.Tags).DBTags()
-	if r.Input.BackupRetentionDays != 0 {
-		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &r.Input.BackupRetentionDays
+	if reqInfo.BackupRetentionDays != 0 {
+		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &reqInfo.BackupRetentionDays
 	}
-	dbCluster.Spec.ForProvider.StorageType = &r.Input.HostParams.StorageType
-	dbCluster.Spec.DeletionPolicy = r.Input.HostParams.DeletionPolicy
+	dbCluster.Spec.ForProvider.StorageType = &reqInfo.HostParams.StorageType
+	dbCluster.Spec.DeletionPolicy = reqInfo.HostParams.DeletionPolicy
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
@@ -375,14 +375,14 @@ func (r *DatabaseClaimReconciler) updateDBClusterAWS(ctx context.Context, dbClai
 	return true, nil
 }
 
-func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, dbHostName string, dbClaim *v1.DatabaseClaim, isSecondIns bool) (bool, error) {
+func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, reqInfo *requestInfo, dbHostName string, dbClaim *v1.DatabaseClaim, isSecondIns bool) (bool, error) {
 	logr := log.FromContext(ctx)
 	// Infrastructure Config
 	region := basefun.GetRegion(r.Config.Viper)
 	providerConfigReference := xpv1.Reference{
 		Name: basefun.GetProviderConfig(r.Config.Viper),
 	}
-	pgName, err := r.manageAuroraPostgresParamGroup(ctx, dbClaim)
+	pgName, err := r.manageAuroraPostgresParamGroup(ctx, reqInfo, dbClaim)
 	if err != nil {
 		logr.Error(err, "parameter group setup failed")
 		return false, err
@@ -393,7 +393,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	}
 	dbInstance := &crossplaneaws.DBInstance{}
 
-	params := &r.Input.HostParams
+	params := &reqInfo.HostParams
 	trueVal := true
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
@@ -415,7 +415,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
-						CACertificateIdentifier: &r.Input.CACertificateIdentifier,
+						CACertificateIdentifier: &reqInfo.CACertificateIdentifier,
 						Region:                  region,
 						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
@@ -429,7 +429,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						// Items from Config
 						PubliclyAccessible:          &params.PubliclyAccessible,
 						DBClusterIdentifier:         &dbClusterIdentifier,
-						EnablePerformanceInsights:   &r.Input.EnablePerfInsight,
+						EnablePerformanceInsights:   &reqInfo.EnablePerfInsight,
 						EnableCloudwatchLogsExports: nil,
 						PreferredMaintenanceWindow:  dbClaim.Spec.PreferredMaintenanceWindow,
 					},
@@ -456,7 +456,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 		return false, err
 	}
 
-	_, err = r.updateDBInstance(ctx, dbClaim, dbInstance)
+	_, err = r.updateDBInstance(ctx, reqInfo, dbClaim, dbInstance)
 	if err != nil {
 		return false, err
 	}
@@ -464,7 +464,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 	return r.isResourceReady(dbInstance.Status.ResourceStatus)
 }
 
-func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (string, error) {
 
 	logr := log.FromContext(ctx)
 
@@ -475,12 +475,12 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	forceSsl := "rds.force_ssl"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(dbClaim)
+	params := &reqInfo.HostParams
+	pgName := r.getParameterGroupName(params, dbClaim, reqInfo.DbType)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
-	cronValue := r.Input.MasterConnInfo.DatabaseName
+	cronValue := reqInfo.MasterConnInfo.DatabaseName
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
@@ -555,7 +555,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}
 	return pgName, nil
 }
-func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (string, error) {
 
 	logr := log.FromContext(ctx)
 
@@ -563,12 +563,12 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	reboot := "pending-reboot"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(dbClaim)
+	params := &reqInfo.HostParams
+	pgName := r.getParameterGroupName(params, dbClaim, reqInfo.DbType)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
-	cronValue := r.Input.MasterConnInfo.DatabaseName
+	cronValue := reqInfo.MasterConnInfo.DatabaseName
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
@@ -636,7 +636,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	return pgName, nil
 }
 
-func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (string, error) {
 
 	logr := log.FromContext(ctx)
 
@@ -647,12 +647,12 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	forceSsl := "rds.force_ssl"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	params := &r.Input.HostParams
-	pgName := r.getParameterGroupName(dbClaim)
+	params := &reqInfo.HostParams
+	pgName := r.getParameterGroupName(params, dbClaim, reqInfo.DbType)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
-	cronValue := r.Input.MasterConnInfo.DatabaseName
+	cronValue := reqInfo.MasterConnInfo.DatabaseName
 	desc := "custom PG for " + pgName
 
 	providerConfigReference := xpv1.Reference{
@@ -728,14 +728,14 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, d
 	return pgName, nil
 }
 
-func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) error {
 	// delete any external resources associated with the dbClaim
 	// Only RDS Instance are managed for now
 	reclaimPolicy := basefun.GetDefaultReclaimPolicy(r.Config.Viper)
 
 	if reclaimPolicy == "delete" {
-		dbHostName := r.getDynamicHostName(dbClaim)
-		pgName := r.getParameterGroupName(dbClaim)
+		dbHostName := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
+		pgName := r.getParameterGroupName(&reqInfo.HostParams, dbClaim, reqInfo.DbType)
 
 		// Delete
 		if err := r.deleteCloudDatabaseAWS(dbHostName, ctx); err != nil {
@@ -861,7 +861,7 @@ func (r *DatabaseClaimReconciler) deleteParameterGroupAWS(ctx context.Context, p
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim *v1.DatabaseClaim, dbInstance *crossplaneaws.DBInstance) (bool, error) {
+func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, dbInstance *crossplaneaws.DBInstance) (bool, error) {
 
 	logr := log.FromContext(ctx)
 
@@ -871,7 +871,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
-	params := &r.Input.HostParams
+	params := &reqInfo.HostParams
 	if dbClaim.Spec.Type == v1.Postgres {
 		multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
 		ms64 := int64(params.MinStorageGB)
@@ -885,13 +885,13 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 		}
 
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
-		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = r.Input.EnableCloudwatchLogsExport
+		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = reqInfo.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
 	}
-	enablePerfInsight := r.Input.EnablePerfInsight
+	enablePerfInsight := reqInfo.EnablePerfInsight
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
 	dbInstance.Spec.DeletionPolicy = params.DeletionPolicy
-	dbInstance.Spec.ForProvider.CACertificateIdentifier = &r.Input.CACertificateIdentifier
+	dbInstance.Spec.ForProvider.CACertificateIdentifier = &reqInfo.CACertificateIdentifier
 	if dbClaim.Spec.Type == v1.AuroraPostgres {
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = nil
 	}
