@@ -21,13 +21,18 @@ import (
 func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, dbClaim *v1.DatabaseClaim) (bool, error) {
 	dbHostIdentifier := r.Input.DbHostIdentifier
 
-	if dbClaim.Spec.Type == v1.Postgres {
+	switch dbClaim.Spec.Type {
+	case v1.AuroraPostgres:
+		return r.manageAuroraDBInstances(ctx, dbHostIdentifier, dbClaim, false)
+	case v1.Postgres:
 		return r.managePostgresDBInstanceAWS(ctx, dbHostIdentifier, dbClaim)
 	}
 
-	if dbClaim.Spec.Type != v1.AuroraPostgres {
-		return false, fmt.Errorf("unsupported db type requested - %s", dbClaim.Spec.Type)
-	}
+	return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
+
+}
+
+func (r *DatabaseClaimReconciler) manageAuroraDBInstances(ctx context.Context, dbHostIdentifier string, dbClaim *v1.DatabaseClaim, isSecondIns bool) (bool, error) {
 
 	if basefun.GetCloud(r.Config.Viper) == "aws" {
 		_, err := r.manageDBClusterAWS(ctx, dbHostIdentifier, dbClaim)

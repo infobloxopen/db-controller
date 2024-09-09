@@ -22,7 +22,10 @@ import (
 	"os/exec"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2" //nolint:golint,revive
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -137,4 +140,26 @@ func GetProjectDir() (string, error) {
 	}
 	wd = strings.Replace(wd, "/test/e2e", "", -1)
 	return wd, nil
+}
+
+func GetKubeContext() (string, error) {
+	cmd := exec.Command("kubectl", "config", "current-context")
+	output, err := Run(cmd)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
+// DBInstanceType returns the DBInstance type based on the cloud provider
+func DBInstanceType(cloud string) client.Object {
+	switch cloud {
+	case "gcp":
+		return &crossplanegcp.Instance{}
+	case "aws":
+		return &crossplaneaws.DBInstance{}
+	default:
+		return nil
+	}
 }

@@ -187,7 +187,7 @@ spec:
           exit 0
   shareProcessNamespace: true
   # Sidecar has a liveness probe, allow it to restart
-  restartPolicy: OnFailure
+  restartPolicy: Never
   volumes:
     - name: dsn-volume
       secret:
