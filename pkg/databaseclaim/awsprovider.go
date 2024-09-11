@@ -23,7 +23,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, dbClai
 
 	switch dbClaim.Spec.Type {
 	case v1.AuroraPostgres:
-		return r.manageAuroraDBInstances(ctx, dbHostIdentifier, dbClaim, false)
+		return r.manageAuroraDBInstances(ctx, dbHostIdentifier, dbClaim)
 	case v1.Postgres:
 		return r.managePostgresDBInstanceAWS(ctx, dbHostIdentifier, dbClaim)
 	}
@@ -32,7 +32,7 @@ func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, dbClai
 
 }
 
-func (r *DatabaseClaimReconciler) manageAuroraDBInstances(ctx context.Context, dbHostIdentifier string, dbClaim *v1.DatabaseClaim, isSecondIns bool) (bool, error) {
+func (r *DatabaseClaimReconciler) manageAuroraDBInstances(ctx context.Context, dbHostIdentifier string, dbClaim *v1.DatabaseClaim) (bool, error) {
 
 	if basefun.GetCloud(r.Config.Viper) == "aws" {
 		_, err := r.manageDBClusterAWS(ctx, dbHostIdentifier, dbClaim)
@@ -281,7 +281,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 						DBInstanceClass:     &params.InstanceClass,
 						AllocatedStorage:    &ms64,
 						MaxAllocatedStorage: maxStorageVal,
-						Tags:                ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
+						Tags:                ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), OperationalStatusTagKey, OperationalStatusActiveValue),
 						// Items from Config
 						MasterUsername:                  &params.MasterUsername,
 						PubliclyAccessible:              &params.PubliclyAccessible,
@@ -425,7 +425,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, db
 						DBParameterGroupName: &pgName,
 						Engine:               &params.Engine,
 						DBInstanceClass:      &params.InstanceClass,
-						Tags:                 ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue),
+						Tags:                 ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), OperationalStatusTagKey, OperationalStatusActiveValue),
 						// Items from Config
 						PubliclyAccessible:          &params.PubliclyAccessible,
 						DBClusterIdentifier:         &dbClusterIdentifier,
@@ -870,7 +870,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, dbClaim 
 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
-	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), operationalStatusTagKey, operationalStatusActiveValue)
+	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), OperationalStatusTagKey, OperationalStatusActiveValue)
 	params := &r.Input.HostParams
 	if dbClaim.Spec.Type == v1.Postgres {
 		multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)
@@ -942,14 +942,14 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbParamGroup(ctx context.
 	}
 	operationalTagForProviderPresent := false
 	for _, tag := range dbParameterGroup.Spec.ForProvider.Tags {
-		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+		if *tag.Key == OperationalStatusTagKey && *tag.Value == OperationalStatusInactiveValue {
 			operationalTagForProviderPresent = true
 		}
 	}
 	if !operationalTagForProviderPresent {
 		patchDBParameterGroup := client.MergeFrom(dbParameterGroup.DeepCopy())
 
-		dbParameterGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbParameterGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+		dbParameterGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbParameterGroup.Spec.ForProvider.Tags, OperationalStatusTagKey, OperationalStatusInactiveValue)
 
 		err := r.Client.Patch(ctx, dbParameterGroup, patchDBParameterGroup)
 		if err != nil {
@@ -974,7 +974,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx c
 
 	operationalTagForProviderPresent := false
 	for _, tag := range dbClusterParamGroup.Spec.ForProvider.Tags {
-		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+		if *tag.Key == OperationalStatusTagKey && *tag.Value == OperationalStatusInactiveValue {
 			operationalTagForProviderPresent = true
 		}
 	}
@@ -982,7 +982,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbClusterParamGroup(ctx c
 	if !operationalTagForProviderPresent {
 		patchDBClusterParameterGroup := client.MergeFrom(dbClusterParamGroup.DeepCopy())
 
-		dbClusterParamGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbClusterParamGroup.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+		dbClusterParamGroup.Spec.ForProvider.Tags = ReplaceOrAddTag(dbClusterParamGroup.Spec.ForProvider.Tags, OperationalStatusTagKey, OperationalStatusInactiveValue)
 
 		err := r.Client.Patch(ctx, dbClusterParamGroup, patchDBClusterParameterGroup)
 		if err != nil {
@@ -1005,7 +1005,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Con
 	}
 	operationalTagForProviderPresent := false
 	for _, tag := range dbCluster.Spec.ForProvider.Tags {
-		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+		if *tag.Key == OperationalStatusTagKey && *tag.Value == OperationalStatusInactiveValue {
 			operationalTagForProviderPresent = true
 		}
 	}
@@ -1013,7 +1013,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbCluster(ctx context.Con
 	if !operationalTagForProviderPresent {
 		patchDBClusterParameterGroup := client.MergeFrom(dbCluster.DeepCopy())
 
-		dbCluster.Spec.ForProvider.Tags = ReplaceOrAddTag(dbCluster.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+		dbCluster.Spec.ForProvider.Tags = ReplaceOrAddTag(dbCluster.Spec.ForProvider.Tags, OperationalStatusTagKey, OperationalStatusInactiveValue)
 
 		err := r.Client.Patch(ctx, dbCluster, patchDBClusterParameterGroup)
 		if err != nil {
@@ -1040,13 +1040,13 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Co
 		operationalTagAtProviderPresent := false
 		// Checking whether tags are already requested
 		for _, tag := range dbInstance.Spec.ForProvider.Tags {
-			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+			if *tag.Key == OperationalStatusTagKey && *tag.Value == OperationalStatusInactiveValue {
 				operationalTagForProviderPresent = true
 			}
 		}
 		// checking whether tags have got updated on AWS (This will be done by chekcing tags at AtProvider)
 		for _, tag := range dbInstance.Status.AtProvider.TagList {
-			if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+			if *tag.Key == OperationalStatusTagKey && *tag.Value == OperationalStatusInactiveValue {
 				operationalTagAtProviderPresent = true
 			}
 		}
@@ -1054,7 +1054,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Co
 		if !operationalTagForProviderPresent {
 			patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 
-			dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(dbInstance.Spec.ForProvider.Tags, operationalStatusTagKey, operationalStatusInactiveValue)
+			dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(dbInstance.Spec.ForProvider.Tags, OperationalStatusTagKey, OperationalStatusInactiveValue)
 
 			err := r.Client.Patch(ctx, dbInstance, patchDBInstance)
 			if err != nil {
@@ -1076,7 +1076,7 @@ func (r *DatabaseClaimReconciler) operationalTaggingForDbInstance(ctx context.Co
 func HasOperationalTag(tags []*crossplaneaws.Tag) bool {
 
 	for _, tag := range tags {
-		if *tag.Key == operationalStatusTagKey && *tag.Value == operationalStatusInactiveValue {
+		if *tag.Key == OperationalStatusTagKey && *tag.Value == OperationalStatusInactiveValue {
 			return true
 		}
 	}

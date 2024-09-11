@@ -304,7 +304,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	//grant rds_superuser to target db user temporarily
 	//this is required to copy schema from source to target and take ownership of the objects
-	log.Info("grant temp superuser to ", "user", s.config.TargetDBUserDsn)
+	log.Info("grant temp superuser to ", "user", s.config.TargetDBAdminDsn)
 
 	var (
 		err           error
