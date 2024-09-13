@@ -18,8 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim,
-	connInfo *v1.DatabaseClaimConnectionInfo) error {
+func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo, cloud string) error {
 	logr := log.FromContext(ctx)
 	gs := &corev1.Secret{}
 	dbType := dbClaim.Spec.Type
@@ -34,8 +33,10 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
 		dsnURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
 
-		replicaDsn = strings.Replace(dsn, ".cluster-", ".cluster-ro-", -1)
-		replicaDsnURI = strings.Replace(dsnURI, ".cluster-", ".cluster-ro-", -1)
+		if cloud == "aws" {
+			replicaDsn = strings.Replace(dsn, ".cluster-", ".cluster-ro-", -1)
+			replicaDsnURI = strings.Replace(dsnURI, ".cluster-", ".cluster-ro-", -1)
+		}
 	default:
 		return fmt.Errorf("unknown DB type")
 	}

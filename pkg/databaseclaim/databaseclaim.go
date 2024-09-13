@@ -569,7 +569,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 			newDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
 			newDBConnInfo.Password = r.Input.TempSecret
 
-			if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
+			if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo, basefun.GetCloud(r.Config.Viper)); err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
 		}
@@ -651,7 +651,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 		newDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
 		newDBConnInfo.Password = r.Input.TempSecret
 
-		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
+		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo, basefun.GetCloud(r.Config.Viper)); err != nil {
 			return err
 		}
 	}
@@ -1409,7 +1409,7 @@ func (r *DatabaseClaimReconciler) rerouteTargetSecret(ctx context.Context, sourc
 	if err != nil {
 		return err
 	}
-	err = r.createOrUpdateSecret(ctx, dbClaim, targetAppConn)
+	err = r.createOrUpdateSecret(ctx, dbClaim, targetAppConn, basefun.GetCloud(r.Config.Viper))
 	if err != nil {
 		return err
 	}
