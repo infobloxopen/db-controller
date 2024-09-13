@@ -82,7 +82,6 @@ const (
 type DatabaseClaimConfig struct {
 	Viper                 *viper.Viper
 	MasterAuth            *rdsauth.MasterAuth
-	DbIdentifierPrefix    string
 	Class                 string
 	Namespace             string
 	MetricsEnabled        bool
@@ -263,7 +262,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		dbClaim.Status.NewDB.ConnectionInfo = new(v1.DatabaseClaimConnectionInfo)
 	}
 
-	reqInfo, err := r.setRequestInfo(&dbClaim)
+	reqInfo, err := NewRequestInfo(r.Config.Viper, &dbClaim)
 	if err != nil {
 		return r.manageError(ctx, &dbClaim, err)
 	}
@@ -605,13 +604,15 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 		}
 	}
 
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
+
 	if !isReady {
-		logr.Info("cloud instance provisioning is in progress", "instance name", reqInfo.DbHostIdentifier, "next-step", "requeueing")
+		logr.Info("cloud instance provisioning is in progress", "instance name", dbHostIdentifier, "next-step", "requeueing")
 		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
 	}
 
 	logr.Info("cloud instance ready. reading generated master secret")
-	connInfo, err := r.readResourceSecret(ctx, reqInfo.DbHostIdentifier)
+	connInfo, err := r.readResourceSecret(ctx, dbHostIdentifier)
 	if err != nil {
 		logr.Error(err, "unable to read the complete secret. requeueing")
 		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
@@ -692,8 +693,10 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 
 	logr.Info("Migration in progress", "state", migrationState)
 
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
+
 	logr.Info("cloud instance ready. reading generated master secret")
-	connInfo, err := r.readResourceSecret(ctx, reqInfo.DbHostIdentifier)
+	connInfo, err := r.readResourceSecret(ctx, dbHostIdentifier)
 	if err != nil {
 		logr.Error(err, "unable to read the complete secret. requeueing")
 		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil
@@ -1100,14 +1103,13 @@ func (r *DatabaseClaimReconciler) readResourceSecret(ctx context.Context, secret
 	return connInfo, nil
 }
 
-// getDynamicHostName is used to name the crossplane
-// dbinstance CRs
+// getDynamicHostName returns a dynamic hostname based on the hash and dbClaim.
 func (r *DatabaseClaimReconciler) getDynamicHostName(hash string, dbClaim *v1.DatabaseClaim) string {
 	var prefix string
 	suffix := "-" + hash
 
-	if r.Config.DbIdentifierPrefix != "" {
-		prefix = r.Config.DbIdentifierPrefix + "-"
+	if basefun.GetDBIdentifierPrefix(r.Config.Viper) != "" {
+		prefix = basefun.GetDBIdentifierPrefix(r.Config.Viper) + "-"
 	}
 	return prefix + dbClaim.Name + suffix
 }

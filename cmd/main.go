@@ -91,7 +91,6 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
 	var class string
-	var dbIdentifierPrefix string
 	var configFile string
 	var dsnExecSidecarConfigPath string
 	var metricsDepYamlPath string
@@ -100,7 +99,6 @@ func main() {
 	var enableDSNExecWebhook bool
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
-	flag.StringVar(&dbIdentifierPrefix, "db-identifier-prefix", "", "The prefix to be added to the DbHost. Ideally this is the env name.")
 
 	flag.StringVar(&configFile, "config-file", "/etc/config/config.yaml", "Database connection string to with root credentials.")
 	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/dsnexec/dsnexecsidecar.json", "Mutating webhook sidecar configuration.")
@@ -195,10 +193,9 @@ func main() {
 	}
 
 	dbClaimConfig := &databaseclaim.DatabaseClaimConfig{
-		Viper:              ctlConfig,
-		Namespace:          namespace,
-		Class:              class,
-		DbIdentifierPrefix: dbIdentifierPrefix,
+		Viper:     ctlConfig,
+		Namespace: namespace,
+		Class:     class,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
 		MasterAuth:            rdsauth.NewMasterAuth(),
 		MetricsEnabled:        true,
@@ -216,10 +213,9 @@ func main() {
 		os.Exit(1)
 	}
 	dbRoleClaimConfig := &roleclaim.RoleConfig{
-		Viper:              ctlConfig,
-		Namespace:          namespace,
-		Class:              class,
-		DbIdentifierPrefix: dbIdentifierPrefix,
+		Viper:     ctlConfig,
+		Namespace: namespace,
+		Class:     class,
 		// Log:                   ctrl.Log.WithName("controllers").WithName("DatabaseClaim").V(controllers.InfoLevel),
 		MasterAuth: rdsauth.NewMasterAuth(),
 	}

@@ -5,6 +5,7 @@ import (
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
+	"github.com/spf13/viper"
 )
 
 // requestInfo is a struct that holds the information needed to create a database.
@@ -13,7 +14,6 @@ type requestInfo struct {
 	SharedDBHost               bool
 	MasterConnInfo             v1.DatabaseClaimConnectionInfo
 	TempSecret                 string
-	DbHostIdentifier           string
 	HostParams                 hostparams.HostParams
 	EnableReplicationRole      bool
 	EnableSuperUser            bool
@@ -23,8 +23,8 @@ type requestInfo struct {
 	CACertificateIdentifier    string
 }
 
-// setRequestInfo load base values and configs to kick off the database claim request.
-func (r *DatabaseClaimReconciler) setRequestInfo(dbClaim *v1.DatabaseClaim) (requestInfo, error) {
+// NewRequestInfo creates a new requestInfo struct.
+func NewRequestInfo(cfg *viper.Viper, dbClaim *v1.DatabaseClaim) (requestInfo, error) {
 	var (
 		sharedDBHost            bool
 		enablePerfInsight       bool
@@ -33,10 +33,10 @@ func (r *DatabaseClaimReconciler) setRequestInfo(dbClaim *v1.DatabaseClaim) (req
 		caCertificateIdentifier string
 	)
 
-	backupRetentionDays = basefun.GetBackupRetentionDays(r.Config.Viper)
-	caCertificateIdentifier = basefun.GetCaCertificateIdentifier(r.Config.Viper)
-	enablePerfInsight = basefun.GetEnablePerfInsight(r.Config.Viper)
-	enableCloudwatchLogsExport := basefun.GetEnableCloudwatchLogsExport(r.Config.Viper)
+	backupRetentionDays = basefun.GetBackupRetentionDays(cfg)
+	caCertificateIdentifier = basefun.GetCaCertificateIdentifier(cfg)
+	enablePerfInsight = basefun.GetEnablePerfInsight(cfg)
+	enableCloudwatchLogsExport := basefun.GetEnableCloudwatchLogsExport(cfg)
 	postgresCloudwatchLogsExportLabels := []string{"postgresql", "upgrade"}
 
 	switch enableCloudwatchLogsExport {
@@ -50,7 +50,7 @@ func (r *DatabaseClaimReconciler) setRequestInfo(dbClaim *v1.DatabaseClaim) (req
 		cloudwatchLogsExport = append(cloudwatchLogsExport, &enableCloudwatchLogsExport)
 	}
 
-	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
+	hostParams, err := hostparams.New(cfg, dbClaim)
 	if err != nil {
 		return requestInfo{}, fmt.Errorf("error creating host params: %w", err)
 	}
@@ -61,7 +61,7 @@ func (r *DatabaseClaimReconciler) setRequestInfo(dbClaim *v1.DatabaseClaim) (req
 	}
 
 	var enableSuperUser bool
-	if basefun.GetSuperUserElevation(r.Config.Viper) {
+	if basefun.GetSuperUserElevation(cfg) {
 		enableSuperUser = *dbClaim.Spec.EnableSuperUser
 	}
 
@@ -81,7 +81,6 @@ func (r *DatabaseClaimReconciler) setRequestInfo(dbClaim *v1.DatabaseClaim) (req
 		SharedDBHost:               sharedDBHost,
 		DbType:                     dbClaim.Spec.Type,
 		MasterConnInfo:             masterConnInfo,
-		DbHostIdentifier:           r.getDynamicHostName(hostParams.Hash(), dbClaim),
 		HostParams:                 *hostParams,
 		EnableReplicationRole:      enableReplicationRole,
 		EnableSuperUser:            enableSuperUser,
