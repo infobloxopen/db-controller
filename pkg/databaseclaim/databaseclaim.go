@@ -44,9 +44,6 @@ var (
 	cachedMasterPasswdForExistingDB = "cachedMasterPasswdForExistingDB"
 	masterSecretSuffix              = "-master"
 	masterPasswordKey               = "password"
-	// infoLevel is used to set V level to 0 as suggested by official docs
-	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	infoLevel = 0
 	// debugLevel is used to set V level to 1 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	debugLevel = 1
@@ -55,10 +52,6 @@ var (
 	OperationalStatusTagKey        string = "operational-status"
 	OperationalStatusInactiveValue string = "inactive"
 	OperationalStatusActiveValue   string = "active"
-
-	operationalStatusTagKey        string = "operational-status"
-	operationalStatusInactiveValue string = "inactive"
-	operationalStatusActiveValue   string = "active"
 )
 
 var (
@@ -231,7 +224,7 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 }
 
 // Load base values and configs to kick off the whole process
-func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *v1.DatabaseClaim) error {
 
 	r.Input = &input{}
 	var (
@@ -300,7 +293,7 @@ func Reconcile(r *DatabaseClaimReconciler, ctx context.Context, req ctrl.Request
 }
 
 // validateDBClaim should validate deprecated and or unsupported values in a claim object
-func validateDBClaim(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+func validateDBClaim(dbClaim *v1.DatabaseClaim) error {
 	// envtest will send default values as empty strings, provide an in-process
 	// update to ensure downstream code works
 	if dbClaim.Spec.DSNName == "" {
@@ -333,7 +326,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	if err := validateDBClaim(ctx, &dbClaim); err != nil {
+	if err := validateDBClaim(&dbClaim); err != nil {
 		res, err := r.manageError(ctx, &dbClaim, err)
 		// TerminalError, do not requeue
 		return res, reconcile.TerminalError(err)
@@ -352,7 +345,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		dbClaim.Status.NewDB.ConnectionInfo = new(v1.DatabaseClaimConnectionInfo)
 	}
 
-	if err := r.setReqInfo(ctx, &dbClaim); err != nil {
+	if err := r.setReqInfo(&dbClaim); err != nil {
 		return r.manageError(ctx, &dbClaim, err)
 	}
 
@@ -546,6 +539,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, dbC
 		return r.reconcileMigrateToNewDB(ctx, dbClaim)
 	}
 	if r.mode == M_InitiateDBUpgrade {
+
 		logr.Info("upgrade db initiated")
 
 		return r.reconcileMigrateToNewDB(ctx, dbClaim)
@@ -639,7 +633,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, db
 	dbName := existingDBConnInfo.DatabaseName
 	updateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUserAndExtensions(ctx, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
 	if err != nil {
 		return err
 	}
@@ -734,7 +728,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, dbClaim *v
 		return ctrl.Result{}, err
 
 	}
-	err = r.manageUserAndExtensions(ctx, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -799,7 +793,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
 	}
-	// sourceAppDsn := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
+
 	sourceAppDsn, err := r.getSrcAppDsnFromSecret(ctx, dbClaim)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
@@ -807,6 +801,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	var sourceMasterConn *v1.DatabaseClaimConnectionInfo
 
 	if r.mode == M_MigrationInProgress || r.mode == M_MigrateExistingToNewDB {
+
 		if dbClaim.Spec.SourceDataFrom == nil {
 			return r.manageError(ctx, dbClaim, fmt.Errorf("sourceDataFrom is nil"))
 		}
@@ -822,8 +817,9 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 			logr.Error(err, "source master secret and cached master secret not found")
 			return r.manageError(ctx, dbClaim, err)
 		}
-	} else if r.mode == M_UpgradeDBInProgress ||
-		r.mode == M_InitiateDBUpgrade {
+
+	} else if r.mode == M_UpgradeDBInProgress || r.mode == M_InitiateDBUpgrade {
+
 		activeHost, _, _ := strings.Cut(dbClaim.Status.ActiveDB.ConnectionInfo.Host, ".")
 
 		activeConnInfo, err := r.readResourceSecret(ctx, activeHost)
@@ -947,7 +943,7 @@ loop:
 	if dbClaim.Status.ActiveDB.DbState != v1.UsingExistingDB {
 		timenow := metav1.Now()
 		dbClaim.Status.OldDB = v1.StatusForOldDB{ConnectionInfo: &v1.DatabaseClaimConnectionInfo{}}
-		//dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
+
 		MakeDeepCopyToOldDB(&dbClaim.Status.OldDB, &dbClaim.Status.ActiveDB)
 		dbClaim.Status.OldDB.DbState = v1.PostMigrationInProgress
 		dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow
@@ -1250,7 +1246,7 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
 
 	if status == nil {
 		return fmt.Errorf("status is nil")
