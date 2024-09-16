@@ -28,8 +28,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 var (
-	DSNKey    = "dsn.txt"
-	DSNURIKey = "uri_dsn.txt"
+	DSNKey           = "dsn.txt"
+	DSNURIKey        = "uri_dsn.txt"
+	ReplicaDSNURIKey = "ro_uri_dsn.txt"
 )
 
 type DatabaseType string
