@@ -15,23 +15,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type mockClient struct {
+type MockClient struct {
 	client.Client
 	// port is derived from the DSN
-	dsn string
+	dsn           string
+	CreatedObject client.Object
 }
 
 var responseUpdate interface{}
 
-func (m *mockClient) GetResponseUpdate() interface{} {
+func (m *MockClient) GetResponseUpdate() interface{} {
 	return responseUpdate
 }
 
-func (m *mockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (m *MockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	return nil
 }
 
-func (m *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 
 	parsedDSN, err := url.Parse(m.dsn)
 	if err != nil {
@@ -147,24 +148,21 @@ func (m *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 	return errors.NewNotFound(schema.GroupResource{Group: "core", Resource: "secret"}, key.Name)
 }
 
-func (m *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+func (m *MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	_ = ctx
 	if (obj.GetNamespace() == "testNamespace" || obj.GetNamespace() == "schema-user-test") &&
 		(obj.GetName() == "create-master-secret" || obj.GetName() == "sample-master-secret") {
 		sec, ok := obj.(*corev1.Secret)
+		m.CreatedObject = sec
 		if !ok {
 			return fmt.Errorf("can't assert type")
-		}
-		sec.Data = map[string][]byte{
-			"password": []byte("masterpassword"),
-			"username": []byte("mainUser"),
 		}
 		return nil
 	}
 	return fmt.Errorf("can't create object")
 }
 
-func (m *mockClient) Status() client.StatusWriter {
+func (m *MockClient) Status() client.StatusWriter {
 	return &MockStatusWriter{}
 }
 

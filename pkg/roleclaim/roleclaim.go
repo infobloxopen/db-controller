@@ -31,11 +31,10 @@ import (
 )
 
 type RoleConfig struct {
-	Viper              *viper.Viper
-	MasterAuth         *rdsauth.MasterAuth
-	DbIdentifierPrefix string
-	Class              string
-	Namespace          string
+	Viper      *viper.Viper
+	MasterAuth *rdsauth.MasterAuth
+	Class      string
+	Namespace  string
 }
 
 const (
@@ -339,8 +338,8 @@ func (r *DbRoleClaimReconciler) getDynamicHostName(dbClaim *v1.DatabaseClaim, db
 	var prefix string
 	suffix := "-" + dbcBaseConf.HostParams.Hash()
 
-	if r.Config.DbIdentifierPrefix != "" {
-		prefix = r.Config.DbIdentifierPrefix + "-"
+	if basefun.GetDBIdentifierPrefix(r.Config.Viper) != "" {
+		prefix = basefun.GetDBIdentifierPrefix(r.Config.Viper) + "-"
 	}
 
 	return prefix + dbClaim.Name + suffix
