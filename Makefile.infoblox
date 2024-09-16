@@ -16,8 +16,11 @@ DSNEXEC_IMG ?= ghcr.io/infobloxopen/db-controller/dsnexec:${GIT_COMMIT}
 .id:
 	git config user.email | awk -F@ '{print $$1}' > .id
 
-.env:
+.env: force
 	kubectl config current-context | awk -F@ '{print $$1}' > .env
+
+# Make a rule always rebuild
+force:
 
 docker-build-%: target=$(@:docker-build-%=%)
 docker-build-%: .id
@@ -89,17 +92,19 @@ build-images: docker-build docker-build-dbproxy docker-build-dsnexec
 # FIXME: remove for a single image
 push-images: docker-push-db-controller docker-push-dbproxy docker-push-dsnexec
 
+# source check-context as part of helm upgrade command
 .deploy-$(GIT_COMMIT): .id .env
-	@./scripts/check-context.sh
+	export HELM_SETFLAGS=$$(bash ./scripts/check-context.sh) && \
+	echo "HELM_SETFLAGS is: $$HELM_SETFLAGS" >&2 && \
 	helm upgrade --install `cat .id` \
-		db-controller-${CHART_VERSION}.tgz \
-		--debug --namespace "`cat .id`" \
-		--wait --wait-for-jobs \
-		--create-namespace \
-		-f helm/db-controller/minikube.yaml \
-		--set dbController.class=`cat .id` \
-		--set env=`cat .env` \
-		${HELM_SETFLAGS}
+               db-controller-${CHART_VERSION}.tgz \
+               --debug --namespace "`cat .id`" \
+               --wait --wait-for-jobs \
+               --create-namespace \
+               -f helm/db-controller/minikube.yaml \
+               --set dbController.class=`cat .id` \
+               --set env=`cat .env` \
+               $$HELM_SETFLAGS
 
 deploy: package-chart-db-controller .deploy-$(GIT_COMMIT)
 

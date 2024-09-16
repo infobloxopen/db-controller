@@ -204,6 +204,7 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	return &hostParams, nil
 }
 
+// Retrieves the current scenario, wha engine, version, instance, etc. actually is deployed
 func GetActiveHostParams(dbClaim *v1.DatabaseClaim) *HostParams {
 
 	hostParams := HostParams{}

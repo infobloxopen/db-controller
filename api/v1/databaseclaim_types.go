@@ -28,8 +28,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 var (
-	DSNKey    = "dsn.txt"
-	DSNURIKey = "uri_dsn.txt"
+	DSNKey           = "dsn.txt"
+	DSNURIKey        = "uri_dsn.txt"
+	ReplicaDSNURIKey = "ro_uri_dsn.txt"
 )
 
 type DatabaseType string
@@ -310,9 +311,10 @@ type DatabaseClaimConnectionInfo struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:printcolumn:name="DB",type=string,JSONPath=`.spec.databaseName`
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.activeDB.dbversion"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.activeDB.DbState`
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:printcolumn:name="Age",type="date",priority=1,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:printcolumn:name="MigrationState",type="string",priority=1,JSONPath=".status.migrationState"
 // +kubebuilder:resource:shortName=dbc
 // +kubebuilder:subresource:status

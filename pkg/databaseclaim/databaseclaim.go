@@ -44,9 +44,6 @@ var (
 	cachedMasterPasswdForExistingDB = "cachedMasterPasswdForExistingDB"
 	masterSecretSuffix              = "-master"
 	masterPasswordKey               = "password"
-	// infoLevel is used to set V level to 0 as suggested by official docs
-	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-	infoLevel = 0
 	// debugLevel is used to set V level to 1 as suggested by official docs
 	// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
 	debugLevel = 1
@@ -55,10 +52,6 @@ var (
 	OperationalStatusTagKey        string = "operational-status"
 	OperationalStatusInactiveValue string = "inactive"
 	OperationalStatusActiveValue   string = "active"
-
-	operationalStatusTagKey        string = "operational-status"
-	operationalStatusInactiveValue string = "inactive"
-	operationalStatusActiveValue   string = "active"
 )
 
 var (
@@ -209,7 +202,7 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, reqInfo *requestI
 }
 
 // validateDBClaim should validate deprecated and or unsupported values in a claim object
-func validateDBClaim(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+func validateDBClaim(dbClaim *v1.DatabaseClaim) error {
 	// envtest will send default values as empty strings, provide an in-process
 	// update to ensure downstream code works
 	if dbClaim.Spec.DSNName == "" {
@@ -243,7 +236,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	if err := validateDBClaim(ctx, &dbClaim); err != nil {
+	if err := validateDBClaim(&dbClaim); err != nil {
 		res, err := r.manageError(ctx, &dbClaim, err)
 		// TerminalError, do not requeue
 		return res, reconcile.TerminalError(err)
@@ -479,7 +472,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 			newDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
 			newDBConnInfo.Password = reqInfo.TempSecret
 
-			if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
+			if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo, basefun.GetCloud(r.Config.Viper)); err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
 		}
@@ -561,7 +554,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 		newDBConnInfo := dbClaim.Status.NewDB.ConnectionInfo.DeepCopy()
 		newDBConnInfo.Password = reqInfo.TempSecret
 
-		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo); err != nil {
+		if err := r.createOrUpdateSecret(ctx, dbClaim, newDBConnInfo, basefun.GetCloud(r.Config.Viper)); err != nil {
 			return err
 		}
 	}
@@ -712,7 +705,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
 	}
-	// sourceAppDsn := dbClaim.Status.ActiveDB.ConnectionInfo.DeepCopy()
+
 	sourceAppDsn, err := r.getSrcAppDsnFromSecret(ctx, dbClaim)
 	if err != nil {
 		return r.manageError(ctx, dbClaim, err)
@@ -859,7 +852,7 @@ loop:
 	if dbClaim.Status.ActiveDB.DbState != v1.UsingExistingDB {
 		timenow := metav1.Now()
 		dbClaim.Status.OldDB = v1.StatusForOldDB{ConnectionInfo: &v1.DatabaseClaimConnectionInfo{}}
-		//dbClaim.Status.OldDB = *dbClaim.Status.ActiveDB.DeepCopy()
+
 		MakeDeepCopyToOldDB(&dbClaim.Status.OldDB, &dbClaim.Status.ActiveDB)
 		dbClaim.Status.OldDB.DbState = v1.PostMigrationInProgress
 		dbClaim.Status.OldDB.PostMigrationActionStartedAt = &timenow
@@ -1040,6 +1033,10 @@ func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 
 // FindStatusCondition finds the conditionType in conditions.
 func (r *DatabaseClaimReconciler) isResourceReady(resourceStatus xpv1.ResourceStatus) (bool, error) {
+	return isResourceReady(resourceStatus)
+}
+
+func isResourceReady(resourceStatus xpv1.ResourceStatus) (bool, error) {
 	ready := xpv1.TypeReady
 	conditionTrue := corev1.ConditionTrue
 	for _, condition := range resourceStatus.Conditions {
@@ -1312,7 +1309,7 @@ func (r *DatabaseClaimReconciler) rerouteTargetSecret(ctx context.Context, sourc
 	if err != nil {
 		return err
 	}
-	err = r.createOrUpdateSecret(ctx, dbClaim, targetAppConn)
+	err = r.createOrUpdateSecret(ctx, dbClaim, targetAppConn, basefun.GetCloud(r.Config.Viper))
 	if err != nil {
 		return err
 	}

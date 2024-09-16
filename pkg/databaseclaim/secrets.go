@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	_ "github.com/lib/pq"
 	corev1 "k8s.io/api/core/v1"
@@ -17,14 +18,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
-func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim,
-	connInfo *v1.DatabaseClaimConnectionInfo) error {
+func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo, cloud string) error {
 	logr := log.FromContext(ctx)
 	gs := &corev1.Secret{}
 	dbType := dbClaim.Spec.Type
 	secretName := dbClaim.Spec.SecretName
 	logr.Info("createOrUpdateSecret being executed. SecretName: " + secretName)
-	var dsn, dsnURI string
+	var dsn, dsnURI, replicaDsnURI string = "", "", ""
 
 	switch dbType {
 	case v1.Postgres:
@@ -32,6 +32,10 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	case v1.AuroraPostgres:
 		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
 		dsnURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
+
+		if cloud == "aws" {
+			replicaDsnURI = strings.Replace(dsnURI, ".cluster-", ".cluster-ro-", -1)
+		}
 	default:
 		return fmt.Errorf("unknown DB type")
 	}
@@ -42,16 +46,16 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 	}, gs)
 
 	if err != nil && errors.IsNotFound(err) {
-		if err := r.createSecret(ctx, dbClaim, dsn, dsnURI, connInfo); err != nil {
+		if err := r.createSecret(ctx, dbClaim, dsn, dsnURI, replicaDsnURI, connInfo); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	return r.updateSecret(ctx, dsn, dsnURI, connInfo, gs)
+	return r.updateSecret(ctx, dsn, dsnURI, replicaDsnURI, connInfo, gs)
 }
 
-func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
+func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI, replicaDbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
 
 	logr := log.FromContext(ctx)
 	secretName := dbClaim.Spec.SecretName
@@ -73,14 +77,15 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 			},
 		},
 		Data: map[string][]byte{
-			v1.DSNKey:    []byte(dsn),
-			v1.DSNURIKey: []byte(dbURI),
-			"hostname":   []byte(connInfo.Host),
-			"port":       []byte(connInfo.Port),
-			"database":   []byte(connInfo.DatabaseName),
-			"username":   []byte(connInfo.Username),
-			"password":   []byte(connInfo.Password),
-			"sslmode":    []byte(connInfo.SSLMode),
+			v1.DSNKey:           []byte(dsn),
+			v1.DSNURIKey:        []byte(dbURI),
+			v1.ReplicaDSNURIKey: []byte(replicaDbURI),
+			"hostname":          []byte(connInfo.Host),
+			"port":              []byte(connInfo.Port),
+			"database":          []byte(connInfo.DatabaseName),
+			"username":          []byte(connInfo.Username),
+			"password":          []byte(connInfo.Password),
+			"sslmode":           []byte(connInfo.SSLMode),
 		},
 	}
 	logr.Info("creating connection info SECRET: "+secret.Name, "secret", secret.Name, "namespace", secret.Namespace)
@@ -88,12 +93,13 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 	return r.Client.Create(ctx, secret)
 }
 
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsn, dbURI string, connInfo *v1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsn, dbURI, replicaDsnURI string, connInfo *v1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
 
 	logr := log.FromContext(ctx)
 
 	exSecret.Data[v1.DSNKey] = []byte(dsn)
 	exSecret.Data[v1.DSNURIKey] = []byte(dbURI)
+	exSecret.Data[v1.ReplicaDSNURIKey] = []byte(replicaDsnURI)
 	exSecret.Data["hostname"] = []byte(connInfo.Host)
 	exSecret.Data["port"] = []byte(connInfo.Port)
 	exSecret.Data["database"] = []byte(connInfo.DatabaseName)

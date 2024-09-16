@@ -58,7 +58,7 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 		{
 			"Get UserSchema claim 1",
 			reconciler{
-				Client: &mockClient{dsn: dsn},
+				Client: &MockClient{dsn: dsn},
 				Config: &RoleConfig{
 					Viper:     viperObj,
 					Class:     "default",
@@ -90,7 +90,7 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 		dbClient, err := basefun.GetClientForExistingDB(existingDBConnInfo, &controllerruntime.Log)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		var responseUpdate = r.Client.(*mockClient).GetResponseUpdate()
+		var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
 		Expect(responseUpdate).Should(Not(BeNil()))
 		var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 		Expect(schemaUserClaimStatus).Should(Not(BeNil()))
@@ -166,7 +166,7 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 		wantErr bool
 	}{
 		reconciler{
-			Client: &mockClient{dsn: dsn},
+			Client: &MockClient{dsn: dsn},
 			Config: &RoleConfig{
 				Viper:     viperObj,
 				Class:     "default",
@@ -201,7 +201,7 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 
 	Expect(result.Requeue).Should(BeFalse())
 
-	var responseUpdate = r.Client.(*mockClient).GetResponseUpdate()
+	var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
 	Expect(responseUpdate).Should(Not(BeNil()))
 	var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 	Expect(schemaUserClaimStatus).Should(Not(BeNil()))
@@ -270,7 +270,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 		wantErr bool
 	}{
 		reconciler{
-			Client: &mockClient{dsn: dsn},
+			Client: &MockClient{dsn: dsn},
 			Config: &RoleConfig{
 				Viper:     viperObj,
 				Class:     "default",
@@ -322,7 +322,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 
 	Expect(result.Requeue).Should(BeFalse())
 
-	var responseUpdate = r.Client.(*mockClient).GetResponseUpdate()
+	var responseUpdate = r.Client.(*MockClient).GetResponseUpdate()
 	Expect(responseUpdate).Should(Not(BeNil()))
 	var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 	Expect(schemaUserClaimStatus).Should(Not(BeNil()))
