@@ -30,7 +30,6 @@ import (
 var (
 	DSNKey           = "dsn.txt"
 	DSNURIKey        = "uri_dsn.txt"
-	ReplicaDSNKey    = "ro_dsn.txt"
 	ReplicaDSNURIKey = "ro_uri_dsn.txt"
 )
 

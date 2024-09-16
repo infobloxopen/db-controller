@@ -45,13 +45,12 @@ func TestCreateSecret(t *testing.T) {
 		Status: v1.DatabaseClaimStatus{},
 	}
 
-	err := dbClaimReconciler.createSecret(ctx, &dbClaim, "dsn", "dsnUri", "ro_dsn", "ro_dsnUri", &claimConnInfo)
+	err := dbClaimReconciler.createSecret(ctx, &dbClaim, "dsn", "dsnUri", "ro_dsnUri", &claimConnInfo)
 
 	secret := mockClient.CreatedObject.(*corev1.Secret)
 
 	Expect(secret.Data[v1.DSNKey]).To(Equal([]byte("dsn")))
 	Expect(secret.Data[v1.DSNURIKey]).To(Equal([]byte("dsnUri")))
-	Expect(secret.Data[v1.ReplicaDSNKey]).To(Equal([]byte("ro_dsn")))
 	Expect(secret.Data[v1.ReplicaDSNURIKey]).To(Equal([]byte("ro_dsnUri")))
 	Expect(secret.Data["hostname"]).To(Equal([]byte("host")))
 	Expect(secret.Data["port"]).To(Equal([]byte("123")))
@@ -88,11 +87,10 @@ func TestUpdateSecret(t *testing.T) {
 		Data: make(map[string][]byte),
 	}
 
-	err := dbClaimReconciler.updateSecret(ctx, "dsn", "dsnUri", "ro_dsn", "ro_dsnUri", &claimConnInfo, &secret)
+	err := dbClaimReconciler.updateSecret(ctx, "dsn", "dsnUri", "ro_dsnUri", &claimConnInfo, &secret)
 
 	Expect(secret.Data[v1.DSNKey]).To(Equal([]byte("dsn")))
 	Expect(secret.Data[v1.DSNURIKey]).To(Equal([]byte("dsnUri")))
-	Expect(secret.Data[v1.ReplicaDSNKey]).To(Equal([]byte("ro_dsn")))
 	Expect(secret.Data[v1.ReplicaDSNURIKey]).To(Equal([]byte("ro_dsnUri")))
 	Expect(secret.Data["hostname"]).To(Equal([]byte("host")))
 	Expect(secret.Data["port"]).To(Equal([]byte("123")))
