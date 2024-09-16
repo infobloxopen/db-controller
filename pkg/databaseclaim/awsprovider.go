@@ -19,11 +19,11 @@ import (
 )
 
 func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
-	dbHostIdentifier := reqInfo.DbHostIdentifier
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
 
 	switch dbClaim.Spec.Type {
 	case v1.AuroraPostgres:
-		return r.manageAuroraDBInstances(ctx, reqInfo, dbHostIdentifier, dbClaim, false, operationalMode)
+		return r.manageAuroraDBInstances(ctx, reqInfo, dbHostIdentifier, dbClaim, operationalMode)
 	case v1.Postgres:
 		return r.managePostgresDBInstanceAWS(ctx, reqInfo, dbHostIdentifier, dbClaim, operationalMode)
 	}

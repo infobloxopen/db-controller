@@ -22,7 +22,7 @@ import (
 )
 
 func (r *DatabaseClaimReconciler) manageCloudHostGCP(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (bool, error) {
-	dbHostIdentifier := reqInfo.DbHostIdentifier
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
 
 	if dbClaim.Spec.Type != v1.Postgres {
 		return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, dbClaim.Spec.Type, []v1.DatabaseType{v1.Postgres})
