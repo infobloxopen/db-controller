@@ -2,6 +2,7 @@ package hostparams
 
 import (
 	"bytes"
+	"context"
 	"reflect"
 	"testing"
 
@@ -141,6 +142,7 @@ func TestHostParams_Hash(t *testing.T) {
 }
 
 func TestHostParams_IsUpgradeRequested(t *testing.T) {
+	ctx := context.Background()
 	type args struct {
 		config           *viper.Viper
 		dbClaim          *persistancev1.DatabaseClaim
@@ -296,10 +298,58 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "dbversion-empty-must-read-status.dbversion", want: false,
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						Type:         "aurora-postgresql",
+						Shape:        "db.t4g.medium!io1",
+						MinStorageGB: 20,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DBVersion: "15.7",
+						},
+					},
+				},
+				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+					Shape:         "db.t4g.medium!io1",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "15.7",
+				},
+			},
+		},
+		{
+			name: "dbversion-empty-must-read-status.dbversion", want: false,
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						Type:         "aurora-postgresql",
+						Shape:        "db.t4g.medium!io1",
+						MinStorageGB: 20,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DBVersion: "",
+						},
+					},
+				},
+				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+					Shape:         "db.t4g.medium!io1",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "15.3",
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hp, _ := New(tt.args.config, tt.args.dbClaim)
+			hp, _ := New(ctx, tt.args.config, tt.args.dbClaim)
 			if got := hp.IsUpgradeRequested(tt.args.activeHostParams); got != tt.want {
 				t.Errorf("IsUpgradeRequested() = %v, want %v", got, tt.want)
 			}
@@ -408,6 +458,7 @@ defaultDeletionPolicy: orphan
 `)
 
 func TestNew(t *testing.T) {
+	ctx := context.Background()
 	type args struct {
 		config  *viper.Viper
 		dbClaim *persistancev1.DatabaseClaim
@@ -639,7 +690,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := New(tt.args.config, tt.args.dbClaim)
+			got, err := New(ctx, tt.args.config, tt.args.dbClaim)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -651,6 +702,7 @@ func TestNew(t *testing.T) {
 	}
 }
 func TestDeletionPolicy(t *testing.T) {
+	ctx := context.Background()
 	type args struct {
 		config  *viper.Viper
 		dbClaim *persistancev1.DatabaseClaim
@@ -704,7 +756,7 @@ func TestDeletionPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _ := New(tt.args.config, tt.args.dbClaim)
+			got, _ := New(ctx, tt.args.config, tt.args.dbClaim)
 			if string(got.DeletionPolicy) != tt.want {
 				t.Errorf("DeletionPolicy = %v, want %v", got.DeletionPolicy, tt.want)
 			}
@@ -712,6 +764,7 @@ func TestDeletionPolicy(t *testing.T) {
 	}
 }
 func TestCheckEngineVersion(t *testing.T) {
+	ctx := context.Background()
 	type args struct {
 		config  *viper.Viper
 		dbClaim *persistancev1.DatabaseClaim
@@ -749,7 +802,7 @@ func TestCheckEngineVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hp, _ := New(tt.args.config, tt.args.dbClaim)
+			hp, _ := New(ctx, tt.args.config, tt.args.dbClaim)
 			if got := hp.CheckEngineVersion(); got != tt.want {
 				t.Errorf("CheckEngineVersion() = %v, want %v", got, tt.want)
 			}

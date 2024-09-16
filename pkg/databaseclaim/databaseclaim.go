@@ -224,7 +224,7 @@ func (r *DatabaseClaimReconciler) getMode(ctx context.Context, dbClaim *v1.Datab
 }
 
 // Load base values and configs to kick off the whole process
-func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *v1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) setReqInfo(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
 
 	r.Input = &input{}
 	var (
@@ -252,7 +252,7 @@ func (r *DatabaseClaimReconciler) setReqInfo(dbClaim *v1.DatabaseClaim) error {
 		cloudwatchLogsExport = append(cloudwatchLogsExport, &enableCloudwatchLogsExport)
 	}
 
-	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
+	hostParams, err := hostparams.New(ctx, r.Config.Viper, dbClaim)
 	if err != nil {
 		return err
 	}
@@ -345,7 +345,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		dbClaim.Status.NewDB.ConnectionInfo = new(v1.DatabaseClaimConnectionInfo)
 	}
 
-	if err := r.setReqInfo(&dbClaim); err != nil {
+	if err := r.setReqInfo(ctx, &dbClaim); err != nil {
 		return r.manageError(ctx, &dbClaim, err)
 	}
 

@@ -1,6 +1,7 @@
 package hostparams
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -11,6 +12,7 @@ import (
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/spf13/viper"
 )
@@ -122,7 +124,9 @@ func (p *HostParams) CheckEngineVersion() error {
 	return nil
 }
 
-func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
+func New(ctx context.Context, config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
+	log := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "hostparams.new")
+
 	var (
 		err   error
 		port  string
@@ -150,8 +154,13 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	}
 
 	if hostParams.EngineVersion == "" {
-		hostParams.isDefaultVersion = true
-		hostParams.EngineVersion = defaultEngineVersion
+		if dbClaim.Status.ActiveDB.DBVersion != "" {
+			log.Info("Using Status.ActiveDB.DBVersion as DefaultVersion")
+			hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
+		} else {
+			hostParams.isDefaultVersion = true
+			hostParams.EngineVersion = defaultEngineVersion
+		}
 	}
 
 	if hostParams.Shape == "" {
