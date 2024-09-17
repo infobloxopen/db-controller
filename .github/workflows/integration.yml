@@ -20,6 +20,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wget
+      # Mutate the path since make installs tools to ./bin
+      - run: |
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Log in to GHCR
@@ -42,5 +45,6 @@ jobs:
           BUILDKIT_PROGRESS: plain
         run: |
           echo 'github' > .id
+          echo ${{ matrix.runner }} > .env
           make test
           make test-e2e
