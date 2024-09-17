@@ -14,6 +14,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     name: Run on ${{ matrix.runner }}
     steps:
+      # FIXME: add basic tools to the arc runner base image
+      # Missing: wget
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/bin/bash","-c","sudo apt-get update && sudo apt-get install curl unzip jq wget python3-pip git-all -y && /home/runner/run.sh"]
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Log in to GHCR
