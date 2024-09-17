@@ -7,11 +7,11 @@ on:
       - main
 
 jobs:
-  run-on-arc-runners:
-    runs-on: [${{ matrix.runner }}]
+  integration:
     strategy:
       matrix:
         runner: [box-3, devops-admin-gcp-dev-usce1]
+    runs-on: ${{ matrix.runner }}
     name: Run on ${{ matrix.runner }}
     steps:
       - name: Checkout code
