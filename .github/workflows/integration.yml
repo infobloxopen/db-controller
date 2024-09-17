@@ -41,12 +41,17 @@ jobs:
         uses: tj-actions/install-postgresql@v3
         with:
           postgresql-version: 16
-      - name: Run script on ${{ matrix.runner }}
+      - name: Build and deploy
         env:
           REGISTRY: ghcr.io/${{ github.repository_owner }}
           BUILDKIT_PROGRESS: plain
         run: |
           echo 'github' > .id
           echo ${{ matrix.runner }} > .env
-          make test
-          make test-e2e
+          make build-images push-images deploy
+      - name: Run script on ${{ matrix.runner }}
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          BUILDKIT_PROGRESS: plain
+        run: |
+          NODEPLOY=1 make test-e2e
