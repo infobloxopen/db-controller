@@ -21,8 +21,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget
       # Mutate the path since make installs tools to ./bin
-      - run: |
-          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -41,6 +39,10 @@ jobs:
         uses: tj-actions/install-postgresql@v3
         with:
           postgresql-version: 16
+      - run: |
+          # Some hacks to make github actions work
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          git tag 0.0.0
       - name: Build and deploy
         env:
           REGISTRY: ghcr.io/${{ github.repository_owner }}
