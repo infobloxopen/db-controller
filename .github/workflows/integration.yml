@@ -16,9 +16,10 @@ jobs:
     steps:
       # FIXME: add basic tools to the arc runner base image
       # Missing: wget
-      - name: runner
-        image: ghcr.io/actions/actions-runner:latest
-        command: ["/bin/bash","-c","sudo apt-get update && sudo apt-get install curl unzip jq wget python3-pip git-all -y && /home/runner/run.sh"]
+      - name: Install missing tools in arc runners
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Log in to GHCR
