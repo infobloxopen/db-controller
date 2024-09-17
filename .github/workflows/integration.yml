@@ -1,0 +1,38 @@
+name: Run Script on ARC Runners
+
+on:
+  pull_request: # FIXME: Remove this before mergin
+  push:
+    branches:
+      - main
+
+jobs:
+  run-on-arc-runners:
+    runs-on: [${{ matrix.runner }}]
+    strategy:
+      matrix:
+        runner: [box-3, devops-admin-gcp-dev-usce1]
+    name: Run on ${{ matrix.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Go
+        uses: actions/setup-go@v4
+      - name: Setup PostgreSQL
+        uses: tj-actions/install-postgresql@v3
+        with:
+          postgresql-version: 16
+      - name: Run script on ${{ matrix.runner }}
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          BUILDKIT_PROGRESS: plain
+        run: |
+          echo 'github' > .id
+          make test
+          make test-e2e
