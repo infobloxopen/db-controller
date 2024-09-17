@@ -108,7 +108,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("%s dbclaim not found", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
 	}
-	dbcBaseConfig, err := r.setDbClaimReqInfo(ctx, sourceDbClaim)
+	dbcBaseConfig, err := r.setDbClaimReqInfo(sourceDbClaim)
 	if err != nil {
 		return r.manageError(ctx, &dbRoleClaim, fmt.Errorf("setting dbclaim required info: %s", dbRoleClaim.Spec.SourceDatabaseClaim.Name))
 	}
@@ -306,14 +306,14 @@ func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseC
 	return connInfo, nil
 }
 
-func (r *DbRoleClaimReconciler) setDbClaimReqInfo(ctx context.Context, dbClaim *v1.DatabaseClaim) (*dbcBaseConfig, error) {
+func (r *DbRoleClaimReconciler) setDbClaimReqInfo(dbClaim *v1.DatabaseClaim) (*dbcBaseConfig, error) {
 	var (
 		err error
 	)
 
 	dbcBaseConf := dbcBaseConfig{}
 
-	hostParams, err := hostparams.New(ctx, r.Config.Viper, dbClaim)
+	hostParams, err := hostparams.New(r.Config.Viper, dbClaim)
 	if err != nil {
 		return nil, err
 	}
@@ -496,7 +496,7 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	}
 	// #endregion
 
-	dbcBaseConfig, err := r.setDbClaimReqInfo(ctx, sourceDbClaim)
+	dbcBaseConfig, err := r.setDbClaimReqInfo(sourceDbClaim)
 	if err != nil {
 		return err
 	}

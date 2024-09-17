@@ -116,7 +116,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				viperconfig := config.NewConfig(filepath.Join(wd, "cmd", "config", "config.yaml"))
-				hostParams, err := hostparams.New(ctx, viperconfig, dbClaim)
+				hostParams, err := hostparams.New(viperconfig, dbClaim)
 				Expect(err).ToNot(HaveOccurred())
 				dbinstance1 = fmt.Sprintf("%s-%s-%s", env, db1, hostParams.Hash())
 			}
@@ -190,7 +190,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				viperconfig := config.NewConfig(filepath.Join(wd, "cmd", "config", "config.yaml"))
-				hostParams, err := hostparams.New(ctx, viperconfig, updatedDbClaim)
+				hostParams, err := hostparams.New(viperconfig, updatedDbClaim)
 				Expect(err).ToNot(HaveOccurred())
 				dbinstance1update = fmt.Sprintf("%s-%s-%s", env, db1, hostParams.Hash())
 			}

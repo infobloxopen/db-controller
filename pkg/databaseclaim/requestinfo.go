@@ -52,7 +52,7 @@ func NewRequestInfo(ctx context.Context, cfg *viper.Viper, dbClaim *v1.DatabaseC
 		cloudwatchLogsExport = append(cloudwatchLogsExport, &enableCloudwatchLogsExport)
 	}
 
-	hostParams, err := hostparams.New(ctx, cfg, dbClaim)
+	hostParams, err := hostparams.New(cfg, dbClaim)
 	if err != nil {
 		return requestInfo{}, fmt.Errorf("error creating host params: %w", err)
 	}

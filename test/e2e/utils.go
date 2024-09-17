@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"fmt"
-	"strings"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -14,11 +13,11 @@ import (
 // getResourceStatus tries to find the status from the object interface
 func getResourceStatus(obj client.Object) (xpv1.ResourceStatus, error) {
 
-	switch obj.(type) {
+	switch obj := obj.(type) {
 	case *crossplanegcp.Instance:
-		return obj.(*crossplanegcp.Instance).Status.ResourceStatus, nil
+		return obj.Status.ResourceStatus, nil
 	case *crossplaneaws.DBInstance:
-		return obj.(*crossplaneaws.DBInstance).Status.ResourceStatus, nil
+		return obj.Status.ResourceStatus, nil
 	}
 
 	return xpv1.ResourceStatus{}, fmt.Errorf("unsupported resource type")
@@ -49,16 +48,4 @@ func isResourceReady(resourceStatus xpv1.ResourceStatus) bool {
 		}
 	}
 	return false
-}
-
-func extractVersion(message string) string {
-	versionStr := ""
-	splitMessage := strings.Split(message, " ")
-	for i, word := range splitMessage {
-		if word == "version" {
-			versionStr = splitMessage[i+1] // This should be of format "15.3"
-			break
-		}
-	}
-	return versionStr
 }

@@ -25,10 +25,8 @@ import (
 	"time"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/test/utils"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
@@ -85,10 +83,10 @@ var _ = BeforeSuite(func() {
 	var err error
 
 	// Add all the schemas needed
-	err = persistancev1.AddToScheme(scheme.Scheme)
+	err = v1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	err = crossplaneaws.SchemeBuilder.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = crossplanegcpv1beta2.SchemeBuilder.AddToScheme(scheme.Scheme)
