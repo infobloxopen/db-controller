@@ -54,7 +54,7 @@ type HostParams struct {
 	isDefaultShape                  bool
 	isDefaultInstanceClass          bool
 	isDefaultStorage                bool
-	isDefaultVersion                bool
+	IsDefaultVersion                bool
 }
 
 func (p *HostParams) String() string {
@@ -103,7 +103,7 @@ func (p *HostParams) HasEngineChanged(activeEngine string) bool {
 }
 
 func (p *HostParams) HasVersionChanged(activeVersion string) bool {
-	if p.isDefaultVersion {
+	if p.IsDefaultVersion {
 		return false
 	}
 	return activeVersion != p.EngineVersion
@@ -115,8 +115,8 @@ func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 		p.HasVersionChanged(np.EngineVersion)
 }
 
-func (p *HostParams) CheckEngineVersion() error {
-	if p.isDefaultVersion {
+func (p *HostParams) CheckEngineVersion(isNewClaim bool) error {
+	if p.IsDefaultVersion && isNewClaim {
 		return ErrEngineVersionNotSpecified
 	}
 	return nil
@@ -153,7 +153,7 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 		if dbClaim.Status.ActiveDB.DBVersion != "" {
 			hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
 		} else {
-			hostParams.isDefaultVersion = true
+			hostParams.IsDefaultVersion = true
 			hostParams.EngineVersion = defaultEngineVersion
 		}
 	}

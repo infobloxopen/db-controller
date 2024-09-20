@@ -12,9 +12,12 @@ import (
 	_ "github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+const defaultMajorVersion string = "15"
 
 func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
 	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
@@ -109,7 +112,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		}
 
 		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
-		validationError := params.CheckEngineVersion()
+		validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 		if validationError != nil {
 			logr.Error(validationError, "invalid_db_version")
 			return false, validationError
@@ -137,7 +140,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 						DBClusterParameterGroupNameRef: &xpv1.Reference{
 							Name: pgName,
 						},
-						EngineVersion: &params.EngineVersion,
+						EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
 					},
 					Engine: &params.Engine,
 					Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
@@ -249,7 +252,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 	}, dbInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
+			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 			if validationError != nil {
 				return false, validationError
 			}
@@ -277,7 +280,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
-							EngineVersion:               &params.EngineVersion,
+							EngineVersion:               (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
 						},
 						Engine:              &params.Engine,
 						MultiAZ:             &multiAZ,
@@ -407,7 +410,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logr.Info("aurora db instance not found. creating now")
-			validationError := params.CheckEngineVersion()
+			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 			if validationError != nil {
 				return false, validationError
 			}
@@ -424,7 +427,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
-							EngineVersion:     &params.EngineVersion,
+							EngineVersion:     (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
 						},
 						DBParameterGroupName: &pgName,
 						Engine:               &params.Engine,
@@ -502,7 +505,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
+			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 			if validationError != nil {
 				return pgName, validationError
 			}
@@ -517,7 +520,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
 								Engine:        params.Engine,
-								EngineVersion: &params.EngineVersion,
+								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
@@ -590,7 +593,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
+			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 			if validationError != nil {
 				return pgName, validationError
 			}
@@ -605,7 +608,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
 								Engine:        params.Engine,
-								EngineVersion: &params.EngineVersion,
+								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &transactionTimeout,
@@ -674,7 +677,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
+			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 			if validationError != nil {
 				return pgName, validationError
 			}
@@ -689,7 +692,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 						CustomDBClusterParameterGroupParameters: crossplaneaws.CustomDBClusterParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
 								Engine:        params.Engine,
-								EngineVersion: &params.EngineVersion,
+								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,

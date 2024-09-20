@@ -181,7 +181,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 		}
 
 		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
-		validationError := params.CheckEngineVersion()
+		validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 		if validationError != nil {
 			logr.Error(validationError, "invalid_db_version")
 			return false, validationError
@@ -307,7 +307,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 	}, dbInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
+			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
 			if validationError != nil {
 				return false, validationError
 			}

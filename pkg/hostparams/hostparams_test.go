@@ -131,7 +131,7 @@ func TestHostParams_Hash(t *testing.T) {
 				isDefaultEngine:                 tt.fields.isDefaultEngine,
 				isDefaultShape:                  tt.fields.isDefaultShape,
 				isDefaultStorage:                tt.fields.isDefaultStorage,
-				isDefaultVersion:                tt.fields.isDefaultVersion,
+				IsDefaultVersion:                tt.fields.isDefaultVersion,
 			}
 			if got := p.Hash(); got != tt.want {
 				t.Errorf("HostParams.Hash() = %v, want %v", got, tt.want)
@@ -765,9 +765,10 @@ func TestCheckEngineVersion(t *testing.T) {
 		dbClaim *persistancev1.DatabaseClaim
 	}
 	tests := []struct {
-		name string
-		args args
-		want error
+		name  string
+		args  args
+		isNew bool
+		want  error
 	}{
 		{
 			name: "test_default_EngineVersion",
@@ -776,10 +777,54 @@ func TestCheckEngineVersion(t *testing.T) {
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					Shape:        "db.t4g.medium",
+					DBVersion:    "",
 					MinStorageGB: 20,
 				}},
 			},
-			want: ErrEngineVersionNotSpecified,
+			isNew: true,
+			want:  ErrEngineVersionNotSpecified,
+		},
+		{
+			name: "test_default_EngineVersion_StatusEmpty",
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						Type:         "aurora-postgresql",
+						Shape:        "db.t4g.medium",
+						DBVersion:    "",
+						MinStorageGB: 20,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DbState: "",
+						},
+					},
+				},
+			},
+			isNew: true,
+			want:  ErrEngineVersionNotSpecified,
+		},
+		{
+			name: "test_default_EngineVersion_NotNew",
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						Type:         "aurora-postgresql",
+						Shape:        "db.t4g.medium",
+						DBVersion:    "",
+						MinStorageGB: 20,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DbState: "15.5",
+						},
+					},
+				},
+			},
+			isNew: false,
+			want:  nil,
 		},
 		{
 			name: "test_specific_EngineVersion",
@@ -792,14 +837,29 @@ func TestCheckEngineVersion(t *testing.T) {
 					MinStorageGB: 20,
 				}},
 			},
-			want: nil,
+			isNew: false,
+			want:  nil,
+		},
+		{
+			name: "test_specific_EngineVersion",
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
+					Type:         "aurora-postgresql",
+					DBVersion:    "",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+				}},
+			},
+			isNew: true,
+			want:  nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hp, _ := New(tt.args.config, tt.args.dbClaim)
-			if got := hp.CheckEngineVersion(); got != tt.want {
-				t.Errorf("CheckEngineVersion() = %v, want %v", got, tt.want)
+			if got := hp.CheckEngineVersion(tt.isNew); got != tt.want {
+				t.Errorf("CheckEngineVersion(IsNew) = %v, want %v", got, tt.want)
 			}
 		})
 	}

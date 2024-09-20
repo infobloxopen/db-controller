@@ -55,7 +55,6 @@ spec:
             - --enable-dsnexec={{ .Values.dsnexec.enabled }}
             - --config-file=/etc/config/config.yaml
             - --dsnexec-sidecar-config-path=config/dsnexec/dsnexecsidecar.json
-            - --db-identifier-prefix={{ tpl .Values.db.identifier.prefix . }}
             - --class={{ .Values.dbController.class }}
             - -zap-encoder={{ .Values.zapLogger.encoding }}
             - -zap-log-level={{ .Values.zapLogger.level }}
