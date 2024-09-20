@@ -7,15 +7,13 @@ import (
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
+	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	_ "github.com/lib/pq"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	v1 "github.com/infobloxopen/db-controller/api/v1"
-	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
-
-	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
@@ -186,6 +184,11 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		logr.Error(err, "dbCluster", "dbHostIdentifier", dbHostName)
 		return false, err
 	}
+
+	if dbClaim.Spec.PreferredMaintenanceWindow != nil {
+		dbCluster.Spec.ForProvider.PreferredMaintenanceWindow = dbClaim.Spec.PreferredMaintenanceWindow
+	}
+
 	_, err = r.updateDBClusterAWS(ctx, reqInfo, dbClaim, dbCluster)
 	if err != nil {
 		return false, err
@@ -366,6 +369,7 @@ func (r *DatabaseClaimReconciler) updateDBClusterAWS(ctx context.Context, reqInf
 	if len(dbClusterPatchData) <= 2 {
 		return false, nil
 	}
+
 	logr.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 	err = r.Client.Patch(ctx, dbCluster, patchDBCluster)
 	if err != nil {
@@ -454,6 +458,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 		err = fmt.Errorf("can not create Cloud DB instance %s it is being deleted", dbHostName)
 		logr.Error(err, "DBInstance", "dbHostIdentifier", dbHostName)
 		return false, err
+	}
+
+	if dbClaim.Spec.PreferredMaintenanceWindow != nil {
+		dbInstance.Spec.ForProvider.PreferredMaintenanceWindow = dbClaim.Spec.PreferredMaintenanceWindow
 	}
 
 	_, err = r.updateDBInstance(ctx, reqInfo, dbClaim, dbInstance)
@@ -906,6 +914,11 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, reqInfo 
 	if len(dbInstancePatchData) <= 2 {
 		return false, nil
 	}
+
+	if dbClaim.Spec.PreferredMaintenanceWindow != nil {
+		dbInstance.Spec.ForProvider.PreferredMaintenanceWindow = dbClaim.Spec.PreferredMaintenanceWindow
+	}
+
 	logr.Info("updating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 	err = r.Client.Patch(ctx, dbInstance, patchDBInstance)
 	if err != nil {
