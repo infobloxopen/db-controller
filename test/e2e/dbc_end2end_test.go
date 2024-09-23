@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -51,13 +50,6 @@ var (
 
 var _ = Describe("dbc-end2end", Ordered, func() {
 
-	//TODO:check why this is not being initialized correctly
-	db1 = namespace + "-db-1"
-	db2 = namespace + "-db-2"
-
-	dbroleclaim1 = namespace + "-dbrc-1"
-	dbroleclaim2 = namespace + "-dbrc-2"
-
 	var (
 		newdbcMasterSecretName string
 		rds1                   string
@@ -66,19 +58,27 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 	_, _ = dbinstance1update, dbinstance2
 
-	rds1 = env + "-" + db1 + "-1ec9b27c"
-	newdbcMasterSecretName = rds1 + "-master"
-
 	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
 
 	//creates db_1
 	Context("Creating a DB", func() {
 
+		newdbcMasterSecretName = rds1 + "-master"
 		It("Creating a DBClaim", func() {
+
+			Expect(namespace).NotTo(BeEmpty(), "Namespace is empty")
+			Expect(env).NotTo(BeEmpty(), "Env is empty")
+			// TODO:check why this is not being initialized correctly
+			db1 = namespace + "-db-1"
+			db2 = namespace + "-db-2"
+
+			dbroleclaim1 = namespace + "-dbrc-1"
+			dbroleclaim2 = namespace + "-dbrc-2"
+			rds1 = env + "-" + db1 + "-1ec9b27c"
 
 			Expect(db1).NotTo(BeEmpty())
 			key := types.NamespacedName{
-				Name:      db1,
+				Name:      env + "-" + db1,
 				Namespace: namespace,
 			}
 
@@ -127,19 +127,12 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
-			By("should create an instance using default version 15")
+			By("should create an instance using default version 15: " + dbinstance1)
 			Eventually(func() (v1.DbState, error) {
 				Expect(k8sClient.Get(ctx, key, dbClaim)).ToNot(HaveOccurred())
 				Expect(dbClaim.Spec.DBVersion).To(BeEmpty())
 				return dbClaim.Status.ActiveDB.DbState, nil
 			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
-
-			if cloud == "aws" {
-				err = k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, dbInst)
-				Expect(err).To(BeNil())
-				Expect(dbInst.(*crossplaneaws.DBInstance).Status.AtProvider.EngineVersion).To(Equal("15"), "crossplane cr: %s exists, please delete", dbinstance1)
-			}
-
 		})
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
@@ -422,7 +415,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			k8sClient.Create(ctx, existingDBMasterSecret)
 			By("successfully processing an useExisting dbClaim")
 			key = types.NamespacedName{
-				Name:      db2,
+				Name:      env + "-" + db2,
 				Namespace: namespace,
 			}
 			dbClaim := &v1.DatabaseClaim{

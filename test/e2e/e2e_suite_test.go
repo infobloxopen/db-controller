@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -30,8 +29,6 @@ import (
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/test/utils"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -75,7 +72,6 @@ func NewGinkgoLogger(t *testing.T) logr.Logger {
 }
 
 var _ = BeforeSuite(func() {
-	namespace = "ecgto"
 	Expect(namespace).NotTo(Equal(""), "you must set the namespace")
 	class = namespace
 
@@ -99,6 +95,7 @@ var _ = BeforeSuite(func() {
 
 	// read kubectl context from the k8sClient
 	env, err = utils.GetKubeContext()
+	Expect(env).NotTo(BeEmpty())
 	Expect(err).NotTo(HaveOccurred())
 
 	// Check if current context is box-3, kind or gcp-ddi-dev-use1
@@ -151,52 +148,52 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 
-	// By("Uninstalling the manager")
-	// cmd := exec.Command("make", "undeploy")
-	// _, err := utils.Run(cmd)
-	// Expect(err).NotTo(HaveOccurred())
-	if os.Getenv("NOCLEANUP") != "" {
-		return
-	}
-	By("Cleaning up resources")
+	// // By("Uninstalling the manager")
+	// // cmd := exec.Command("make", "undeploy")
+	// // _, err := utils.Run(cmd)
+	// // Expect(err).NotTo(HaveOccurred())
+	// if os.Getenv("NOCLEANUP") != "" {
+	// 	return
+	// }
+	// By("Cleaning up resources")
 
-	ctx := context.Background()
-	// delete db1 if it exists
-	claim := &v1.DatabaseClaim{}
-	for _, db := range []string{db1, db2} {
-		nname := types.NamespacedName{
-			Name:      db,
-			Namespace: namespace,
-		}
-		if err := k8sClient.Get(ctx, nname, claim); err == nil {
-			By("Deleting DatabaseClaim: " + db)
-			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-		}
-	}
+	// ctx := context.Background()
+	// // delete db1 if it exists
+	// claim := &v1.DatabaseClaim{}
+	// for _, db := range []string{db1, db2} {
+	// 	nname := types.NamespacedName{
+	// 		Name:      db,
+	// 		Namespace: namespace,
+	// 	}
+	// 	if err := k8sClient.Get(ctx, nname, claim); err == nil {
+	// 		By("Deleting DatabaseClaim: " + db)
+	// 		Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+	// 	}
+	// }
 
-	inst := &crossplaneaws.DBInstance{}
-	for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
-		nname := types.NamespacedName{
-			Name:      db,
-			Namespace: namespace,
-		}
-		if err := k8sClient.Get(ctx, nname, inst); err == nil {
-			By("Deleting DBInstance   : " + db)
-			Expect(k8sClient.Delete(ctx, inst)).Should(Succeed())
-		}
-	}
+	// inst := &crossplaneaws.DBInstance{}
+	// for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
+	// 	nname := types.NamespacedName{
+	// 		Name:      db,
+	// 		Namespace: namespace,
+	// 	}
+	// 	if err := k8sClient.Get(ctx, nname, inst); err == nil {
+	// 		By("Deleting DBInstance   : " + db)
+	// 		Expect(k8sClient.Delete(ctx, inst)).Should(Succeed())
+	// 	}
+	// }
 
-	secrets := []string{dbinstance1, fmt.Sprintf("%s-master", dbinstance1)}
-	for _, secret := range secrets {
-		nname := types.NamespacedName{
-			Name:      secret,
-			Namespace: namespace,
-		}
-		sec := &corev1.Secret{}
-		if err := k8sClient.Get(ctx, nname, sec); err == nil {
-			By("Deleting Secret       : " + secret)
-			Expect(k8sClient.Delete(ctx, sec)).Should(Succeed())
-		}
-	}
+	// secrets := []string{dbinstance1, fmt.Sprintf("%s-master", dbinstance1)}
+	// for _, secret := range secrets {
+	// 	nname := types.NamespacedName{
+	// 		Name:      secret,
+	// 		Namespace: namespace,
+	// 	}
+	// 	sec := &corev1.Secret{}
+	// 	if err := k8sClient.Get(ctx, nname, sec); err == nil {
+	// 		By("Deleting Secret       : " + secret)
+	// 		Expect(k8sClient.Delete(ctx, sec)).Should(Succeed())
+	// 	}
+	// }
 
 })
