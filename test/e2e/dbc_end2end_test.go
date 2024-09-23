@@ -17,20 +17,17 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -643,136 +640,125 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 	// FIXME: only clean up resources that this test suite created
 	var afterall = func() {
-		return
-		if os.Getenv("NOCLEANUP") != "" {
-			return
-		}
-		By("Cleaning up resources")
+		// if os.Getenv("NOCLEANUP") != "" {
+		// 	return
+		// }
+		// By("Cleaning up resources")
 
-		// delete db1 if it exists
-		claim := &v1.DatabaseClaim{}
-		for _, db := range []string{db1, db2} {
-			nname := types.NamespacedName{
-				Name:      db,
-				Namespace: namespace,
-			}
-			if err := k8sClient.Get(ctx, nname, claim); err == nil {
-				By("Deleting DatabaseClaim: " + db)
-				Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-			}
-		}
+		// // delete db1 if it exists
+		// claim := &v1.DatabaseClaim{}
+		// for _, db := range []string{db1, db2} {
+		// 	nname := types.NamespacedName{
+		// 		Name:      db,
+		// 		Namespace: namespace,
+		// 	}
+		// 	if err := k8sClient.Get(ctx, nname, claim); err == nil {
+		// 		By("Deleting DatabaseClaim: " + db)
+		// 		Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+		// 	}
+		// }
 
-		inst := &crossplaneaws.DBInstance{}
-		for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
-			nname := types.NamespacedName{
-				Name:      db,
-				Namespace: namespace,
-			}
-			if err := k8sClient.Get(ctx, nname, inst); err == nil {
-				By("Deleting DBInstance: " + db)
-				Expect(k8sClient.Delete(ctx, inst)).Should(Succeed())
-			}
-		}
+		// inst := &crossplaneaws.DBInstance{}
+		// for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
+		// 	nname := types.NamespacedName{
+		// 		Name:      db,
+		// 		Namespace: namespace,
+		// 	}
+		// 	if err := k8sClient.Get(ctx, nname, inst); err == nil {
+		// 		By("Deleting DBInstance: " + db)
+		// 		Expect(k8sClient.Delete(ctx, inst)).Should(Succeed())
+		// 	}
+		// }
 
-		return
+		// return
 
-		//delete DBRoleClaims within this namespace
-		dbRoleClaims := &v1.DbRoleClaimList{}
-		if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, dbrc := range dbRoleClaims.Items {
-			By("Deleting DBRoleClaim: " + dbrc.Name)
-			k8sClient.Delete(ctx, &dbrc)
-		}
+		// //delete DBRoleClaims within this namespace
+		// dbRoleClaims := &v1.DbRoleClaimList{}
+		// if err := k8sClient.List(ctx, dbRoleClaims, client.InNamespace(namespace)); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, dbrc := range dbRoleClaims.Items {
+		// 	By("Deleting DBRoleClaim: " + dbrc.Name)
+		// 	k8sClient.Delete(ctx, &dbrc)
+		// }
 
-		// delete DBClaims within this namespace
-		dbClaims := &v1.DatabaseClaimList{}
-		if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, dbc := range dbClaims.Items {
-			By("Deleting DatabaseClaim: " + dbc.Name)
-			k8sClient.Delete(ctx, &dbc)
-		}
+		// // delete DBClaims within this namespace
+		// dbClaims := &v1.DatabaseClaimList{}
+		// if err := k8sClient.List(ctx, dbClaims, client.InNamespace(namespace)); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, dbc := range dbClaims.Items {
+		// 	By("Deleting DatabaseClaim: " + dbc.Name)
+		// 	k8sClient.Delete(ctx, &dbc)
+		// }
 
-		if cloud == "aws" {
-			instances := &crossplaneaws.DBInstanceList{}
-			if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
-				Expect(err).To(BeNil())
-			}
-			for _, instance := range instances.Items {
-				if strings.Contains(instance.Name, namespace) {
-					By("Deleting Instance: " + instance.Name)
-					k8sClient.Delete(ctx, &instance)
-				}
-			}
+		// if cloud == "aws" {
+		// 	instances := &crossplaneaws.DBInstanceList{}
+		// 	if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+		// 		Expect(err).To(BeNil())
+		// 	}
+		// 	for _, instance := range instances.Items {
+		// 		if strings.Contains(instance.Name, namespace) {
+		// 			By("Deleting Instance: " + instance.Name)
+		// 			k8sClient.Delete(ctx, &instance)
+		// 		}
+		// 	}
 
-			clusters := &crossplaneaws.DBClusterList{}
-			if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
-				Expect(err).To(BeNil())
-			}
-			for _, cluster := range clusters.Items {
-				if strings.Contains(cluster.Name, namespace) {
-					By("Deleting Cluster: " + cluster.Name)
-					k8sClient.Delete(ctx, &cluster)
-				}
-			}
+		// 	clusters := &crossplaneaws.DBClusterList{}
+		// 	if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
+		// 		Expect(err).To(BeNil())
+		// 	}
+		// 	for _, cluster := range clusters.Items {
+		// 		if strings.Contains(cluster.Name, namespace) {
+		// 			By("Deleting Cluster: " + cluster.Name)
+		// 			k8sClient.Delete(ctx, &cluster)
+		// 		}
+		// 	}
 
-		} else { //gcp
-			instances := &crossplanegcp.InstanceList{}
-			if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
-				Expect(err).To(BeNil())
-			}
-			for _, instance := range instances.Items {
-				if strings.Contains(instance.Name, namespace) {
-					By("Deleting Instance: " + instance.Name)
-					k8sClient.Delete(ctx, &instance)
-				}
-			}
+		// } else { //gcp
+		// 	instances := &crossplanegcp.InstanceList{}
+		// 	if err := k8sClient.List(ctx, instances, &client.ListOptions{}); err != nil {
+		// 		Expect(err).To(BeNil())
+		// 	}
+		// 	for _, instance := range instances.Items {
+		// 		if strings.Contains(instance.Name, namespace) {
+		// 			By("Deleting Instance: " + instance.Name)
+		// 			k8sClient.Delete(ctx, &instance)
+		// 		}
+		// 	}
 
-			clusters := &crossplanegcp.ClusterList{}
-			if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
-				Expect(err).To(BeNil())
-			}
-			for _, cluster := range clusters.Items {
-				if strings.Contains(cluster.Name, namespace) {
-					By("Deleting Cluster: " + cluster.Name)
-					k8sClient.Delete(ctx, &cluster)
-				}
-			}
+		// 	clusters := &crossplanegcp.ClusterList{}
+		// 	if err := k8sClient.List(ctx, clusters, &client.ListOptions{}); err != nil {
+		// 		Expect(err).To(BeNil())
+		// 	}
+		// 	for _, cluster := range clusters.Items {
+		// 		if strings.Contains(cluster.Name, namespace) {
+		// 			By("Deleting Cluster: " + cluster.Name)
+		// 			k8sClient.Delete(ctx, &cluster)
+		// 		}
+		// 	}
 
-			xnetworkrecord := &persistanceinfobloxcomv1alpha1.XNetworkRecordList{}
-			if err := k8sClient.List(ctx, xnetworkrecord, &client.ListOptions{}); err != nil {
-				Expect(err).To(BeNil())
-			}
-			for _, xnetrec := range xnetworkrecord.Items {
-				if strings.Contains(xnetrec.Name, namespace) {
-					By("Deleting XNetworkRecord: " + xnetrec.Name)
-					k8sClient.Delete(ctx, &xnetrec)
-				}
-			}
-		}
+		// 	xnetworkrecord := &persistanceinfobloxcomv1alpha1.XNetworkRecordList{}
+		// 	if err := k8sClient.List(ctx, xnetworkrecord, &client.ListOptions{}); err != nil {
+		// 		Expect(err).To(BeNil())
+		// 	}
+		// 	for _, xnetrec := range xnetworkrecord.Items {
+		// 		if strings.Contains(xnetrec.Name, namespace) {
+		// 			By("Deleting XNetworkRecord: " + xnetrec.Name)
+		// 			k8sClient.Delete(ctx, &xnetrec)
+		// 		}
+		// 	}
+		// }
 
-		// delete Secrets within this namespace
-		secrets := &corev1.SecretList{}
-		if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
-			Expect(err).To(BeNil())
-		}
-		for _, secret := range secrets.Items {
-			By("Deleting Secret: " + secret.Name)
-			k8sClient.Delete(ctx, &secret)
-		}
-
-		//delete the namespace
-		// Don't delete a namespace in a test
-		// By("deleting the namespace")
-		// k8sClient.Delete(ctx, &corev1.Namespace{
-		// 	ObjectMeta: metav1.ObjectMeta{
-		// 		Name: namespace,
-		// 	},
-		// })
-
+		// // delete Secrets within this namespace
+		// secrets := &corev1.SecretList{}
+		// if err := k8sClient.List(ctx, secrets, client.InNamespace(namespace)); err != nil {
+		// 	Expect(err).To(BeNil())
+		// }
+		// for _, secret := range secrets.Items {
+		// 	By("Deleting Secret: " + secret.Name)
+		// 	k8sClient.Delete(ctx, &secret)
+		// }
 	}
 	_ = afterall
 })
