@@ -36,12 +36,12 @@ var (
 
 type HostParams struct {
 	// FIXME: this should be DatabaseType, not string
-	Engine string
+	Type string
 
 	Shape                           string
 	MinStorageGB                    int
 	MaxStorageGB                    int64
-	EngineVersion                   string
+	DBVersion                       string
 	MasterUsername                  string
 	InstanceClass                   string
 	StorageType                     string
@@ -58,7 +58,7 @@ type HostParams struct {
 }
 
 func (p *HostParams) String() string {
-	return fmt.Sprintf("%s-%s-%s", p.Engine, p.InstanceClass, p.EngineVersion)
+	return fmt.Sprintf("%s-%s-%s", p.Type, p.InstanceClass, p.DBVersion)
 }
 
 func (p *HostParams) Hash() string {
@@ -86,7 +86,7 @@ func (p *HostParams) HasInstanceClassChanged(activeInstanceClass string) bool {
 
 func (p *HostParams) HasStorageChanged(activeStorage int) bool {
 	// storage is not applicable to aurora postgres
-	if p.Engine == defaultAuroraPostgresStr {
+	if p.Type == defaultAuroraPostgresStr {
 		return false
 	}
 	if p.isDefaultStorage {
@@ -99,20 +99,20 @@ func (p *HostParams) HasEngineChanged(activeEngine string) bool {
 	if p.isDefaultEngine {
 		return false
 	}
-	return activeEngine != p.Engine
+	return activeEngine != p.Type
 }
 
 func (p *HostParams) HasVersionChanged(activeVersion string) bool {
 	if p.IsDefaultVersion {
 		return false
 	}
-	return strings.Split(activeVersion, ".")[0] != strings.Split(p.EngineVersion, ".")[0]
+	return strings.Split(activeVersion, ".")[0] != strings.Split(p.DBVersion, ".")[0]
 }
 
-func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
-	return p.HasEngineChanged(np.Engine) ||
-		p.HasInstanceClassChanged(np.InstanceClass) ||
-		p.HasVersionChanged(np.EngineVersion)
+func (p *HostParams) IsUpgradeRequested(active *HostParams) bool {
+	return p.HasEngineChanged(active.Type) ||
+		p.HasInstanceClassChanged(active.InstanceClass) ||
+		p.HasVersionChanged(active.DBVersion)
 }
 
 func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
@@ -125,8 +125,8 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 
 	hostParams.DeletionPolicy = xpv1.DeletionPolicy(
 		cases.Title(language.English, cases.Compact).String(string(dbClaim.Spec.DeletionPolicy)))
-	hostParams.Engine = string(dbClaim.Spec.Type)
-	hostParams.EngineVersion = dbClaim.Spec.DBVersion
+	hostParams.Type = string(dbClaim.Spec.Type)
+	hostParams.DBVersion = dbClaim.Spec.DBVersion
 	hostParams.Shape = dbClaim.Spec.Shape
 	hostParams.MinStorageGB = dbClaim.Spec.MinStorageGB
 	hostParams.MaxStorageGB = dbClaim.Spec.MaxStorageGB
@@ -142,12 +142,12 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 		hostParams.MasterUsername = config.GetString("defaultMasterUsername")
 	}
 
-	if hostParams.EngineVersion == "" {
+	if hostParams.DBVersion == "" {
 		if dbClaim.Status.ActiveDB.DBVersion != "" {
-			hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
+			hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
 		} else {
 			hostParams.IsDefaultVersion = true
-			hostParams.EngineVersion = defaultEngineVersion
+			hostParams.DBVersion = defaultEngineVersion
 		}
 	}
 
@@ -157,9 +157,9 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 		hostParams.Shape = defaultShape
 	}
 
-	if hostParams.Engine == "" {
+	if hostParams.Type == "" {
 		hostParams.isDefaultEngine = true
-		hostParams.Engine = string(defaultEngine)
+		hostParams.Type = string(defaultEngine)
 	}
 
 	if hostParams.MinStorageGB == 0 {
@@ -181,12 +181,12 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	hostParams.EnableIAMDatabaseAuthentication = false
 
 	hostParams.InstanceClass = getInstanceClass(hostParams.Shape)
-	hostParams.StorageType, err = getStorageType(config, hostParams.Engine, hostParams.Shape)
+	hostParams.StorageType, err = getStorageType(config, hostParams.Type, hostParams.Shape)
 	if err != nil {
 		return &HostParams{}, err
 	}
 
-	if hostParams.Engine == string(v1.Postgres) {
+	if hostParams.Type == string(v1.Postgres) {
 		if hostParams.MaxStorageGB == 0 {
 			if dbClaim.Status.ActiveDB.MaxStorageGB != 0 {
 				return &HostParams{}, ErrMaxStorageReduced
@@ -206,8 +206,8 @@ func GetActiveHostParams(dbClaim *v1.DatabaseClaim) *HostParams {
 
 	hostParams := HostParams{}
 
-	hostParams.Engine = string(dbClaim.Status.ActiveDB.Type)
-	hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
+	hostParams.Type = string(dbClaim.Status.ActiveDB.Type)
+	hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
 	hostParams.Shape = dbClaim.Status.ActiveDB.Shape
 	hostParams.InstanceClass = getInstanceClass(hostParams.Shape)
 	hostParams.MinStorageGB = dbClaim.Status.ActiveDB.MinStorageGB

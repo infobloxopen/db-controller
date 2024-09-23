@@ -192,7 +192,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 						Enabled: ptr.To(true),
 					},
 
-					DatabaseVersion: getAlloyDBVersion(&params.EngineVersion),
+					DatabaseVersion: getAlloyDBVersion(&params.DBVersion),
 
 					DeletionPolicy: ptr.To(string(params.DeletionPolicy)),
 

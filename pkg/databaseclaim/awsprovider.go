@@ -135,9 +135,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 						DBClusterParameterGroupNameRef: &xpv1.Reference{
 							Name: pgName,
 						},
-						EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
+						EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
 					},
-					Engine: &params.Engine,
+					Engine: &params.Type,
 					Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 					// Items from Config
 					MasterUsername:                  &params.MasterUsername,
@@ -271,9 +271,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
-							EngineVersion:               (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
+							EngineVersion:               (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
 						},
-						Engine:              &params.Engine,
+						Engine:              &params.Type,
 						MultiAZ:             &multiAZ,
 						DBInstanceClass:     &params.InstanceClass,
 						AllocatedStorage:    &ms64,
@@ -414,10 +414,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
-							EngineVersion:     (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
+							EngineVersion:     (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
 						},
 						DBParameterGroupName: &pgName,
-						Engine:               &params.Engine,
+						Engine:               &params.Type,
 						DBInstanceClass:      &params.InstanceClass,
 						Tags:                 ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), OperationalStatusTagKey, OperationalStatusActiveValue),
 						// Items from Config
@@ -502,8 +502,8 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 						Description: &desc,
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-								Engine:        params.Engine,
-								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
+								Engine:        params.Type,
+								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
@@ -586,8 +586,8 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 						Description: &desc,
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-								Engine:        params.Engine,
-								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
+								Engine:        params.Type,
+								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &transactionTimeout,
@@ -666,8 +666,8 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 						Description: &desc,
 						CustomDBClusterParameterGroupParameters: crossplaneaws.CustomDBClusterParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-								Engine:        params.Engine,
-								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.EngineVersion})[params.IsDefaultVersion],
+								Engine:        params.Type,
+								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
