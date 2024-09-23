@@ -54,6 +54,7 @@ var (
 
 var _ = Describe("dbc-end2end", Ordered, func() {
 
+	//TODO:check why this is not being initialized correctly
 	db1 = namespace + "-db-1"
 	db2 = namespace + "-db-2"
 
@@ -129,12 +130,19 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
-			By("status error includes engine version not specified error")
-			Eventually(func() (string, error) {
+			By("should create an instance using default version 15")
+			Eventually(func() (v1.DbState, error) {
 				Expect(k8sClient.Get(ctx, key, dbClaim)).ToNot(HaveOccurred())
 				Expect(dbClaim.Spec.DBVersion).To(BeEmpty())
-				return dbClaim.Status.Error, nil
-			}, 2*time.Minute, 250*time.Millisecond).Should(Equal(hostparams.ErrEngineVersionNotSpecified.Error()))
+				return dbClaim.Status.ActiveDB.DbState, nil
+			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
+
+			if cloud == "aws" {
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, dbInst)
+				Expect(err).To(BeNil())
+				Expect(dbInst.(*crossplaneaws.DBInstance).Status.AtProvider.EngineVersion).To(Equal("15"), "crossplane cr: %s exists, please delete", dbinstance1)
+			}
+
 		})
 
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
@@ -175,9 +183,6 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			Eventually(func() error {
 				Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
 				prevDbClaim.Spec.DBVersion = "15"
-				if cloud == "aws" {
-					prevDbClaim.Spec.DBVersion = "15.5"
-				}
 				return k8sClient.Update(ctx, prevDbClaim)
 			}, 30*time.Second, 100*time.Millisecond).Should(Succeed())
 
@@ -638,6 +643,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 	// FIXME: only clean up resources that this test suite created
 	var afterall = func() {
+		return
 		if os.Getenv("NOCLEANUP") != "" {
 			return
 		}

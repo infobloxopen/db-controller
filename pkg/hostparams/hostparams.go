@@ -115,13 +115,6 @@ func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 		p.HasVersionChanged(np.EngineVersion)
 }
 
-func (p *HostParams) CheckEngineVersion(isNewClaim bool) error {
-	if p.IsDefaultVersion && isNewClaim {
-		return ErrEngineVersionNotSpecified
-	}
-	return nil
-}
-
 func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	var (
 		err   error

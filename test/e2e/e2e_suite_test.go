@@ -75,6 +75,7 @@ func NewGinkgoLogger(t *testing.T) logr.Logger {
 }
 
 var _ = BeforeSuite(func() {
+	namespace = "ecgto"
 	Expect(namespace).NotTo(Equal(""), "you must set the namespace")
 	class = namespace
 

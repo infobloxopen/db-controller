@@ -112,11 +112,6 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		}
 
 		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
-		validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
-		if validationError != nil {
-			logr.Error(validationError, "invalid_db_version")
-			return false, validationError
-		}
 		dbCluster = &crossplaneaws.DBCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: dbHostName,
@@ -252,10 +247,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 	}, dbInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
-			if validationError != nil {
-				return false, validationError
-			}
 			dbInstance = &crossplaneaws.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -410,10 +401,6 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logr.Info("aurora db instance not found. creating now")
-			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
-			if validationError != nil {
-				return false, validationError
-			}
 			dbInstance = &crossplaneaws.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -505,10 +492,6 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
-			if validationError != nil {
-				return pgName, validationError
-			}
 			dbParamGroup = &crossplaneaws.DBParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -593,10 +576,6 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
-			if validationError != nil {
-				return pgName, validationError
-			}
 			dbParamGroup = &crossplaneaws.DBParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -677,10 +656,6 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion(dbClaim.Status.ActiveDB.DbState == "")
-			if validationError != nil {
-				return pgName, validationError
-			}
 			dbParamGroup = &crossplaneaws.DBClusterParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
