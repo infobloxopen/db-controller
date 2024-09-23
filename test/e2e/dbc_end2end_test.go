@@ -138,7 +138,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 		It("Updating a databaseclaim to have an invalid dbVersion", func() {
 			By("erroring out when AWS/GCP does not support dbVersion")
 			key := types.NamespacedName{
-				Name:      db1,
+				Name:      env + "-" + db1,
 				Namespace: namespace,
 			}
 			invalidVersion := "15.3"
@@ -165,7 +165,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 		It("Updating dbclaim to valid db version", func() {
 			key := types.NamespacedName{
-				Name:      db1,
+				Name:      env + "-" + db1,
 				Namespace: namespace,
 			}
 			prevDbClaim := &v1.DatabaseClaim{}
@@ -177,7 +177,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			}, 30*time.Second, 100*time.Millisecond).Should(Succeed())
 
 			updatedDbClaim := &v1.DatabaseClaim{}
-			By(fmt.Sprintf("checking dbclaim %s status is ready", db1))
+			By(fmt.Sprintf("checking dbclaim %s status is ready", env+"-"+db1))
 			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
 			// FIXME: replace this hash naming scheme
 			{
@@ -293,7 +293,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					SecretName: secretName,
 					SourceDatabaseClaim: &v1.SourceDatabaseClaim{
 						Namespace: namespace,
-						Name:      db1,
+						Name:      env + "-" + db1,
 					},
 					SchemaRoleMap: map[string]v1.RoleType{
 						"schemaapp111": v1.ReadOnly,
@@ -350,7 +350,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					SecretName: secretName,
 					SourceDatabaseClaim: &v1.SourceDatabaseClaim{
 						Namespace: namespace,
-						Name:      db1,
+						Name:      env + "-" + db1,
 					},
 					SchemaRoleMap: map[string]v1.RoleType{
 						"schemaapp444": v1.ReadOnly,
@@ -488,7 +488,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			})
 			By("Removing the useExistingFlag in dbclaim and forcing the use of cached secret")
 			key := types.NamespacedName{
-				Name:      db2,
+				Name:      env + "-" + db2,
 				Namespace: namespace,
 			}
 			existingDbClaim := &v1.DatabaseClaim{}
@@ -536,7 +536,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			}
 
 			key := types.NamespacedName{
-				Name:      db2,
+				Name:      env + "-" + db2,
 				Namespace: namespace,
 			}
 			type testState struct {

@@ -106,7 +106,7 @@ func (p *HostParams) HasVersionChanged(activeVersion string) bool {
 	if p.IsDefaultVersion {
 		return false
 	}
-	return activeVersion != p.EngineVersion
+	return strings.Split(activeVersion, ".")[0] != strings.Split(p.EngineVersion, ".")[0]
 }
 
 func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
