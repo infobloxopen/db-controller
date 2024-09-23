@@ -147,7 +147,7 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 			hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
 		} else {
 			hostParams.IsDefaultVersion = true
-			hostParams.DBVersion = defaultEngineVersion
+			hostParams.DBVersion = "15"
 		}
 	}
 

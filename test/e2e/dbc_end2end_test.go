@@ -64,7 +64,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 	Context("Creating a DB", func() {
 
 		newdbcMasterSecretName = rds1 + "-master"
-		It("Creating a DBClaim", func() {
+		It("Creating a DBClaim with invalid version", func() {
 
 			Expect(namespace).NotTo(BeEmpty(), "Namespace is empty")
 			Expect(env).NotTo(BeEmpty(), "Env is empty")
@@ -125,61 +125,46 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, dbInst)
 			Expect(errors.IsNotFound(err)).To(BeTrue(), "crossplane cr: %s exists, please delete", dbinstance1)
 
-			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
-
-			By("should create an instance using default version 15: " + dbinstance1)
-			Eventually(func() (v1.DbState, error) {
-				Expect(k8sClient.Get(ctx, key, dbClaim)).ToNot(HaveOccurred())
-				Expect(dbClaim.Spec.DBVersion).To(BeEmpty())
-				return dbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
-		})
-
-		It("Updating a databaseclaim to have an invalid dbVersion", func() {
-			By("erroring out when AWS/GCP does not support dbVersion")
-			key := types.NamespacedName{
-				Name:      env + "-" + db1,
-				Namespace: namespace,
-			}
 			invalidVersion := "15.3"
 			if cloud == "gcp" {
 				invalidVersion = "15.1"
 			}
-			prevDbClaim := &v1.DatabaseClaim{}
-			By("Getting the prev dbclaim")
-			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
-			By(fmt.Sprintf("Updating with version dbVersion: %s", invalidVersion))
-			prevDbClaim.Spec.DBVersion = invalidVersion
-			Expect(k8sClient.Update(ctx, prevDbClaim)).Should(Succeed())
-			updatedDbClaim := &v1.DatabaseClaim{}
-			By("Check that .spec.dbVersion is set")
-			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
-			Expect(updatedDbClaim.Spec.DBVersion).To(Equal(invalidVersion))
+			dbClaim.Spec.DBVersion = invalidVersion
+
+			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
 			By(fmt.Sprintf("checking %s status.error message is not empty", key.String()))
 			Eventually(func() string {
-				Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
-				return updatedDbClaim.Status.Error
+				Expect(k8sClient.Get(ctx, key, dbClaim)).Should(Succeed())
+				return dbClaim.Status.Error
 			}, time.Minute*3, time.Second*3).ShouldNot(ContainSubstring(v1.ErrInvalidDBVersion.Error()))
+
 		})
 
-		It("Updating dbclaim to valid db version", func() {
+		It("Updating a databaseclaim", func() {
+			By("setting DBVersion to empty should use value 15")
 			key := types.NamespacedName{
 				Name:      env + "-" + db1,
 				Namespace: namespace,
 			}
-			prevDbClaim := &v1.DatabaseClaim{}
-			By("Update DBC CR")
-			Eventually(func() error {
-				Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
-				prevDbClaim.Spec.DBVersion = "15"
-				return k8sClient.Update(ctx, prevDbClaim)
-			}, 30*time.Second, 100*time.Millisecond).Should(Succeed())
 
+			prevDbClaim := &v1.DatabaseClaim{}
+			By("Getting the prev dbclaim")
+			Expect(k8sClient.Get(ctx, key, prevDbClaim)).Should(Succeed())
+			By("Updating with version dbVersion: <empty>")
+			newDeploy := prevDbClaim.DeepCopy()
+			newDeploy.Spec.DBVersion = ""
+			Expect(k8sClient.Patch(ctx, newDeploy, client.MergeFrom(prevDbClaim))).Should(Succeed())
 			updatedDbClaim := &v1.DatabaseClaim{}
-			By(fmt.Sprintf("checking dbclaim %s status is ready", env+"-"+db1))
+
+			By("should create an instance using default version 15: " + dbinstance1)
+			Eventually(func() (v1.DbState, error) {
+				Expect(k8sClient.Get(ctx, key, updatedDbClaim)).ToNot(HaveOccurred())
+				Expect(updatedDbClaim.Spec.DBVersion).To(Equal(""))
+				return updatedDbClaim.Status.ActiveDB.DbState, nil
+			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
+
 			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
-			// FIXME: replace this hash naming scheme
 			{
 				wd, err := utils.GetProjectDir()
 				Expect(err).ToNot(HaveOccurred())
@@ -195,6 +180,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				dbInst := utils.DBInstanceType(cloud)
 				return k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1update}, dbInst)
 			}, timeout_e2e, interval_e2e).Should(Succeed())
+
 			By("Check Crossplane CR is ready: " + dbinstance1update)
 			Eventually(func() bool {
 				dbInst := utils.DBInstanceType(cloud)
@@ -221,6 +207,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1update, Namespace: namespace}, &creds)
 			}, 30*time.Second, 500*time.Millisecond).Should(BeNil())
+
 			// TODO: this secret is empty on aws
 			// Eventually(func() string {
 			// 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1, Namespace: namespace}, &creds)).Should(Succeed())
