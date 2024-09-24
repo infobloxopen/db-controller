@@ -25,6 +25,7 @@ var (
 	// These values are purposely moved from the config file to the code to avoid accidental changes.
 	defaultShape         = "db.t4g.medium"
 	defaultEngineVersion = "15.3"
+	defaultMajorVersion  = "15"
 	defaultEngine        = v1.Postgres
 )
 
@@ -144,10 +145,12 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 
 	if hostParams.DBVersion == "" {
 		if dbClaim.Status.ActiveDB.DBVersion != "" {
+			//for an existing (Status.ActiveDB NOT empty) it picks up the Status DBVersion, so no update is triggered.
 			hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
 		} else {
+			//for a new Claim (Status.ActiveDB empty) it assumes 15 only
 			hostParams.IsDefaultVersion = true
-			hostParams.DBVersion = "15"
+			hostParams.DBVersion = defaultMajorVersion
 		}
 	}
 
