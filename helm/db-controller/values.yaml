@@ -33,9 +33,6 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-xrd:
-  create: true
-
 xr:
   create: true
 
