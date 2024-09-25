@@ -2,6 +2,8 @@ apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
   name: xnetworkrecords.persistance.infoblox.com
+  labels:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   group: persistance.infoblox.com
   names:
