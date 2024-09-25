@@ -65,10 +65,15 @@ func (r *DatabaseClaimReconciler) createSecretWithConnInfo(ctx context.Context, 
 		return err
 	}
 
+	serviceNS, err := r.getServiceNamespace()
+	if err != nil {
+		return err
+	}
+
 	var secret = &corev1.Secret{}
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name:      dbHostIdentifier,
-		Namespace: dbclaim.Namespace,
+		Namespace: serviceNS,
 	}, secret)
 	if err != nil {
 		return err
