@@ -298,6 +298,8 @@ var revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
 	return err
 }
 
+// Execute runs the schema copy process, including granting and revoking superuser access,
+// dumping the schema, and restoring it to the target database.
 func (s *copy_schema_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
 	log.Info("started")
@@ -313,7 +315,6 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	if targetDBAdmin, err = getDB(s.config.TargetDBAdminDsn, nil); err != nil {
 		log.Error(err, "connection test failed for targetDBAdmin")
-
 		return nil, err
 	}
 	defer closeDB(log, targetDBAdmin)
@@ -322,18 +323,18 @@ func (s *copy_schema_state) Execute() (State, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	rolename := url.User.Username()
-	log.Info("granting super user acesss role to \"" + rolename + "\"")
+	log.Info("granting super user access", "role", rolename)
 
 	err = grantSuperUserAccess(targetDBAdmin, rolename)
 	if err != nil {
-		log.Error(err, "could not grant super user acesss role to \""+rolename+"\"")
+		log.Error(err, "failed to grant superuser access", "role", rolename)
 		metrics.UsersUpdatedErrors.WithLabelValues("grant error").Inc()
 		return nil, err
 	}
 
 	dump := NewDump(s.config.SourceDBAdminDsn)
-
 	dump.SetupFormat("p")
 	dump.SetPath(s.config.ExportFilePath)
 	dump.EnableVerbose()
@@ -347,11 +348,12 @@ func (s *copy_schema_state) Execute() (State, error) {
 	})
 
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
-	log.Info("executed dump with", "full command", dumpExec.FullCommand)
+	log.Info("executed dump", "full command", dumpExec.FullCommand)
 
 	if dumpExec.Error != nil {
 		return nil, dumpExec.Error.Err
 	}
+
 	if err = dump.modifyPgDumpInfo(); err != nil {
 		log.Error(err, "failed to comment create policy")
 		return nil, err
@@ -362,14 +364,16 @@ func (s *copy_schema_state) Execute() (State, error) {
 	restore.Path = s.config.ExportFilePath
 	restoreExec := restore.Exec(dumpExec.FileName, ExecOptions{StreamPrint: true})
 
-	log.Info("restored with", "full command", restoreExec.FullCommand)
+	log.Info("executed restore", "full command", restoreExec.FullCommand)
 
 	if restoreExec.Error != nil {
+		log.Error(restoreExec.Error.Err, "restore failed")
 		return nil, restoreExec.Error.Err
 	}
+
 	err = revokeSuperUserAccess(targetDBAdmin, rolename)
 	if err != nil {
-		log.Error(err, "could not revoke super user acesss role from"+rolename)
+		log.Error(err, "failed to revoke superuser access", "role", rolename)
 		metrics.UsersUpdatedErrors.WithLabelValues("revoke error").Inc()
 		return nil, err
 	}
@@ -378,8 +382,8 @@ func (s *copy_schema_state) Execute() (State, error) {
 	return &create_subscription_state{
 		config: s.config,
 	}, nil
-
 }
+
 func (s *copy_schema_state) Id() StateEnum {
 	return S_CopySchema
 }
