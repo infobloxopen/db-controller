@@ -49,11 +49,10 @@ func (x *Restore) Exec(filename string, opts ExecOptions) Result {
 	err = cmd.Wait()
 	if err != nil {
 		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
+		if errors.As(err, exitError) {
 			result.Error = &ResultError{Err: exitError, ExitCode: exitError.ExitCode(), CmdOutput: result.Output}
 
 			// Attempt to drop schemas after restore failure.
-			fmt.Println("restore failed, dropping all schemas")
 			dropErr := x.DropSchemas()
 			if dropErr != nil {
 				result.Error = &ResultError{
