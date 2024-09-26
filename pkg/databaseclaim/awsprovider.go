@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
+	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	_ "github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,8 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-const defaultMajorVersion string = "15"
 
 func (r *DatabaseClaimReconciler) manageCloudHostAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
 	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
@@ -135,7 +134,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 						DBClusterParameterGroupNameRef: &xpv1.Reference{
 							Name: pgName,
 						},
-						EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
+						EngineVersion: ptr.To(getEngineVersion(params, r)),
 					},
 					Engine: &params.Type,
 					Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
@@ -271,7 +270,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
-							EngineVersion:               (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
+							EngineVersion:               ptr.To(getEngineVersion(params, r)),
 						},
 						Engine:              &params.Type,
 						MultiAZ:             &multiAZ,
@@ -414,7 +413,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
-							EngineVersion:     (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
+							EngineVersion:     ptr.To(getEngineVersion(params, r)),
 						},
 						DBParameterGroupName: &pgName,
 						Engine:               &params.Type,
@@ -503,7 +502,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
 								Engine:        params.Type,
-								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
+								EngineVersion: ptr.To(getEngineVersion(params, r)),
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
@@ -549,6 +548,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}
 	return pgName, nil
 }
+
 func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (string, error) {
 
 	logr := log.FromContext(ctx)
@@ -587,7 +587,7 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
 								Engine:        params.Type,
-								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
+								EngineVersion: ptr.To(getEngineVersion(params, r)),
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &transactionTimeout,
@@ -667,7 +667,7 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 						CustomDBClusterParameterGroupParameters: crossplaneaws.CustomDBClusterParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
 								Engine:        params.Type,
-								EngineVersion: (map[bool]*string{true: ptr.To(defaultMajorVersion), false: &params.DBVersion})[params.IsDefaultVersion],
+								EngineVersion: ptr.To(getEngineVersion(params, r)),
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
@@ -1072,4 +1072,14 @@ func HasOperationalTag(tags []*crossplaneaws.Tag) bool {
 		}
 	}
 	return false
+}
+
+func getEngineVersion(params *hostparams.HostParams, r *DatabaseClaimReconciler) string {
+	defaultMajorVersion := ""
+	if params.IsDefaultVersion {
+		defaultMajorVersion = basefun.GetDefaultMajorVersion(r.Config.Viper)
+	} else {
+		defaultMajorVersion = params.DBVersion
+	}
+	return defaultMajorVersion
 }
