@@ -1,10 +1,9 @@
-{{- if .Values.xrd.create }}
-# TODO: should this move to a hook/crd install?
-{{- if not (lookup "apiextensions.crossplane.io/v1" "CompositeResourceDefinition" "" "xnetworkrecords.persistance.infoblox.com") }}
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
   name: xnetworkrecords.persistance.infoblox.com
+  labels:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   group: persistance.infoblox.com
   names:
@@ -62,6 +61,3 @@ spec:
                       description: 'Subnetwork is the subnet to provision IP addresses for PSC
                         ie. projects/gcp-eng-ddiaas-dev/regions/us-east1/subnetworks/private-service-connect'
                       type: string
-{{- end }}
----
-{{- end }}

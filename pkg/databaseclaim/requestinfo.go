@@ -1,7 +1,9 @@
 package databaseclaim
 
 import (
+	"context"
 	"fmt"
+
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
@@ -24,7 +26,7 @@ type requestInfo struct {
 }
 
 // NewRequestInfo creates a new requestInfo struct.
-func NewRequestInfo(cfg *viper.Viper, dbClaim *v1.DatabaseClaim) (requestInfo, error) {
+func NewRequestInfo(ctx context.Context, cfg *viper.Viper, dbClaim *v1.DatabaseClaim) (requestInfo, error) {
 	var (
 		sharedDBHost            bool
 		enablePerfInsight       bool

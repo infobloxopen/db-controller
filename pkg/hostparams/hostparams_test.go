@@ -296,6 +296,54 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "dbversion-empty-must-read-status.dbversion", want: false,
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						Type:         "aurora-postgresql",
+						Shape:        "db.t4g.medium!io1",
+						MinStorageGB: 20,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DBVersion: "15.7",
+						},
+					},
+				},
+				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+					Shape:         "db.t4g.medium!io1",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "15.7",
+				},
+			},
+		},
+		{
+			name: "dbversion-empty-must-read-status.dbversion", want: false,
+			args: args{
+				config: NewConfig(testConfig),
+				dbClaim: &persistancev1.DatabaseClaim{
+					Spec: persistancev1.DatabaseClaimSpec{
+						Type:         "aurora-postgresql",
+						Shape:        "db.t4g.medium!io1",
+						MinStorageGB: 20,
+					},
+					Status: persistancev1.DatabaseClaimStatus{
+						ActiveDB: persistancev1.Status{
+							DBVersion: "",
+						},
+					},
+				},
+				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+					Shape:         "db.t4g.medium!io1",
+					InstanceClass: "db.t4g.medium",
+					MinStorageGB:  200,
+					EngineVersion: "15.3",
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

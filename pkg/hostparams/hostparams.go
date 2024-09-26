@@ -150,8 +150,12 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	}
 
 	if hostParams.EngineVersion == "" {
-		hostParams.isDefaultVersion = true
-		hostParams.EngineVersion = defaultEngineVersion
+		if dbClaim.Status.ActiveDB.DBVersion != "" {
+			hostParams.EngineVersion = dbClaim.Status.ActiveDB.DBVersion
+		} else {
+			hostParams.isDefaultVersion = true
+			hostParams.EngineVersion = defaultEngineVersion
+		}
 	}
 
 	if hostParams.Shape == "" {
