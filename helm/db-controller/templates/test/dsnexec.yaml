@@ -1,0 +1,122 @@
+{{ $tableName := printf "dnsexec_%s" (randAlpha 4 | lower) }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-dsnexec-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+    persistance.atlas.infoblox.com/claim: {{ .Release.Name }}-dbproxy-test
+    persistance.atlas.infoblox.com/class: {{ .Values.dbController.class | quote }}
+    persistance.atlas.infoblox.com/dsnexec: enabled
+    persistance.atlas.infoblox.com/dsnexec-config: {{ .Release.Name }}-dsnexec-config
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
+spec:
+  serviceAccountName: {{ .Release.Name }}-dbproxy-test
+  initContainers:
+    - name: init
+      image: postgres:15
+      env:
+        - name: PGCONNECT_TIMEOUT
+          value: "2"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          ls /etc/secrets
+          cat /etc/secrets/uri_dsn.txt
+          for i in $(seq 1 10); do
+            echo "Attempt $i: Connecting to PostgreSQL..."
+            if psql $(cat /etc/secrets/uri_dsn.txt) -c 'SELECT 1'; then
+              echo "Connection successful!"
+              exit 0
+            fi
+            echo "Failed to connect. Retrying in 5 seconds..."
+            sleep 5
+          done
+          echo "Failed to connect after 20 attempts. Exiting."
+          exit 1
+      volumeMounts:
+        - name: dsn-volume
+          mountPath: /etc/secrets
+          readOnly: true
+  containers:
+    - name: wait
+      image: {{ .Values.tools.postgres.repository }}:{{ .Values.tools.postgres.tag }}
+      securityContext:
+        runAsUser: 0
+      command:
+        - /bin/bash
+        - -cx
+        - |
+          echo "Waiting for dsnexec to run..."
+          # Table name to check
+          TABLE_NAME={{ $tableName }}
+          # Function to check if the table exists
+          check_table_exists() {
+              # Use PSQL with the connection string to check if the table exists
+              psql $(cat /etc/secrets/uri_dsn.txt) -tAc "SELECT to_regclass('$TABLE_NAME');" | grep -q "$TABLE_NAME"
+              return $?
+          }
+
+          start_time=$(date +%s)
+
+          # Loop for 1 minute (60 seconds)
+          while [ $(($(date +%s) - start_time)) -lt 60 ]; do
+
+              if check_table_exists; then
+                  echo "Table $TABLE_NAME exists!"
+                  kill -s INT $(pidof dsnexec)
+                  exit 0
+              else
+                  echo "Table $TABLE_NAME does not exist. Checking again in 5 seconds..."
+                  sleep 5
+              fi
+          done
+
+          exit 1
+      volumeMounts:
+        - name: dsn-volume
+          mountPath: /etc/secrets
+          readOnly: true
+  shareProcessNamespace: true
+  # Sidecar has a liveness probe, allow it to restart
+  restartPolicy: Never
+  volumes:
+    - name: dsn-volume
+      secret:
+        secretName: {{ .Release.Name }}-dbproxy-test
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-dsnexec-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+  annotations:
+    # ensure this runs on the new db-controller, not the existing one
+    "helm.sh/hook": "test"
+    "helm.sh/hook-weight": "-5"
+type: Opaque
+stringData:
+  config.yaml: |
+    configs:
+      sql:
+        disabled: false
+        sources:
+        - driver: postgres
+          # This is not supported in code
+          filename: /var/run/db-dsn/dsn.txt
+        destination:
+          driver: "postgres"
+          dsn: {{ printf "postgres://myuser:mypassword@%s-dbproxy-test-db.%s.svc:5432/mydb?sslmode=disable" .Release.Name .Release.Namespace | quote }}
+        commands:
+        - command: |-
+            -- FIXME: The random tableName isn't unique across multiple helm test runs
+            DROP TABLE IF EXISTS {{ $tableName }};
+            CREATE TABLE {{ $tableName }} ( first_column text );
+---

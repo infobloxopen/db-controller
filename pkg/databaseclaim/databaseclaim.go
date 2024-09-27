@@ -414,7 +414,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 	//when using an existing db, this is the first status, then it moves to M_MigrateExistingToNewDB and falls into the condition below
 	if operationMode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
-		err := r.reconcileUseExistingDB(ctx, reqInfo, dbClaim)
+		err := r.reconcileUseExistingDB(ctx, reqInfo, dbClaim, operationMode)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
@@ -438,7 +438,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 
 			logr.Info("existing db was not reconciled, calling reconcileUseExistingDB before reconcileUseExistingDB")
 
-			err := r.reconcileUseExistingDB(ctx, reqInfo, dbClaim)
+			err := r.reconcileUseExistingDB(ctx, reqInfo, dbClaim, operationMode)
 			if err != nil {
 				return r.manageError(ctx, dbClaim, err)
 			}
@@ -494,7 +494,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 
 // reconcileUseExistingDB reconciles the existing db
 // bool indicates that object status should be updated
-func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) error {
+func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) error {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 
 	activeDB := dbClaim.Status.ActiveDB
@@ -542,7 +542,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 	dbName := existingDBConnInfo.DatabaseName
 	updateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUserAndExtensions(reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username, operationalMode)
 	if err != nil {
 		return err
 	}
@@ -639,7 +639,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 		return ctrl.Result{}, err
 
 	}
-	err = r.manageUserAndExtensions(reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username)
+	err = r.manageUserAndExtensions(reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username, operationalMode)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1150,7 +1150,7 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string, operationalMode ModeEnum) error {
 
 	if status == nil {
 		return fmt.Errorf("status is nil")
@@ -1165,7 +1165,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(reqInfo *requestInfo, 
 	if err != nil {
 		return err
 	}
-	if roleCreated {
+	if roleCreated && operationalMode != M_MigrateExistingToNewDB && operationalMode != M_MigrationInProgress {
 		// take care of special extensions related to the user
 		err = dbClient.CreateSpecialExtensions(dbName, baseUsername)
 		if err != nil {

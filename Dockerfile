@@ -17,8 +17,6 @@ COPY api/ api/
 COPY internal/controller/ internal/controller/
 COPY internal/webhook/ internal/webhook/
 COPY pkg/ pkg/
-# FIXME: move this to pkg/
-COPY webhook/ webhook/
 # FIXME: config is for raw manifest yaml that we use in helm, remove this when possible
 COPY config/ config/
 

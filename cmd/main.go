@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/internal/controller"
@@ -44,7 +43,6 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
-	dbwebhook "github.com/infobloxopen/db-controller/webhook"
 
 	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	// +kubebuilder:scaffold:imports
@@ -96,7 +94,6 @@ func main() {
 	var metricsDepYamlPath string
 	var metricsConfigYamlPath string
 	var enableDBProxyWebhook bool
-	var enableDSNExecWebhook bool
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
 
@@ -105,7 +102,6 @@ func main() {
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
 	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. Enabling this option will cause the db-controller to inject db proxy pod into pods with the infoblox.com/db-secret-path annotation set.")
-	flag.BoolVar(&enableDSNExecWebhook, "enable-dsnexec", false, "Enable Dsnexec webhook. Enabling this option will cause the db-controller to inject dsnexec container into pods with the infoblox.com/remote-db-dsn-secret and infoblox.com/dsnexec-config-secret annotations set.")
 
 	opts := zap.Options{
 		Development: true,
@@ -247,29 +243,11 @@ func main() {
 			Namespace:  namespace,
 			Class:      class,
 			DBProxyImg: os.Getenv("DBPROXY_IMAGE"),
+			DSNExecImg: os.Getenv("DSNEXEC_IMAGE"),
 		}); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
 		}
-	}
-	if enableDSNExecWebhook {
-
-		cfg, err := dbwebhook.ParseConfig(dsnExecSidecarConfigPath)
-
-		if err != nil {
-			setupLog.Error(err, "could not parse dsnexec  sidecar configuration")
-			os.Exit(1)
-		}
-		setupLog.Info("dnsexec-controller", "config", cfg)
-
-		mgr.GetWebhookServer().Register("/mutate-dsnexec", &webhook.Admission{
-			Handler: &dbwebhook.DsnExecInjector{
-				Name:                 "Dsnexec",
-				Client:               mgr.GetClient(),
-				DsnExecSidecarConfig: cfg,
-				Decoder:              admission.NewDecoder(mgr.GetScheme()),
-			},
-		})
 	}
 
 	setupLog.Info("starting manager")

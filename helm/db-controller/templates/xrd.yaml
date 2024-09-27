@@ -1,16 +1,18 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xnetworkrecords.persistance.infoblox.com
+  name: xnetworkrecords.{{ include "db-controller.group" . }}
   labels:
     kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
-  group: persistance.infoblox.com
+  group: {{ include "db-controller.group" . }}
   names:
     kind: XNetworkRecord
     plural: xnetworkrecords
+    {{- if eq .Values.dbController.class "default" }}
     shortNames:
       - xnr
+    {{- end }}
   versions:
     - name: v1alpha1
       served: true
