@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/bits"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	_ "github.com/infobloxopen/db-controller/dsnexec/pkg/shelldb"
 	_ "github.com/lib/pq"
+	log "github.com/sirupsen/logrus"
 )
 
 // Hanlder is an instance of dsnexec.
@@ -85,14 +87,20 @@ func (w *Handler) exec() error {
 
 		parsedOpts, err := parse(source.DSN)
 		if err != nil {
-			return fmt.Errorf("failed to parse dsn: %v", err)
+			return fmt.Errorf("failed to parse dsn: %s", err)
 		}
 		parsedOpts["raw_dsn"] = source.DSN
 		argContext[name] = parsedOpts
 	}
+
+	dsnURL, err := url.Parse(w.config.Destination.DSN)
+	if err == nil {
+		log.Infof("destination dsn: %s", dsnURL.Redacted())
+	}
+
 	db, err := sql.Open(w.config.Destination.Driver, w.config.Destination.DSN)
 	if err != nil {
-		return fmt.Errorf("failed to open destination database: %v", err)
+		return fmt.Errorf("failed to open destination database: %s", err)
 	}
 	defer db.Close()
 
@@ -108,6 +116,7 @@ func (w *Handler) exec() error {
 		cmd := bs.String()
 		if len(v.Args) == 0 {
 			if _, err := db.Exec(cmd); err != nil {
+				log.Infof("failed to execute sql command: %s err: %s", cmd, err)
 				return fmt.Errorf("failed to execute sql: %v", err)
 			}
 			continue
