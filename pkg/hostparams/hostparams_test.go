@@ -3,7 +3,11 @@ package hostparams
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -765,6 +769,27 @@ func TestDeletionPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDBVersions(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	dbVersion1 := "15"
+
+	Expect(strings.Split(dbVersion1, ".")[0]).To(Equal("15"))
+
+	dbVersion2 := "15.2"
+
+	Expect(strings.Split(dbVersion2, ".")[0]).To(Equal("15"))
+
+	dbVersion3 := "15.1.2"
+
+	Expect(strings.Split(dbVersion3, ".")[0]).To(Equal("15"))
+
+	dbVersion4 := ""
+
+	Expect(strings.Split(dbVersion4, ".")[0]).To(Equal(""))
+
 }
 
 func NewConfig(in []byte) *viper.Viper {
