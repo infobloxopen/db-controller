@@ -361,15 +361,23 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	restore := NewRestore(s.config.TargetDBUserDsn)
 	restore.EnableVerbose()
-	restore.Path = s.config.ExportFilePath
+	restore.SetPath(s.config.ExportFilePath)
+
 	restoreExec := restore.Exec(dumpExec.FileName, ExecOptions{StreamPrint: true})
-
-	log.Info("executed restore", "full command", restoreExec.FullCommand)
-
 	if restoreExec.Error != nil {
 		log.Error(restoreExec.Error.Err, "restore failed")
+
+		// Attempt to drop schemas after restore failure.
+		dropResult := restore.DropSchemas()
+		if dropResult.Error != nil {
+			log.Error(dropResult.Error.Err, "failed to drop schemas")
+			return nil, dropResult.Error.Err
+		}
+
 		return nil, restoreExec.Error.Err
 	}
+
+	log.Info("executed restore", "full command", restoreExec.FullCommand)
 
 	err = revokeSuperUserAccess(targetDBAdmin, rolename)
 	if err != nil {
