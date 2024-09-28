@@ -22,7 +22,6 @@ import (
 	"time"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	hosterrors "github.com/infobloxopen/db-controller/pkg/hostparams"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -466,7 +465,7 @@ func createPostgresRDSWithEmptyDbVersionTest() {
 			return "", err
 		}
 		return createdDbClaim.Status.Error, nil
-	}, time.Second*10, time.Second*5).Should(Equal(hosterrors.ErrEngineVersionNotSpecified.Error()))
+	}, time.Second*10, time.Second*5).Should(BeEmpty())
 }
 
 func cleanupdb(db string) {

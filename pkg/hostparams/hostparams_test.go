@@ -787,7 +787,7 @@ func TestCheckEngineVersion(t *testing.T) {
 					MinStorageGB: 20,
 				}},
 			},
-			want: ErrEngineVersionNotSpecified,
+			want: nil,
 		},
 		{
 			name: "test_specific_EngineVersion",

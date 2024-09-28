@@ -441,6 +441,11 @@ func (r *DatabaseClaimReconciler) updateStatus(ctx context.Context, dbClaim *per
 		dbClaim.Status.NewDB.ConnectionInfo = new(persistancev1.DatabaseClaimConnectionInfo)
 	}
 
+	activeParams := hostparams.GetActiveHostParams(dbClaim)
+	if r.Input.HostParams.IsUpgradeRequested(activeParams) && dbClaim.Status.ActiveDB.ConnectionInfo.DatabaseName != "" {
+		return r.manageError(ctx, dbClaim, fmt.Errorf("Migrations are disabled temporarily. Revert values to original setting: dbVersion: %s Shape: %s and Type: %s", activeParams.EngineVersion, activeParams.Shape, activeParams.Engine))
+	}
+
 	r.Mode = r.getMode(dbClaim)
 	if r.Mode == M_PostMigrationInProgress {
 		logr.Info("post migration is in progress")

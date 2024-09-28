@@ -4,13 +4,15 @@ kind: DatabaseClaim
 metadata:
   name: databaseclaim-dynamic-3
 spec:
-  # class: bjeevan
+  #class: dwells
   appId: sample-app
   secretName: dbc-databaseclaim-dynamic-3
   type: postgres
   userName: sample_user
+  dbVersion: "15.5"
   databaseName: pub
   dsnName: dynamic-postgres-dsn
-  shape: db.t2.small
+  shape: db.t3.medium
   minStorageGB: 20
   # useExistingSource: false
+---

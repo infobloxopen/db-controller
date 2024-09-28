@@ -115,9 +115,6 @@ func (p *HostParams) IsUpgradeRequested(np *HostParams) bool {
 }
 
 func (p *HostParams) CheckEngineVersion() error {
-	if p.isDefaultVersion {
-		return ErrEngineVersionNotSpecified
-	}
 	return nil
 }
 
