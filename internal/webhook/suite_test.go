@@ -37,7 +37,8 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var ctx context.Context
 var cancel context.CancelFunc
-var sidecarImage = "dbproxy:latest"
+var sidecarImageProxy = "dbproxy:latest"
+var sidecarImageExec = "dsnexec:latest"
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -99,7 +100,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = SetupWebhookWithManager(mgr, SetupConfig{
-		DBProxyImg: sidecarImage,
+		DBProxyImg: sidecarImageProxy,
+		DSNExecImg: sidecarImageExec,
 		Namespace:  "default",
 		Class:      "default",
 	})

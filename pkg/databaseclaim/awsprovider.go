@@ -9,9 +9,11 @@ import (
 	"github.com/go-logr/logr"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
+	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	_ "github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -109,11 +111,6 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		}
 
 		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
-		validationError := params.CheckEngineVersion()
-		if validationError != nil {
-			logr.Error(validationError, "invalid_db_version")
-			return false, validationError
-		}
 		dbCluster = &crossplaneaws.DBCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: dbHostName,
@@ -137,9 +134,9 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 						DBClusterParameterGroupNameRef: &xpv1.Reference{
 							Name: pgName,
 						},
-						EngineVersion: &params.EngineVersion,
+						EngineVersion: ptr.To(getEngineVersion(params, r)),
 					},
-					Engine: &params.Engine,
+					Engine: &params.Type,
 					Tags:   DBClaimTags(dbClaim.Spec.Tags).DBTags(),
 					// Items from Config
 					MasterUsername:                  &params.MasterUsername,
@@ -249,10 +246,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 	}, dbInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
-			if validationError != nil {
-				return false, validationError
-			}
 			dbInstance = &crossplaneaws.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -277,9 +270,9 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 							},
 							AutogeneratePassword:        true,
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
-							EngineVersion:               &params.EngineVersion,
+							EngineVersion:               ptr.To(getEngineVersion(params, r)),
 						},
-						Engine:              &params.Engine,
+						Engine:              &params.Type,
 						MultiAZ:             &multiAZ,
 						DBInstanceClass:     &params.InstanceClass,
 						AllocatedStorage:    &ms64,
@@ -407,10 +400,6 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logr.Info("aurora db instance not found. creating now")
-			validationError := params.CheckEngineVersion()
-			if validationError != nil {
-				return false, validationError
-			}
 			dbInstance = &crossplaneaws.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: dbHostName,
@@ -424,10 +413,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 							ApplyImmediately:  &trueVal,
 							SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
-							EngineVersion:     &params.EngineVersion,
+							EngineVersion:     ptr.To(getEngineVersion(params, r)),
 						},
 						DBParameterGroupName: &pgName,
-						Engine:               &params.Engine,
+						Engine:               &params.Type,
 						DBInstanceClass:      &params.InstanceClass,
 						Tags:                 ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), OperationalStatusTagKey, OperationalStatusActiveValue),
 						// Items from Config
@@ -502,10 +491,6 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
-			if validationError != nil {
-				return pgName, validationError
-			}
 			dbParamGroup = &crossplaneaws.DBParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -516,8 +501,8 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 						Description: &desc,
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-								Engine:        params.Engine,
-								EngineVersion: &params.EngineVersion,
+								Engine:        params.Type,
+								EngineVersion: ptr.To(getEngineVersion(params, r)),
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
@@ -563,6 +548,7 @@ func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, 
 	}
 	return pgName, nil
 }
+
 func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (string, error) {
 
 	logr := log.FromContext(ctx)
@@ -590,10 +576,6 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
-			if validationError != nil {
-				return pgName, validationError
-			}
 			dbParamGroup = &crossplaneaws.DBParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -604,8 +586,8 @@ func (r *DatabaseClaimReconciler) manageAuroraPostgresParamGroup(ctx context.Con
 						Description: &desc,
 						CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-								Engine:        params.Engine,
-								EngineVersion: &params.EngineVersion,
+								Engine:        params.Type,
+								EngineVersion: ptr.To(getEngineVersion(params, r)),
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &transactionTimeout,
@@ -674,10 +656,6 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 	}, dbParamGroup)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			validationError := params.CheckEngineVersion()
-			if validationError != nil {
-				return pgName, validationError
-			}
 			dbParamGroup = &crossplaneaws.DBClusterParameterGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pgName,
@@ -688,8 +666,8 @@ func (r *DatabaseClaimReconciler) manageClusterParamGroup(ctx context.Context, r
 						Description: &desc,
 						CustomDBClusterParameterGroupParameters: crossplaneaws.CustomDBClusterParameterGroupParameters{
 							DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-								Engine:        params.Engine,
-								EngineVersion: &params.EngineVersion,
+								Engine:        params.Type,
+								EngineVersion: ptr.To(getEngineVersion(params, r)),
 							},
 							Parameters: []crossplaneaws.CustomParameter{
 								{ParameterName: &logical,
@@ -1094,4 +1072,14 @@ func HasOperationalTag(tags []*crossplaneaws.Tag) bool {
 		}
 	}
 	return false
+}
+
+func getEngineVersion(params *hostparams.HostParams, r *DatabaseClaimReconciler) string {
+	defaultMajorVersion := ""
+	if params.IsDefaultVersion {
+		defaultMajorVersion = basefun.GetDefaultMajorVersion(r.Config.Viper)
+	} else {
+		defaultMajorVersion = params.DBVersion
+	}
+	return defaultMajorVersion
 }

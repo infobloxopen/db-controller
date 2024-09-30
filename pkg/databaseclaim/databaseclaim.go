@@ -629,7 +629,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 		if dbClaim.Status.NewDB.MinStorageGB != reqInfo.HostParams.MinStorageGB {
 			dbClaim.Status.NewDB.MinStorageGB = reqInfo.HostParams.MinStorageGB
 		}
-		if reqInfo.HostParams.Engine == string(v1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(reqInfo.HostParams.MaxStorageGB) {
+		if reqInfo.HostParams.Type == string(v1.Postgres) && int(dbClaim.Status.NewDB.MaxStorageGB) != int(reqInfo.HostParams.MaxStorageGB) {
 			dbClaim.Status.NewDB.MaxStorageGB = reqInfo.HostParams.MaxStorageGB
 		}
 	} else {
@@ -1116,11 +1116,11 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(hostParams *hostparams.H
 
 	switch dbType {
 	case v1.Postgres:
-		return hostName + "-" + (strings.Split(hostParams.EngineVersion, "."))[0]
+		return hostName + "-" + (strings.Split(hostParams.DBVersion, "."))[0]
 	case v1.AuroraPostgres:
-		return hostName + "-a-" + (strings.Split(hostParams.EngineVersion, "."))[0]
+		return hostName + "-a-" + (strings.Split(hostParams.DBVersion, "."))[0]
 	default:
-		return hostName + "-" + (strings.Split(hostParams.EngineVersion, "."))[0]
+		return hostName + "-" + (strings.Split(hostParams.DBVersion, "."))[0]
 	}
 }
 
@@ -1340,11 +1340,11 @@ func updateHostPortStatus(status *v1.Status, host, port, sslMode string) {
 }
 
 func updateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams) {
-	status.DBVersion = hostParams.EngineVersion
-	status.Type = v1.DatabaseType(hostParams.Engine)
+	status.DBVersion = hostParams.DBVersion
+	status.Type = v1.DatabaseType(hostParams.Type)
 	status.Shape = hostParams.Shape
 	status.MinStorageGB = hostParams.MinStorageGB
-	if hostParams.Engine == string(v1.Postgres) {
+	if hostParams.Type == string(v1.Postgres) {
 		status.MaxStorageGB = hostParams.MaxStorageGB
 	}
 }

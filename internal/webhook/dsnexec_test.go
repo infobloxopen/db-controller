@@ -13,7 +13,7 @@ import (
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
-var _ = Describe("dbproxy defaulting", func() {
+var _ = Describe("dsnexec defaulting", func() {
 	BeforeEach(func() {
 
 		By("create dependent resources")
@@ -69,11 +69,11 @@ var _ = Describe("dbproxy defaulting", func() {
 		By("Check pod is mutated")
 
 		name := "annotation-enabled"
-		Expect(k8sClient.Create(ctx, makePodProxy(name, "default-db"))).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, makePodExec(name, "default-db"))).NotTo(HaveOccurred())
 		pod := &corev1.Pod{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: name}, pod)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjectedProxy, "true"))
+		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjectedExec, "true"))
 
 	})
 
@@ -82,18 +82,18 @@ var _ = Describe("dbproxy defaulting", func() {
 
 		name := "annotation-disabled"
 
-		Expect(k8sClient.Create(ctx, makePodProxy(name, ""))).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, makePodExec(name, ""))).NotTo(HaveOccurred())
 		pod := &corev1.Pod{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: name}, pod)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pod.Annotations).NotTo(HaveKeyWithValue(AnnotationInjectedProxy, "true"))
+		Expect(pod.Annotations).NotTo(HaveKeyWithValue(AnnotationInjectedExec, "true"))
 
 		name = "annotation-false"
 
-		Expect(k8sClient.Create(ctx, makePodProxy(name, ""))).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, makePodExec(name, ""))).NotTo(HaveOccurred())
 		err = k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: name}, pod)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pod.Annotations).NotTo(HaveKeyWithValue(AnnotationInjectedProxy, "true"))
+		Expect(pod.Annotations).NotTo(HaveKeyWithValue(AnnotationInjectedExec, "true"))
 		Expect(pod.Spec.Volumes).To(HaveLen(0))
 		Expect(pod.Spec.Containers).To(HaveLen(1))
 
@@ -102,48 +102,52 @@ var _ = Describe("dbproxy defaulting", func() {
 	It("check initial volume and sidecar pod mutation", func() {
 
 		name := "annotation-enabled"
-		Expect(k8sClient.Create(ctx, makePodProxy(name, "default-db"))).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, makePodExec(name, "default-db"))).NotTo(HaveOccurred())
 		pod := &corev1.Pod{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: name}, pod)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjectedProxy, "true"))
+		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjectedExec, "true"))
 		By("Check secret volume")
-		Expect(pod.Spec.Volumes).To(HaveLen(1))
-		Expect(pod.Spec.Volumes[0].Name).To(Equal(VolumeNameProxy))
+		Expect(pod.Spec.Volumes).To(HaveLen(2))
+		Expect(pod.Spec.Volumes[0].Name).To(Equal(VolumeNameExec))
 		Expect(pod.Spec.Volumes[0].VolumeSource.Secret.SecretName).To(Equal("test"))
 		Expect(pod.Spec.Volumes[0].VolumeSource.Secret.Optional).To(BeNil())
+		Expect(pod.Spec.Volumes[1].Name).To(Equal(VolumeNameExecConfig))
+		Expect(pod.Spec.Volumes[1].VolumeSource.Secret.SecretName).To(Equal("dsnexec-config-secret"))
+		Expect(pod.Spec.Volumes[1].VolumeSource.Secret.Optional).To(BeNil())
 
 		By("Check sidecar pod is injected")
 		sidecar := pod.Spec.Containers[len(pod.Spec.Containers)-1]
-		Expect(sidecar.Image).To(Equal(sidecarImageProxy))
-		Expect(sidecar.VolumeMounts).To(HaveLen(1))
-		Expect(sidecar.VolumeMounts[0].Name).To(Equal(VolumeNameProxy))
-		Expect(sidecar.VolumeMounts[0].MountPath).To(Equal(MountPathProxy))
+		Expect(sidecar.Image).To(Equal(sidecarImageExec))
+		Expect(sidecar.VolumeMounts).To(HaveLen(2))
+		Expect(sidecar.VolumeMounts[0].Name).To(Equal(VolumeNameExec))
+		Expect(sidecar.VolumeMounts[0].MountPath).To(Equal(MountPathExec))
 		Expect(sidecar.VolumeMounts[0].ReadOnly).To(BeTrue())
 	})
 
 	It("pre-mutated pods are not re-mutated", func() {
 
 		name := "annotation-enabled"
-		Expect(k8sClient.Create(ctx, makeMutatedPodProxy(name, "default-db", "test"))).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, makeMutatedPodExec(name, "default-db", "test"))).NotTo(HaveOccurred())
 		pod := &corev1.Pod{}
 		err := k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: name}, pod)
 		Expect(err).NotTo(HaveOccurred())
 		By("Check pod has one set of volumes and sidecars")
-		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjectedProxy, "true"))
-		Expect(pod.Spec.Volumes).To(HaveLen(1))
+		Expect(pod.Annotations).To(HaveKeyWithValue(AnnotationInjectedExec, "true"))
+		Expect(pod.Spec.Volumes).To(HaveLen(2))
 		Expect(pod.Spec.Containers).To(HaveLen(2))
 	})
 
 })
 
-func makeMutatedPodProxy(name, claimName, secretName string) *corev1.Pod {
-	pod := makePodProxy(name, claimName)
-	Expect(mutatePodProxy(context.TODO(), pod, secretName, sidecarImageProxy)).To(Succeed())
+func makeMutatedPodExec(name, claimName, secretName string) *corev1.Pod {
+	pod := makePodExec(name, claimName)
+	Expect(mutatePodExec(context.TODO(), pod, secretName, sidecarImageExec)).To(Succeed())
 	return pod
+
 }
 
-func makePodProxy(name, claimName string) *corev1.Pod {
+func makePodExec(name, claimName string) *corev1.Pod {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -162,14 +166,15 @@ func makePodProxy(name, claimName string) *corev1.Pod {
 	switch name {
 	case "annotation-enabled":
 		pod.Labels = map[string]string{
-			LabelCheckProxy: "enabled",
+			LabelCheckExec:  "enabled",
 			LabelClaim:      claimName,
+			LabelConfigExec: "dsnexec-config-secret",
 		}
 	case "annotation-disabled":
 		pod.Labels = map[string]string{}
 	case "annotation-false":
 		pod.Labels = map[string]string{
-			LabelCheckProxy: "disabled",
+			LabelCheckExec: "disabled",
 		}
 	}
 

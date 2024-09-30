@@ -239,6 +239,10 @@ func GetSystemFunctions(viperConfig *viper.Viper) map[string]string {
 	return viperConfig.GetStringMapString("systemFunctions")
 }
 
+func GetDefaultMajorVersion(viperConfig *viper.Viper) string {
+	return viperConfig.GetString("defaultMajorVersion")
+}
+
 func GetDynamicHostWaitTime(viperConfig *viper.Viper) time.Duration {
 	t := time.Duration(viperConfig.GetInt("dynamicHostWaitTimeMin")) * time.Minute
 

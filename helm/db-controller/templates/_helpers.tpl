@@ -60,3 +60,10 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "db-controller.group" -}}
+{{- if not (eq .Values.dbController.class "default") -}}
+    {{- .Values.dbController.class -}}.
+{{- end -}}
+persistance.infoblox.com
+{{- end }}

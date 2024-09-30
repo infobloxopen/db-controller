@@ -98,6 +98,7 @@ var _ = BeforeSuite(func() {
 
 	// read kubectl context from the k8sClient
 	env, err = utils.GetKubeContext()
+	Expect(env).NotTo(BeEmpty())
 	Expect(err).NotTo(HaveOccurred())
 
 	// Check if current context is box-3, kind or gcp-ddi-dev-use1

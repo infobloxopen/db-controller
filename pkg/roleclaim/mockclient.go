@@ -43,7 +43,7 @@ func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 	_ = ctx
 	var time8DaysAgo = metav1.Time{Time: time.Now().Add(-8 * 24 * time.Hour)}
 	if (key.Namespace == "testNamespace" || key.Namespace == "testNamespaceWithDbIdentifierPrefix" || key.Namespace == "unitest" || key.Namespace == "schema-user-test") &&
-		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test" || key.Name == "testclaim-1ec9b27c") {
+		(key.Name == "sample-master-secret" || key.Name == "dbc-sample-connection" || key.Name == "dbc-sample-claim" || key.Name == "dbc-box-sample-claim" || key.Name == "test" || key.Name == "testclaim-1ec9b27c" || key.Name == "testclaim-416e183c") {
 		sec, ok := obj.(*corev1.Secret)
 		if !ok {
 			return fmt.Errorf("can't assert type")

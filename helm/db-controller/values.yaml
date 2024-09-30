@@ -17,12 +17,6 @@ db:
 dbController:
   class: default
 
-tools:
-  kubectl:
-    repository: bitnami/kubectl
-    pullPolicy: IfNotPresent
-    tag: 1.28.5
-
 image:
   repository: ghcr.io/infobloxopen/db-controller
   pullPolicy: Always
@@ -106,6 +100,16 @@ pdb:
 postgresql:
   enabled: false
 
+tools:
+  postgres:
+    repository: "postgres"
+    tag: "15"
+
+  kubectl:
+    repository: bitnami/kubectl
+    pullPolicy: IfNotPresent
+    tag: 1.28.5
+
 dbproxy:
   enabled: true
   image:
@@ -114,8 +118,6 @@ dbproxy:
     tag: ""
 
 dsnexec:
-  # Do not enable this without writing complete unit and integration tests using helm
-  enabled: false
   image:
     repository: "ghcr.io/infobloxopen/dsnexec"
     tag: ""
@@ -168,6 +170,7 @@ controllerConfig:
     passwordRotationPeriod: 60m
   pgTemp: "/pg-temp/"
   storageType: gp3
+  defaultMajorVersion: 15
   supportSuperUserElevation: true
   # system funtions are created as functions in the database. The prefix is used as the schema name.
   # only "ib_" prefixed functions are supported at this time.

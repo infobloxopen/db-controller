@@ -118,7 +118,7 @@ metadata:
 spec:
   containers:
     - name: postgres
-      image: postgres:15
+      image: {{ .Values.tools.postgres.repository }}:{{ .Values.tools.postgres.tag }}
       env:
         - name: POSTGRES_USER
           value: "myuser"
@@ -130,12 +130,13 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: {{ .Release.Name }}-dbproxy-test-proxy
+  name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "db-controller.labels" . | nindent 4 }}
-    persistance.atlas.infoblox.com/databaseclaim: {{ .Release.Name }}-dbproxy-test
+    persistance.atlas.infoblox.com/claim: {{ .Release.Name }}-dbproxy-test
     persistance.atlas.infoblox.com/class: {{ .Values.dbController.class | quote }}
+    persistance.atlas.infoblox.com/dbproxy: enabled
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
