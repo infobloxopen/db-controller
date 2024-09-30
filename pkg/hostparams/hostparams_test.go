@@ -3,7 +3,11 @@ package hostparams
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -112,16 +116,23 @@ func TestHostParams_Hash(t *testing.T) {
 				MinStorageGB:  20000,
 				EngineVersion: "15.3",
 			},
+		}, {name: "test_Execute_postgres_15_tg4.medium", want: "416e183c",
+			fields: fields{Engine: "postgres",
+				Shape:         "db.t4g.medium",
+				InstanceClass: "db.t4g.medium",
+				MinStorageGB:  20000,
+				EngineVersion: "15",
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &HostParams{
-				Engine:                          tt.fields.Engine,
+				Type:                            tt.fields.Engine,
 				Shape:                           tt.fields.Shape,
 				InstanceClass:                   tt.fields.InstanceClass,
 				MinStorageGB:                    tt.fields.MinStorageGB,
-				EngineVersion:                   tt.fields.EngineVersion,
+				DBVersion:                       tt.fields.EngineVersion,
 				MasterUsername:                  tt.fields.MasterUsername,
 				SkipFinalSnapshotBeforeDeletion: tt.fields.SkipFinalSnapshotBeforeDeletion,
 				PubliclyAccessible:              tt.fields.PubliclyAccessible,
@@ -131,7 +142,7 @@ func TestHostParams_Hash(t *testing.T) {
 				isDefaultEngine:                 tt.fields.isDefaultEngine,
 				isDefaultShape:                  tt.fields.isDefaultShape,
 				isDefaultStorage:                tt.fields.isDefaultStorage,
-				isDefaultVersion:                tt.fields.isDefaultVersion,
+				IsDefaultVersion:                tt.fields.isDefaultVersion,
 			}
 			if got := p.Hash(); got != tt.want {
 				t.Errorf("HostParams.Hash() = %v, want %v", got, tt.want)
@@ -156,10 +167,10 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 			args: args{
 				config:  NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
-				activeHostParams: &HostParams{Engine: "postgres",
-					Shape:         "db.t4g.medium",
-					MinStorageGB:  20,
-					EngineVersion: "12.11",
+				activeHostParams: &HostParams{Type: "postgres",
+					Shape:        "db.t4g.medium",
+					MinStorageGB: 20,
+					DBVersion:    "12.11",
 				},
 			},
 		},
@@ -173,11 +184,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					MinStorageGB: 20,
 					DBVersion:    "12.11",
 				}},
-				activeHostParams: &HostParams{Engine: "postgres",
+				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t2.small",
 					InstanceClass: "db.t2.small",
 					MinStorageGB:  200,
-					EngineVersion: "12.11",
+					DBVersion:     "12.11",
 				},
 			},
 		},
@@ -190,11 +201,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					MinStorageGB: 20,
 					DBVersion:    "12.11",
 				}},
-				activeHostParams: &HostParams{Engine: "postgres",
+				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "12.11",
+					DBVersion:     "12.11",
 				},
 			},
 		},
@@ -208,11 +219,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					MinStorageGB: 20,
 					DBVersion:    "12.11",
 				}},
-				activeHostParams: &HostParams{Engine: "postgres",
+				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "13.11",
+					DBVersion:     "13.11",
 				},
 			},
 		},
@@ -221,11 +232,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 			args: args{
 				config:  NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
-				activeHostParams: &HostParams{Engine: "postgres",
+				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "13.11",
+					DBVersion:     "13.11",
 				},
 			},
 		},
@@ -237,11 +248,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					Type:  "aurora-postgresql",
 					Shape: "db.t4g.different",
 				}},
-				activeHostParams: &HostParams{Engine: "postgres",
+				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "13.11",
+					DBVersion:     "13.11",
 				},
 			},
 		},
@@ -254,11 +265,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					Shape:        "db.t4g.medium",
 					MinStorageGB: 20,
 				}},
-				activeHostParams: &HostParams{Engine: "postgres",
+				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "13.11",
+					DBVersion:     "13.11",
 				},
 			},
 		},
@@ -271,11 +282,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					Shape:        "db.t4g.medium",
 					MinStorageGB: 20,
 				}},
-				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+				activeHostParams: &HostParams{Type: "aurora-postgresql",
 					Shape:         "db.t4g.medium",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "13.11",
+					DBVersion:     "13.11",
 				},
 			},
 		},
@@ -288,11 +299,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 					Shape:        "db.t4g.medium!io1",
 					MinStorageGB: 20,
 				}},
-				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+				activeHostParams: &HostParams{Type: "aurora-postgresql",
 					Shape:         "db.t4g.medium!io1",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "13.11",
+					DBVersion:     "13.11",
 				},
 			},
 		},
@@ -312,11 +323,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 						},
 					},
 				},
-				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+				activeHostParams: &HostParams{Type: "aurora-postgresql",
 					Shape:         "db.t4g.medium!io1",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "15.7",
+					DBVersion:     "15.7",
 				},
 			},
 		},
@@ -336,11 +347,11 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 						},
 					},
 				},
-				activeHostParams: &HostParams{Engine: "aurora-postgresql",
+				activeHostParams: &HostParams{Type: "aurora-postgresql",
 					Shape:         "db.t4g.medium!io1",
 					InstanceClass: "db.t4g.medium",
 					MinStorageGB:  200,
-					EngineVersion: "15.3",
+					DBVersion:     "15.3",
 				},
 			},
 		},
@@ -381,11 +392,11 @@ func TestGetActiveHostParams(t *testing.T) {
 				},
 			},
 			},
-			want: &HostParams{Engine: "aurora-postgresql",
+			want: &HostParams{Type: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
 				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 			},
 		},
 		{name: "ok - with instance class",
@@ -405,11 +416,11 @@ func TestGetActiveHostParams(t *testing.T) {
 				},
 			},
 			},
-			want: &HostParams{Engine: "aurora-postgresql",
+			want: &HostParams{Type: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
 				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 			},
 		},
 		{name: "ok - with instance class and storage type",
@@ -429,11 +440,11 @@ func TestGetActiveHostParams(t *testing.T) {
 				},
 			},
 			},
-			want: &HostParams{Engine: "aurora-postgresql",
+			want: &HostParams{Type: "aurora-postgresql",
 				Shape:         "db.t4g.medium!io1",
 				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  20,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 			},
 		},
 	}
@@ -477,10 +488,10 @@ func TestNew(t *testing.T) {
 					MinStorageGB: 20,
 				}},
 			},
-			want: &HostParams{Engine: "aurora-postgresql",
+			want: &HostParams{Type: "aurora-postgresql",
 				Shape:         "db.t4g.medium",
 				MinStorageGB:  20,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 				InstanceClass: "db.t4g.medium",
 				StorageType:   "aurora",
 			},
@@ -497,10 +508,10 @@ func TestNew(t *testing.T) {
 					MinStorageGB: 20,
 				}},
 			},
-			want: &HostParams{Engine: "aurora-postgresql",
+			want: &HostParams{Type: "aurora-postgresql",
 				Shape:         "db.t4g.medium!io1",
 				MinStorageGB:  20,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 				InstanceClass: "db.t4g.medium",
 				StorageType:   "aurora-iopt1",
 			},
@@ -517,10 +528,10 @@ func TestNew(t *testing.T) {
 					MinStorageGB: 20,
 				}},
 			},
-			want: &HostParams{Engine: "postgres",
+			want: &HostParams{Type: "postgres",
 				Shape:         "db.t4g.large",
 				MinStorageGB:  20,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 				InstanceClass: "db.t4g.large",
 				StorageType:   "gp3",
 			},
@@ -547,11 +558,11 @@ func TestNew(t *testing.T) {
 				config:  NewConfig(testConfig),
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 			},
-			want: &HostParams{Engine: "postgres",
+			want: &HostParams{Type: "postgres",
 				Shape:         "db.t4g.medium",
 				InstanceClass: "db.t4g.medium",
 				MinStorageGB:  42,
-				EngineVersion: "15.3",
+				DBVersion:     "15",
 			},
 			wantErr: false,
 		},
@@ -605,11 +616,11 @@ func TestNew(t *testing.T) {
 					},
 				}},
 			},
-			want: &HostParams{Engine: "postgres",
+			want: &HostParams{Type: "postgres",
 				Shape:         "db.t4g.medium",
 				MinStorageGB:  20,
 				MaxStorageGB:  40,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 				InstanceClass: "db.t4g.medium",
 				StorageType:   "gp3",
 				Port:          5432,
@@ -653,11 +664,11 @@ func TestNew(t *testing.T) {
 					},
 				},
 			},
-			want: &HostParams{Engine: "postgres",
+			want: &HostParams{Type: "postgres",
 				Shape:         "db.t4g.medium",
 				MinStorageGB:  20,
 				MaxStorageGB:  0,
-				EngineVersion: "12.11",
+				DBVersion:     "12.11",
 				InstanceClass: "db.t4g.medium",
 				StorageType:   "gp3",
 				Port:          5432,
@@ -759,50 +770,26 @@ func TestDeletionPolicy(t *testing.T) {
 		})
 	}
 }
-func TestCheckEngineVersion(t *testing.T) {
-	type args struct {
-		config  *viper.Viper
-		dbClaim *persistancev1.DatabaseClaim
-	}
-	tests := []struct {
-		name string
-		args args
-		want error
-	}{
-		{
-			name: "test_default_EngineVersion",
-			args: args{
-				config: NewConfig(testConfig),
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Type:         "aurora-postgresql",
-					Shape:        "db.t4g.medium",
-					MinStorageGB: 20,
-				}},
-			},
-			want: ErrEngineVersionNotSpecified,
-		},
-		{
-			name: "test_specific_EngineVersion",
-			args: args{
-				config: NewConfig(testConfig),
-				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
-					Type:         "aurora-postgresql",
-					DBVersion:    "12.11",
-					Shape:        "db.t4g.medium",
-					MinStorageGB: 20,
-				}},
-			},
-			want: nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			hp, _ := New(tt.args.config, tt.args.dbClaim)
-			if got := hp.CheckEngineVersion(); got != tt.want {
-				t.Errorf("CheckEngineVersion() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+
+func TestDBVersions(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	dbVersion1 := "15"
+
+	Expect(strings.Split(dbVersion1, ".")[0]).To(Equal("15"))
+
+	dbVersion2 := "15.2"
+
+	Expect(strings.Split(dbVersion2, ".")[0]).To(Equal("15"))
+
+	dbVersion3 := "15.1.2"
+
+	Expect(strings.Split(dbVersion3, ".")[0]).To(Equal("15"))
+
+	dbVersion4 := ""
+
+	Expect(strings.Split(dbVersion4, ".")[0]).To(Equal(""))
+
 }
 
 func NewConfig(in []byte) *viper.Viper {

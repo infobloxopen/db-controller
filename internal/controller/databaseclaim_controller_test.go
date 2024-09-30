@@ -131,11 +131,11 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 		})
 
-		It("Should fail to reconcile DB Claim missing dbVersion", func() {
+		It("Should succeed to reconcile DB Claim missing dbVersion", func() {
 			By("Reconciling the created resource")
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).To(MatchError(".spec.dbVersion is a mandatory field and cannot be empty"))
+			Expect(err).NotTo(HaveOccurred())
 			Expect(claim.Status.Error).To(Equal(""))
 		})
 

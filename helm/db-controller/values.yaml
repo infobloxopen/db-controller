@@ -170,6 +170,7 @@ controllerConfig:
     passwordRotationPeriod: 60m
   pgTemp: "/pg-temp/"
   storageType: gp3
+  defaultMajorVersion: 15
   supportSuperUserElevation: true
   # system funtions are created as functions in the database. The prefix is used as the schema name.
   # only "ib_" prefixed functions are supported at this time.

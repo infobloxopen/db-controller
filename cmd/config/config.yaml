@@ -33,6 +33,7 @@ project: gcp-eng-ddiaas-dev
 network: "ddiaas-dev-use1-vpc"
 subnetwork: private-service-connect
 numbackupstoretain: 3
+defaultMajorVersion: 15
 
 passwordConfig:
   passwordComplexity: enabled
