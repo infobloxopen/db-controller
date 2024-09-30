@@ -17,10 +17,11 @@ import (
 )
 
 var (
-	SourceDBAdminDsn string
-	SourceDBUserDsn  string
-	TargetDBAdminDsn string
-	TargetDBUserDsn  string
+	SourceDBAdminDsn     string
+	SourceDBUserDsn      string
+	TargetDBAdminDsn     string
+	TargetDBUserDsn      string
+	dropSchemaDBAdminDsn string
 
 	ExportFilePath = "/tmp/"
 	repository     = "postgres"
@@ -47,21 +48,19 @@ var logger logr.Logger
 func TestMain(m *testing.M) {
 	//need to do this trick to avoid os.Exit bypassing defer logic
 	//with this silly setup, defer is called in realTestMain before the exit is called in this func
-	os.Exit(realTestMain(m))
+	os.Exit(setupAndRunTests(m))
 }
 
-func realTestMain(m *testing.M) int {
-
+func setupAndRunTests(m *testing.M) int {
 	opts := zap.Options{
 		Development: true,
 	}
-
 	logger = zap.New(zap.UseFlagOptions(&opts))
 
-	var err error
 	networkName := "pgctl"
 	removeNetwork := dockerdb.StartNetwork(networkName)
 	defer removeNetwork()
+
 	// FIXME: randomly generate network name
 	_, sourceDSN, sourceClose := dockerdb.Run(dockerdb.Config{
 		HostName:  "pubHost",
@@ -73,7 +72,7 @@ func realTestMain(m *testing.M) int {
 	})
 	defer sourceClose()
 
-	if err = loadSourceTestData(sourceDSN); err != nil {
+	if err := loadSourceTestData(sourceDSN); err != nil {
 		panic(err)
 	}
 
@@ -87,25 +86,33 @@ func realTestMain(m *testing.M) int {
 	})
 	defer targetClose()
 
-	if err = loadTargetTestData(targetDSN); err != nil {
+	_, dropSchemaDSN, dropSchemaClose := dockerdb.Run(dockerdb.Config{
+		HostName:  "dropSchemaHost",
+		DockerTag: targetVersion,
+		Database:  "sub",
+		Username:  "dropSchemaAdmin",
+		Password:  "dropSchemaSecret",
+		Network:   networkName,
+	})
+	defer dropSchemaClose()
+
+	if err := loadTargetTestData(targetDSN); err != nil {
 		panic(err)
 	}
 
-	_, err = url.Parse(sourceDSN)
-	if err != nil {
+	if _, err := url.Parse(sourceDSN); err != nil {
 		panic(err)
 	}
 
 	// Set a bunch of package variables. This should be done in the test setup
 	TargetDBAdminDsn = targetDSN
 	SourceDBAdminDsn = sourceDSN
+	dropSchemaDBAdminDsn = dropSchemaDSN
 
 	TargetDBUserDsn = changeUserInfo(TargetDBAdminDsn, "appuser_b", "secret")
 	SourceDBUserDsn = changeUserInfo(SourceDBAdminDsn, "appuser_a", "secret")
 
-	rc := m.Run()
-
-	return rc
+	return m.Run()
 }
 
 func loadSourceTestData(dsn string) error {
@@ -133,23 +140,25 @@ func setWalLevel(repo string, tag string, port string) error {
 	// return nil
 }
 
-func TestWrapper(t *testing.T) {
-	testInitalState(t)
-	test_validate_connection_state_Execute(t)
-	test_create_publication_state_Execute(t)
-	test_copy_schema_state_Execute(t)
-	test_create_subscription_state_Execute(t)
-	test_enable_subscription_state_Execute(t)
-	test_cut_over_readiness_check_state_Execute(t)
-	test_reset_target_sequence_state_Execute(t)
-	test_reroute_target_secret_state_Execute(t)
-	test_wait_to_disable_source_state_Execute(t)
-	test_disable_source_access_state_Execute(t)
-	test_validate_migration_status_state_Execute(t)
-	test_disable_subscription_state_Execute(t)
-	test_delete_subscription_state_Execute(t)
-	test_delete_publication_state_Execute(t)
+func TestStateTransitions(t *testing.T) {
+	testInitialState(t)
+	testValidateConnectionStateExecute(t)
+	testCreatePublicationStateExecute(t)
+	testCopySchemaStateExecute(t)
+	testCreateSubscriptionStateExecute(t)
+	testEnableSubscriptionStateExecute(t)
+	testCutOverReadinessCheckStateExecute(t)
+	testResetTargetSequenceStateExecute(t)
+	testRerouteTargetSecretStateExecute(t)
+	testWaitToDisableSourceStateExecute(t)
+	testDisableSourceAccessStateExecute(t)
+	testValidateMigrationStatusStateExecute(t)
+	testDisableSubscriptionStateExecute(t)
+	testDeleteSubscriptionStateExecute(t)
+	testDeletePublicationStateExecute(t)
 }
+
+// TODO: this is not used anywhere in the code, should it be removed?
 func testEndToEnd(t *testing.T) {
 
 	config := Config{
@@ -214,16 +223,16 @@ loop:
 	}
 }
 
-func testInitalState(t *testing.T) {
-
+func testInitialState(t *testing.T) {
 	type testcase struct {
 		args          Config
 		name          string
 		expectedErr   bool
 		expectedState StateEnum
 	}
+
 	tests := []testcase{
-		{name: "testInitalState_empty", expectedErr: true, args: Config{}},
+		{name: "testInitialState_empty", expectedErr: true, args: Config{}},
 		{name: "target Admin empty", expectedErr: true,
 			args: Config{
 				Log:              logger,
@@ -232,7 +241,7 @@ func testInitalState(t *testing.T) {
 				TargetDBUserDsn:  TargetDBUserDsn,
 			},
 		},
-		{name: "testInitalState_target User empty", expectedErr: true,
+		{name: "testInitialState_target User empty", expectedErr: true,
 			args: Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
@@ -240,7 +249,7 @@ func testInitalState(t *testing.T) {
 				TargetDBAdminDsn: TargetDBAdminDsn,
 			},
 		},
-		{name: "testInitalState_Source Admin empty", expectedErr: true,
+		{name: "testInitialState_Source Admin empty", expectedErr: true,
 			args: Config{
 				Log:              logger,
 				SourceDBUserDsn:  SourceDBUserDsn,
@@ -248,7 +257,7 @@ func testInitalState(t *testing.T) {
 				TargetDBUserDsn:  TargetDBUserDsn,
 			},
 		},
-		{name: "testInitalState_Source User empty", expectedErr: true,
+		{name: "testInitialState_Source User empty", expectedErr: true,
 			args: Config{
 				Log: logger,
 
@@ -257,7 +266,7 @@ func testInitalState(t *testing.T) {
 				TargetDBUserDsn:  TargetDBUserDsn,
 			},
 		},
-		{name: "testInitalState_ok", expectedErr: false, expectedState: S_ValidateConnection,
+		{name: "testInitialState_ok", expectedErr: false, expectedState: S_ValidateConnection,
 			args: Config{
 				Log:              logger,
 				SourceDBAdminDsn: SourceDBAdminDsn,
@@ -271,23 +280,23 @@ func testInitalState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &initial_state{config: tt.args}
 
-			next_state, err := s.Execute()
+			nextState, err := s.Execute()
 			if tt.expectedErr && err == nil {
 				t.Fatalf("test case  %s: expected error got nil", tt.name)
 			}
 			if tt.expectedErr == false && err != nil {
 				t.Fatalf("test case %s: expected no error, got %s", tt.name, err)
 			}
-			if next_state != nil {
-				if tt.expectedState != next_state.Id() {
-					t.Fatalf(" test case %s: expected %s, got %s", tt.name, tt.expectedState, next_state.Id())
+			if nextState != nil {
+				if tt.expectedState != nextState.Id() {
+					t.Fatalf(" test case %s: expected %s, got %s", tt.name, tt.expectedState, nextState.Id())
 				}
 			}
 		})
 	}
 }
 
-func test_validate_connection_state_Execute(t *testing.T) {
+func testValidateConnectionStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -338,7 +347,7 @@ func test_validate_connection_state_Execute(t *testing.T) {
 	}
 }
 
-func test_create_publication_state_Execute(t *testing.T) {
+func testCreatePublicationStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -374,7 +383,7 @@ func test_create_publication_state_Execute(t *testing.T) {
 	}
 }
 
-func test_copy_schema_state_Execute(t *testing.T) {
+func testCopySchemaStateExecute(t *testing.T) {
 
 	oldGrantSuper := grantSuperUserAccess
 	oldRevokeSuper := revokeSuperUserAccess
@@ -382,12 +391,12 @@ func test_copy_schema_state_Execute(t *testing.T) {
 		grantSuperUserAccess = oldGrantSuper
 		revokeSuperUserAccess = oldRevokeSuper
 	}()
-	// This overrides a var grantSuperUserAccess to handle the special case in unit test
-	// unit test uses different method to set and unset super user permission
-	// the difference is related to using posgtres vs RDS - the superuser permission are handled differently in AWS RDS
+
+	// This overrides a var grantSuperUserAccess to handle the special case in unit test.
+	// Unit test uses different methods to set and unset superuser permission.
+	// The difference is related to using postgres vs RDS - the superuser permission is handled differently in AWS RDS.
 	grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
 		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH SUPERUSER;", pq.QuoteIdentifier(role)))
-
 		return err
 	}
 	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
@@ -398,6 +407,7 @@ func test_copy_schema_state_Execute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
+
 	tests := []struct {
 		name    string
 		fields  fields
@@ -431,7 +441,7 @@ func test_copy_schema_state_Execute(t *testing.T) {
 	}
 }
 
-func test_create_subscription_state_Execute(t *testing.T) {
+func testCreateSubscriptionStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -471,7 +481,7 @@ func test_create_subscription_state_Execute(t *testing.T) {
 	}
 }
 
-func test_enable_subscription_state_Execute(t *testing.T) {
+func testEnableSubscriptionStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -507,7 +517,7 @@ func test_enable_subscription_state_Execute(t *testing.T) {
 	}
 }
 
-func test_cut_over_readiness_check_state_Execute(t *testing.T) {
+func testCutOverReadinessCheckStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -549,7 +559,7 @@ func test_cut_over_readiness_check_state_Execute(t *testing.T) {
 	}
 }
 
-func test_reset_target_sequence_state_Execute(t *testing.T) {
+func testResetTargetSequenceStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -585,7 +595,7 @@ func test_reset_target_sequence_state_Execute(t *testing.T) {
 	}
 }
 
-func test_reroute_target_secret_state_Execute(t *testing.T) {
+func testRerouteTargetSecretStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -621,7 +631,7 @@ func test_reroute_target_secret_state_Execute(t *testing.T) {
 	}
 }
 
-func test_validate_migration_status_state_Execute(t *testing.T) {
+func testValidateMigrationStatusStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -661,7 +671,7 @@ func test_validate_migration_status_state_Execute(t *testing.T) {
 	}
 }
 
-func test_wait_to_disable_source_state_Execute(t *testing.T) {
+func testWaitToDisableSourceStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -698,7 +708,7 @@ func test_wait_to_disable_source_state_Execute(t *testing.T) {
 	}
 }
 
-func test_disable_source_access_state_Execute(t *testing.T) {
+func testDisableSourceAccessStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -734,7 +744,7 @@ func test_disable_source_access_state_Execute(t *testing.T) {
 	}
 }
 
-func test_disable_subscription_state_Execute(t *testing.T) {
+func testDisableSubscriptionStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -770,7 +780,7 @@ func test_disable_subscription_state_Execute(t *testing.T) {
 	}
 }
 
-func test_delete_subscription_state_Execute(t *testing.T) {
+func testDeleteSubscriptionStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}
@@ -806,7 +816,7 @@ func test_delete_subscription_state_Execute(t *testing.T) {
 	}
 }
 
-func test_delete_publication_state_Execute(t *testing.T) {
+func testDeletePublicationStateExecute(t *testing.T) {
 	type fields struct {
 		config Config
 	}

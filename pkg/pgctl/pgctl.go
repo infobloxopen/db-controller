@@ -139,6 +139,7 @@ func (s *initial_state) Execute() (State, error) {
 		config: s.config,
 	}, nil
 }
+
 func (s *initial_state) Id() StateEnum {
 	return S_Initial
 }
@@ -348,11 +349,10 @@ func (s *copy_schema_state) Execute() (State, error) {
 	})
 
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
-	log.Info("executed dump", "full command", dumpExec.FullCommand)
-
 	if dumpExec.Error != nil {
 		return nil, dumpExec.Error.Err
 	}
+	log.Info("executed dump", "full command", dumpExec.FullCommand)
 
 	if err = dump.modifyPgDumpInfo(); err != nil {
 		log.Error(err, "failed to comment create policy")
@@ -662,7 +662,6 @@ func (s *reset_target_sequence_state) String() string {
 }
 
 func (s *reroute_target_secret_state) Execute() (State, error) {
-	//log := s.config.log.WithValues("state", s.String())
 	return &wait_to_disable_source_state{
 		config: s.config,
 	}, nil
@@ -675,11 +674,11 @@ func (s *reroute_target_secret_state) String() string {
 }
 
 func (s *wait_to_disable_source_state) Execute() (State, error) {
-	//log := s.config.log.WithValues("state", s.String())
 	return &disable_source_access_state{
 		config: s.config,
 	}, nil
 }
+
 func (s *wait_to_disable_source_state) Id() StateEnum {
 	return S_WaitToDisableSource
 }
@@ -722,6 +721,7 @@ func (s *disable_source_access_state) Execute() (State, error) {
 		config: s.config,
 	}, nil
 }
+
 func (s *disable_source_access_state) Id() StateEnum {
 	return S_DisableSourceAccess
 }
