@@ -27,7 +27,9 @@ type ExportFile struct {
 	Name string
 }
 type Config struct {
-	Log              logr.Logger
+	Log logr.Logger
+	// Cloud assumes `aws` if not specified
+	Cloud            string
 	SourceDBAdminDsn string
 	SourceDBUserDsn  string
 	TargetDBAdminDsn string
@@ -102,6 +104,9 @@ func GetReplicatorState(name string, c Config) (State, error) {
 		return &reroute_target_secret_state{config: c}, nil
 	case S_WaitToDisableSource:
 		return &wait_to_disable_source_state{config: c}, nil
+	case S_MigrationInProgress:
+		// FIXME: The getMode code just needs to not be S_Completed
+		return &initial_state{config: c}, nil
 	case S_ValidateMigrationStatus:
 		return &validate_migration_status_state{config: c}, nil
 	case S_DisableSourceAccess:
@@ -135,6 +140,7 @@ func (s *initial_state) Execute() (State, error) {
 	if s.config.TargetDBUserDsn == "" {
 		return nil, fmt.Errorf("target db admin dns is empty")
 	}
+
 	return &validate_connection_state{
 		config: s.config,
 	}, nil
@@ -150,58 +156,55 @@ func (s *initial_state) String() string {
 func (s *validate_connection_state) Execute() (State, error) {
 
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
-
-	var (
-		err   error
-		valid bool
-	)
 
 	sourceDBAdmin, err := getDB(s.config.SourceDBAdminDsn, nil)
 	if err != nil {
-		log.Error(err, "connection test failed for sourceDBAdmin")
+		log.Error(err, "connection test failed for sourceDBAdmin", "dsn", SanitizeDSN(s.config.SourceDBAdminDsn))
 		return nil, err
 	}
 	defer closeDB(log, sourceDBAdmin)
 
 	sourceDBUser, err := getDB(s.config.SourceDBUserDsn, nil)
 	if err != nil {
-		log.Error(err, "connection test failed for sourceDBUser")
+		log.Error(err, "connection test failed for sourceDBUser", "dsn", SanitizeDSN(s.config.SourceDBUserDsn))
 		return nil, err
 	}
 	defer closeDB(log, sourceDBUser)
+
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
 	if err != nil {
-		log.Error(err, "connection test failed for targetDBAdmin")
+		log.Error(err, "connection test failed for targetDBAdmin", "dsn", SanitizeDSN(s.config.TargetDBAdminDsn))
 		return nil, err
 	}
 	defer closeDB(log, targetDBAdmin)
+
 	targetDBUser, err := getDB(s.config.TargetDBUserDsn, nil)
 	if err != nil {
-		log.Error(err, "connection test failed for targetDBUser")
+		log.Error(err, "connection test failed for targetDBUser", "dsn", SanitizeDSN(s.config.TargetDBUserDsn))
 		return nil, err
 	}
 	defer targetDBUser.Close()
 
-	if valid, err = isAdminUser(sourceDBAdmin); !valid || err != nil {
+	if valid, err := isAdminUser(sourceDBAdmin); !valid || err != nil {
 		return nil, fmt.Errorf("%w; Source DB Admin user lacks  required permission", err)
 	}
-	if valid, err = isAdminUser(targetDBAdmin); !valid || err != nil {
+	if valid, err := isAdminUser(targetDBAdmin); !valid || err != nil {
 		return nil, fmt.Errorf("%w; Target DB Admin user lacks  required permission", err)
 	}
-	if valid, err = isLogical(sourceDBAdmin); !valid || err != nil {
+	if valid, err := isLogical(sourceDBAdmin); !valid || err != nil {
 		log.Error(err, "wal_level check failed")
 		return nil, err
 	}
 
-	log.Info("completed")
 	return &create_publication_state{
 		config: s.config,
 	}, nil
 }
+
 func (s *validate_connection_state) Id() StateEnum {
 	return S_ValidateConnection
 }
+
 func (s *validate_connection_state) String() string {
 	return S_ValidateConnection.String()
 }
@@ -290,12 +293,21 @@ func (s *create_publication_state) String() string {
 }
 
 // The following var is used only by copy_schema_state. This is provided so that it can be overridden during unit test.
-var grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
-	_, err := DBAdmin.Exec(fmt.Sprintf("GRANT rds_superuser TO %s;", pq.QuoteIdentifier(getParentRole(role))))
+var grantSuperUserAccess = func(DBAdmin *sql.DB, userrole string, cloud string) error {
+	grouprole := "rds_superuser"
+	if cloud == "gcp" {
+		grouprole = "alloydbsuperuser"
+	}
+	_, err := DBAdmin.Exec(fmt.Sprintf("GRANT %s TO %s;", grouprole, pq.QuoteIdentifier(getParentRole(userrole))))
 	return err
 }
-var revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
-	_, err := DBAdmin.Exec(fmt.Sprintf("REVOKE rds_superuser FROM %s;", pq.QuoteIdentifier(getParentRole(role))))
+
+var revokeSuperUserAccess = func(DBAdmin *sql.DB, userrole string, cloud string) error {
+	grouprole := "rds_superuser"
+	if cloud == "gcp" {
+		grouprole = "alloydbsuperuser"
+	}
+	_, err := DBAdmin.Exec(fmt.Sprintf("REVOKE %s FROM %s;", grouprole, pq.QuoteIdentifier(getParentRole(userrole))))
 	return err
 }
 
@@ -307,7 +319,6 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	//grant rds_superuser to target db user temporarily
 	//this is required to copy schema from source to target and take ownership of the objects
-	log.Info("grant temp superuser to ", "user", s.config.TargetDBAdminDsn)
 
 	var (
 		err           error
@@ -328,7 +339,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 	rolename := url.User.Username()
 	log.Info("granting super user access", "role", rolename)
 
-	err = grantSuperUserAccess(targetDBAdmin, rolename)
+	err = grantSuperUserAccess(targetDBAdmin, rolename, s.config.Cloud)
 	if err != nil {
 		log.Error(err, "failed to grant superuser access", "role", rolename)
 		metrics.UsersUpdatedErrors.WithLabelValues("grant error").Inc()
@@ -379,7 +390,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	log.Info("executed restore", "full command", restoreExec.FullCommand)
 
-	err = revokeSuperUserAccess(targetDBAdmin, rolename)
+	err = revokeSuperUserAccess(targetDBAdmin, rolename, s.config.Cloud)
 	if err != nil {
 		log.Error(err, "failed to revoke superuser access", "role", rolename)
 		metrics.UsersUpdatedErrors.WithLabelValues("revoke error").Inc()

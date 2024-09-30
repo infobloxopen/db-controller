@@ -188,11 +188,12 @@ func testEndToEnd(t *testing.T) {
 	getSourceDbAdminDSNForCreateSubscription = func(c *Config) string {
 		return "postgres://sourceAdmin:sourceSecret@pubHost:5432/pub?sslmode=disable"
 	}
-	grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+	// FIXME: this does not test actual functionality, replace these tests to call [grant|revoke]SuperUserAccess
+	grantSuperUserAccess = func(DBAdmin *sql.DB, role string, cloud string) error {
 		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH SUPERUSER;", pq.QuoteIdentifier(role)))
 		return err
 	}
-	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string, cloud string) error {
 		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH NOSUPERUSER;", pq.QuoteIdentifier(role)))
 		return err
 	}
@@ -227,6 +228,7 @@ func testInitialState(t *testing.T) {
 	type testcase struct {
 		args          Config
 		name          string
+		eErr          error
 		expectedErr   bool
 		expectedState StateEnum
 	}
@@ -284,6 +286,7 @@ func testInitialState(t *testing.T) {
 			if tt.expectedErr && err == nil {
 				t.Fatalf("test case  %s: expected error got nil", tt.name)
 			}
+
 			if tt.expectedErr == false && err != nil {
 				t.Fatalf("test case %s: expected no error, got %s", tt.name, err)
 			}
@@ -392,14 +395,15 @@ func testCopySchemaStateExecute(t *testing.T) {
 		revokeSuperUserAccess = oldRevokeSuper
 	}()
 
+	// FIXME: dont do this
 	// This overrides a var grantSuperUserAccess to handle the special case in unit test.
 	// Unit test uses different methods to set and unset superuser permission.
 	// The difference is related to using postgres vs RDS - the superuser permission is handled differently in AWS RDS.
-	grantSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+	grantSuperUserAccess = func(DBAdmin *sql.DB, role string, cloud string) error {
 		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH SUPERUSER;", pq.QuoteIdentifier(role)))
 		return err
 	}
-	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string) error {
+	revokeSuperUserAccess = func(DBAdmin *sql.DB, role string, cloud string) error {
 		_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH NOSUPERUSER;", pq.QuoteIdentifier(role)))
 		return err
 	}

@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -339,6 +340,24 @@ type DatabaseClaimList struct {
 
 func init() {
 	SchemeBuilder.Register(&DatabaseClaim{}, &DatabaseClaimList{})
+}
+
+// Validate checks for basic errors in the DSN string
+func (c *DatabaseClaimConnectionInfo) Validate() error {
+	if c.Host == "" {
+		return errors.New("dsn has an empty host")
+	}
+	if c.Username == "" {
+		return errors.New("dsn has an empty user")
+	}
+	if c.Password == "" {
+		return errors.New("dsn has an empty password")
+	}
+	if c.DatabaseName == "" {
+		return errors.New("dsn has an empty database name")
+	}
+
+	return nil
 }
 
 func (c *DatabaseClaimConnectionInfo) Uri() string {

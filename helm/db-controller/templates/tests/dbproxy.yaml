@@ -74,6 +74,7 @@ metadata:
   annotations:
     # ensure this runs on the new db-controller, not the existing one
     "helm.sh/hook": "test"
+    "helm.sh/hook-weight": "-5"
 spec:
   class: {{ .Values.dbController.class }}
   databaseName: mydb
@@ -159,10 +160,10 @@ spec:
               echo "Connection successful!"
               exit 0
             fi
-            echo "Failed to connect. Retrying in 5 seconds..."
-            sleep 5
+            echo "Failed to connect. Retrying in 1 second..."
+            sleep 1
           done
-          echo "Failed to connect after 20 attempts. Exiting."
+          echo "Failed to connect after 50 attempts. Exiting."
           exit 1
       volumeMounts:
         - name: dsn-volume
@@ -187,8 +188,7 @@ spec:
           kill -s INT $(pidof /usr/bin/dbproxy)
           exit 0
   shareProcessNamespace: true
-  # Sidecar has a liveness probe, allow it to restart
-  restartPolicy: Never
+  restartPolicy: OnFailure
   volumes:
     - name: dsn-volume
       secret:

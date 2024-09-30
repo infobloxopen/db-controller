@@ -4,35 +4,18 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
 	"github.com/infobloxopen/db-controller/internal/dockerdb"
-	uzap "go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"go.uber.org/zap/zaptest"
 )
 
 const succeed = "\u2713"
 const failed = "\u2717"
 
-// testLogger wraps a testing.T to provide a Zap Core that logs to t.Log
-type testLogger struct {
-	t *testing.T
-}
-
-// Write logs to testing.T
-func (tl *testLogger) Write(p []byte) (n int, err error) {
-	tl.t.Log(string(p))
-	return len(p), nil
-}
-
 // NewTestLogger creates a new logr.Logger using a Zap logger that logs to testing.T
 func NewTestLogger(t *testing.T) logr.Logger {
-	writer := zapcore.AddSync(&testLogger{t})
-	encoder := zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
-	core := zapcore.NewCore(encoder, writer, zapcore.DebugLevel)
-	zapLogger := uzap.New(core)
-
-	// Wrap the zapLogger with the controller-runtime logr.Logger
-	return log.Log.WithName("test").WithValues("zapLogger", zapLogger)
+	zapTest := zaptest.NewLogger(t)
+	return zapr.NewLogger(zapTest)
 }
 
 func TestPostgresClientOperations(t *testing.T) {
@@ -94,11 +77,9 @@ func TestPostgresClientOperations(t *testing.T) {
 				log:    NewTestLogger(t),
 			}
 
-			t.Logf("CreateDataBase()")
-			got, err := pc.CreateDataBase(tt.args.dbName)
+			got, err := pc.CreateDatabase(tt.args.dbName)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("\t%s CreateDataBase() error = %v, wantErr %v", failed, err, tt.wantErr)
-				return
+				t.Fatalf("wantErr %t err: %s", tt.wantErr, err)
 			}
 			if got != tt.want {
 				t.Errorf("\t%sCreateDataBase() got = %v, want %v", failed, got, tt.want)

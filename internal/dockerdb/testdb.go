@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"os"
@@ -239,7 +240,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 
 	// Exercise hotload
 	//hotload.RegisterSQLDriver("pgx", stdlib.GetDefaultDriver())
-	dsn := fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", url.QueryEscape(cfg.Username), url.QueryEscape(cfg.Password), port, cfg.Database)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", url.QueryEscape(cfg.Username), url.QueryEscape(cfg.Password), GetOutboundIP(), port, cfg.Database)
 	logger.V(debugLevel).Info(dsn)
 	f, err := os.CreateTemp("", "dsn.txt")
 	if err != nil {
@@ -257,11 +258,18 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 	if err != nil {
 		panic(err)
 	}
-
 	now := time.Now()
 	err = RetryFn(nil, func() error {
 		return conn.Ping()
-	}, 10*time.Millisecond, 30*time.Second)
+	}, 100*time.Millisecond, 10*time.Second)
+
+	// Fake some roles for testing
+	_, err = conn.Exec(`
+CREATE ROLE rds_superuser WITH INHERIT LOGIN;
+CREATE ROLE alloydbsuperuser WITH INHERIT LOGIN`)
+	if err != nil {
+		panic(err)
+	}
 
 	if err != nil {
 		logger.Error(err, "failed to connect to database")
@@ -276,7 +284,7 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 		os.Exit(1)
 	}
 	// TODO: change this to debug logging, just timing jenkins for now
-	logger.Info("db_connected", "duration", time.Since(now))
+	logger.Info("db_connected", "dsn", dsn, "duration", time.Since(now))
 
 	return conn, dsn, func() {
 		// Cleanup container on close, dont exit without trying all steps first
@@ -299,4 +307,16 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 			logger.Error(err, "failed to remove container")
 		}
 	}
+}
+
+func GetOutboundIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP.String()
 }

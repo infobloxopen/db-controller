@@ -24,10 +24,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/go-logr/logr/funcr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/go-logr/logr"
+	uberzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
@@ -35,7 +37,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -51,24 +53,36 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var controllerReconciler *DatabaseClaimReconciler
 var namespace string
 var logger logr.Logger
+var env = "testenv"
+
+// Stand up postgres in a container
+var (
+	testdb        *sql.DB
+	testDSN       string
+	cleanupTestDB func()
+)
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
-
 	RunSpecs(t, "Controller Suite", Label("FailFast"))
+}
 
-	logger = funcr.New(func(prefix, args string) {
-		t.Log(prefix, args)
-	}, funcr.Options{
-		Verbosity: 1,
-	})
+func NewGinkgoLogger() logr.Logger {
+	// Create a new Zap logger, routing output to GinkgoWriter
+	return zap.New(zap.WriteTo(GinkgoWriter), zap.UseFlagOptions(&zap.Options{
+		Encoder:     zapcore.NewConsoleEncoder(uberzap.NewDevelopmentEncoderConfig()),
+		Development: true,
+		TimeEncoder: zapcore.RFC3339TimeEncoder,
+	}))
 }
 
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
+	logger = NewGinkgoLogger()
+	log.SetLogger(logger)
 	By("bootstrapping test environment")
 	namespace = "default"
 	testEnv = &envtest.Environment{
@@ -77,7 +91,9 @@ var _ = BeforeSuite(func() {
 			filepath.Join("..", "..", "test", "crd"),
 		},
 		ErrorIfCRDPathMissing: true,
-
+		WebhookInstallOptions: envtest.WebhookInstallOptions{
+			Paths: []string{filepath.Join("testdata", "mutatingwebhook.yaml")},
+		},
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
 		// without call the makefile target test. If not informed it will look for the
 		// default path defined in controller-runtime which is /usr/local/kubebuilder/.
@@ -125,9 +141,12 @@ var _ = BeforeSuite(func() {
 	configPath, err := filepath.Abs(filepath.Join("..", "..", "cmd", "config", "config.yaml"))
 	Expect(err).NotTo(HaveOccurred())
 
+	viperCfg := config.NewConfig(configPath)
+	// Used by kctlutils
+	viperCfg.Set("SERVICE_NAMESPACE", "default")
 	controllerReconciler = &DatabaseClaimReconciler{
 		Config: &databaseclaim.DatabaseClaimConfig{
-			Viper:     config.NewConfig(configPath),
+			Viper:     viperCfg,
 			Namespace: "default",
 		},
 		Client: k8sClient,
@@ -140,14 +159,6 @@ var _ = BeforeSuite(func() {
 	controllerReconciler.Config.Viper.Set("defaultSslMode", "disable")
 
 })
-
-// Stand up postgres in a container
-var (
-	testdb               *sql.DB
-	testDSN              string
-	cleanupTestDB        func()
-	controllerReconciler *DatabaseClaimReconciler
-)
 
 var _ = AfterSuite(func() {
 	cleanupTestDB()

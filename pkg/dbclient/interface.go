@@ -1,6 +1,10 @@
 package dbclient
 
-import "github.com/aws/aws-sdk-go-v2/aws"
+import (
+	"database/sql"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+)
 
 type Clienter interface {
 	Creater
@@ -8,6 +12,10 @@ type Clienter interface {
 	Remover
 	Exister
 	DBCloser
+
+	GetDB() *sql.DB
+	Ping() error
+	SanitizeDSN() string
 
 	ManageReplicationRole(username string, enableReplicationRole bool) error
 	ManageSuperUserRole(username string, enableSuperUser bool) error

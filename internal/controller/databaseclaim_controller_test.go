@@ -18,19 +18,27 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
 	"net/url"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	mutating "github.com/infobloxopen/db-controller/internal/webhook"
+	"github.com/infobloxopen/db-controller/pkg/hostparams"
 )
 
 var _ = Describe("DatabaseClaim Controller", func() {
@@ -58,7 +66,7 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			By("ensuring the resource does not exist")
 			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(HaveOccurred())
 
-			By("creating the custom resource for the Kind DatabaseClaim")
+			By(fmt.Sprintf("Creating dbc: %s", resourceName))
 			parsedDSN, err := url.Parse(testDSN)
 			Expect(err).NotTo(HaveOccurred())
 			password, ok := parsedDSN.User.Password()
@@ -132,6 +140,10 @@ var _ = Describe("DatabaseClaim Controller", func() {
 		})
 
 		It("Should succeed to reconcile DB Claim missing dbVersion", func() {
+			By("Verify environment")
+			viper := controllerReconciler.Config.Viper
+			Expect(viper.Get("env")).To(Equal(env))
+
 			By("Reconciling the created resource")
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
@@ -154,6 +166,100 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource.Status.Error).To(Equal(""))
 
+			var instance crossplaneaws.DBInstance
+			viper := controllerReconciler.Config.Viper
+			hostParams, err := hostparams.New(viper, resource)
+			Expect(err).ToNot(HaveOccurred())
+
+			instanceName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+
+			By(fmt.Sprintf("Check dbinstance is created: %s", instanceName))
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: instanceName}, &instance)
+			}).Should(Succeed())
+		})
+
+		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
+			By("Updating CR with a DB Version")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			resource.Spec.DBVersion = "13.3"
+			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal("13.3"))
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+
+		})
+
+		It("dbproxy mutated pod", func() {
+
+			// FIXME: can this be done without standing up
+			// a full manager?
+			mgr, err := manager.New(cfg, manager.Options{
+				Scheme: k8sClient.Scheme(),
+				WebhookServer: webhook.NewServer(webhook.Options{
+					Port:    testEnv.WebhookInstallOptions.LocalServingPort,
+					Host:    testEnv.WebhookInstallOptions.LocalServingHost,
+					CertDir: testEnv.WebhookInstallOptions.LocalServingCertDir,
+					TLSOpts: []func(*tls.Config){func(config *tls.Config) {}},
+				}),
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(mutating.SetupWebhookWithManager(mgr, mutating.SetupConfig{
+				Namespace:  namespace,
+				Class:      env,
+				DBProxyImg: "test-db-proxy:latest",
+				DSNExecImg: "test-dsn-exec:latest",
+			})).To(Succeed())
+
+			mgrCtx, cancel := context.WithCancel(context.Background())
+			go func() {
+				Expect(mgr.Start(mgrCtx)).To(Succeed())
+			}()
+			DeferCleanup(func() {
+				cancel()
+				<-mgrCtx.Done()
+				Expect(errors.Is(mgrCtx.Err(), context.Canceled)).To(BeTrue())
+			})
+
+			pod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "default",
+					Labels: map[string]string{
+						mutating.LabelCheckProxy: "enabled",
+						mutating.LabelClaim:      resourceName,
+						mutating.LabelClass:      env,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "test-container",
+							Image: "busybox",
+							Command: []string{
+								"sleep",
+								"3600",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, &pod)).To(Succeed())
+			Expect(pod.Spec.Volumes).To(HaveLen(1))
+			Expect(pod.Spec.Volumes[0].VolumeSource.Secret.SecretName).To(Equal(secretName))
+			Expect(pod.Annotations[mutating.AnnotationInjectedProxy]).To(Equal("true"))
+			Expect(pod.Spec.Containers).To(HaveLen(2))
+			Expect(pod.Spec.Containers[1].Env).To(HaveLen(1))
+			envvar := pod.Spec.Containers[1].Env[0]
+			Expect(envvar.Name).To(Equal("DBPROXY_CREDENTIAL"))
+			Expect(envvar.Value).To(Equal("/dbproxy/uri_dsn.txt"))
 		})
 	})
 })

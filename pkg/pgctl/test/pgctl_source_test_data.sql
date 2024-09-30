@@ -44,7 +44,9 @@ set     rds.logical_replication static parameter to 1
 -- CREATE DATABASE pub;
 -- \c pub
 -- simulate AWS rds_superuser role
-CREATE ROLE rds_superuser WITH INHERIT LOGIN;
+-- testdb injects these now    
+-- CREATE ROLE rds_superuser WITH INHERIT LOGIN;
+-- CREATE ROLE alloydbsuperuser WITH INHERIT LOGIN;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/hostparams"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -68,8 +70,6 @@ func manageError(ctx context.Context, cli client.Client, claim *v1.DatabaseClaim
 		wrappedErr = &managedErr{err: inErr}
 	}
 
-	logr.Error(inErr, "")
-
 	// Refresh the claim to get the latest resource version
 	copy := claim.DeepCopy()
 	if err := refreshClaim(ctx, cli, copy); err != nil {
@@ -91,6 +91,8 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *v1
 	dbClaim.Status.Error = ""
 
 	if err := r.Client.Status().Update(ctx, dbClaim); err != nil {
+		logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
+		logr.Error(err, "manage_success_update_claim")
 		return ctrl.Result{}, err
 	}
 	//if object is getting deleted then call requeue immediately
@@ -100,10 +102,58 @@ func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *v1
 	if dbClaim.Status.OldDB.DbState == v1.PostMigrationInProgress {
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
+
 	return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 }
 
 func (r *DatabaseClaimReconciler) updateClientStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
 
 	return r.Client.Status().Update(ctx, dbClaim)
+}
+
+func updateUserStatus(status *v1.Status, reqInfo *requestInfo, userName, userPassword string) {
+	timeNow := metav1.Now()
+	if status.ConnectionInfo == nil {
+		status.ConnectionInfo = &v1.DatabaseClaimConnectionInfo{}
+	}
+
+	status.UserUpdatedAt = &timeNow
+	status.ConnectionInfo.Username = userName
+	reqInfo.TempSecret = userPassword
+	status.ConnectionInfoUpdatedAt = &timeNow
+}
+
+func updateDBStatus(status *v1.Status, dbName string) {
+	timeNow := metav1.Now()
+	if status.DbCreatedAt == nil {
+		status.DbCreatedAt = &timeNow
+	}
+	if status.ConnectionInfo == nil {
+		status.ConnectionInfo = &v1.DatabaseClaimConnectionInfo{}
+	}
+	if status.ConnectionInfo.DatabaseName == "" {
+		status.ConnectionInfo.DatabaseName = dbName
+		status.ConnectionInfoUpdatedAt = &timeNow
+	}
+}
+
+func updateHostPortStatus(status *v1.Status, host, port, sslMode string) {
+	timeNow := metav1.Now()
+	if status.ConnectionInfo == nil {
+		status.ConnectionInfo = &v1.DatabaseClaimConnectionInfo{}
+	}
+	status.ConnectionInfo.Host = host
+	status.ConnectionInfo.Port = port
+	status.ConnectionInfo.SSLMode = sslMode
+	status.ConnectionInfoUpdatedAt = &timeNow
+}
+
+func updateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams) {
+	status.DBVersion = hostParams.DBVersion
+	status.Type = v1.DatabaseType(hostParams.Type)
+	status.Shape = hostParams.Shape
+	status.MinStorageGB = hostParams.MinStorageGB
+	if hostParams.Type == string(v1.Postgres) {
+		status.MaxStorageGB = hostParams.MaxStorageGB
+	}
 }

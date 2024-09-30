@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -13,12 +14,14 @@ var configLog = ctrl.Log.WithName("configLog")
 // NewConfig creates a new db-controller config
 func NewConfig(configFile string) *viper.Viper {
 	c := viper.NewWithOptions(viper.KeyDelimiter("::"))
+	c.AutomaticEnv()
 	c.SetDefault("config", "config.yaml")
 	c.SetConfigFile(configFile)
 	configLog.Info("loading config")
 	err := c.ReadInConfig() // Find and read the config file
 	if err != nil {         // Handle errors reading the config file
-		panic(fmt.Errorf("fatal error config file: %s", err))
+		configLog.Error(err, "error reading config file", "file", configFile)
+		os.Exit(1)
 	}
 
 	// monitor the changes in the config file

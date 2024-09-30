@@ -6,10 +6,16 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"os/exec"
 
 	"github.com/go-logr/logr"
 )
+
+// IsAdminUser checks if the user is a superuser or has replication role
+func IsAdminUser(db *sql.DB) (bool, error) {
+	return isAdminUser(db)
+}
 
 func isAdminUser(db *sql.DB) (bool, error) {
 	var (
@@ -31,10 +37,10 @@ func isAdminUser(db *sql.DB) (bool, error) {
 	_ = db.QueryRow("SELECT session_user").Scan(&user)
 
 	awsAdminQuery := fmt.Sprintf(`
-	SELECT count(1) 
-	FROM pg_roles 
+	SELECT count(1)
+	FROM pg_roles
 	WHERE pg_has_role( '%s', oid, 'member')
-  	AND rolname in ( 'rds_superuser', 'rds_replication');`, user)
+  	AND rolname in ( 'alloydbsuperuser', 'alloydbadmin', 'alloydbreplica', 'rds_superuser', 'rds_replication');`, user)
 
 	err = db.QueryRow(awsAdminQuery).Scan(&count)
 	if err != nil {
@@ -133,4 +139,12 @@ func getParentRole(dbUser string) string {
 		}
 	}
 	return dbUser
+}
+
+func SanitizeDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return ""
+	}
+	return u.Redacted()
 }

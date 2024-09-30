@@ -191,7 +191,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 		return false, err
 	}
 
-	return r.isResourceReady(dbCluster.Status.ResourceStatus)
+	return r.isResourceReady("aurora.cluster", dbHostName, dbCluster.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Context, reqInfo *requestInfo, dbHostName string, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (bool, error) {
@@ -333,7 +333,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	return r.isResourceReady(dbInstance.Status.ResourceStatus)
+	return r.isResourceReady("rds.instance", dbHostName, dbInstance.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) updateDBClusterAWS(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, dbCluster *crossplaneaws.DBCluster) (bool, error) {
@@ -458,7 +458,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 		return false, err
 	}
 
-	return r.isResourceReady(dbInstance.Status.ResourceStatus)
+	return r.isResourceReady("aurora.instance", dbHostName, dbInstance.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) managePostgresParamGroup(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (string, error) {

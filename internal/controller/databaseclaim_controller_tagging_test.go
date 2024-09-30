@@ -21,6 +21,7 @@ var hasOperationalTag = databaseclaim.HasOperationalTag
 
 var _ = Describe("Tagging", Ordered, func() {
 
+	var logger = NewGinkgoLogger()
 	// define and create objects in the test cluster
 
 	name := fmt.Sprintf("test-%s-%s", namespace, rand.String(5))
