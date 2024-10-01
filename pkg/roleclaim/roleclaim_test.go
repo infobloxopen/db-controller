@@ -65,7 +65,7 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 					Namespace: "testNamespace",
 				},
 				Request: controllerruntime.Request{
-					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "schema-user-claim-1"},
+					NamespacedName: types.NamespacedName{Namespace: "schema-user-test", Name: "6afxqssmpaqwuct5umrr7gexxozakhil-1a-role-claim"},
 				},
 				Log: zap.New(zap.UseDevMode(true)),
 			},
@@ -95,7 +95,7 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 		var schemaUserClaimStatus = responseUpdate.(*persistancev1.DbRoleClaim).Status
 		Expect(schemaUserClaimStatus).Should(Not(BeNil()))
 		Expect(schemaUserClaimStatus.Error).Should(BeEmpty())
-		Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus).Should(HaveLen(5))
+		Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus).Should(HaveLen(6))
 
 		Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus["schema1"]).Should(Equal("valid"))
 		Expect(schemaUserClaimStatus.SchemaRoleStatus.SchemaStatus["schema2"]).Should(Equal("valid"))
@@ -117,7 +117,7 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 		exists, err = dbClient.RoleExists("schema1_regular")
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
-		exists, err = dbClient.UserExists("testclaim_user_a")
+		exists, err = dbClient.UserExists("6afxqssmpaqwuct5umrr7gexxozakhil-1a-role-claim_user_a")
 		Expect(exists).Should(BeTrue())
 		Expect(err).Should(BeNil())
 		//-----------------
