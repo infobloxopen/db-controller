@@ -101,6 +101,26 @@ func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 			sec.Spec.SchemaRoleMap["public"] = persistancev1.Admin
 			sec.Spec.SchemaRoleMap["schema4"] = persistancev1.Admin
 
+		} else if key.Name == "6afxqssmpaqwuct5umrr7gexxozakhil-1a-role-claim" { //DBRoleClaim
+
+			sec, ok := obj.(*persistancev1.DbRoleClaim)
+			if !ok {
+				return fmt.Errorf("can't assert type")
+			}
+			sec.Spec.Class = ptr.String("default")
+			sec.Spec.SourceDatabaseClaim = &persistancev1.SourceDatabaseClaim{Namespace: "schema-user-test", Name: "testclaim"}
+			sec.Spec.SchemaRoleMap = make(map[string]persistancev1.RoleType)
+			sec.Spec.SecretName = "sample-master-secret"
+			sec.Name = "6afxqssmpaqwuct5umrr7gexxozakhil-1a-role-claim"
+			sec.Namespace = "schema-user-test"
+
+			sec.Spec.SchemaRoleMap["schema1"] = persistancev1.Regular
+			sec.Spec.SchemaRoleMap["schema2"] = persistancev1.Admin
+			sec.Spec.SchemaRoleMap["schema3"] = persistancev1.ReadOnly
+			sec.Spec.SchemaRoleMap["public"] = persistancev1.Admin
+			sec.Spec.SchemaRoleMap["schema4"] = persistancev1.Admin
+			sec.Spec.SchemaRoleMap["6afxqssmpaqwuct5umrr7gexxozakhil_schema"] = persistancev1.Admin
+
 		} else if key.Name == "schema-user-claim-2" || key.Name == "schema-user-claim-3" { //DBRoleClaim - EXISTING USER
 
 			sec, ok := obj.(*persistancev1.DbRoleClaim)
