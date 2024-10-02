@@ -1,0 +1,138 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: alloydb-client
+spec:
+  initContainers:
+  # - name: postgres-init
+  #   image: postgres:15-alpine
+  #   command:
+  #     - "bash"
+  #     - "-c"
+  #   args:
+  #     - |
+  #       until timeout 10 psql -h localhost -U postgres -c 'SELECT 1'; do
+  #         echo "Waiting to connection to be ready..."
+  #         sleep 3
+  #       done
+  #   env:
+  #     - name: NEWUSER
+  #       value: "alloydb-test-sa@gcp-eng-ddiaas-dev.iam"
+  #     - name: PGHOST
+  #       value: "127.0.0.1"
+  #     - name: PGPORT
+  #       value: "5432"
+  #     - name: NEWDB
+  #       value: "mydb"
+  #     - name: PGPASSWORD
+  #       valueFrom:
+  #         secretKeyRef:
+  #           name: alloydb-psc-test-creds
+  #           key: password
+  - name: init-user
+    image: google/cloud-sdk:slim  # Image with gcloud CLI
+    command:
+    - /bin/bash
+    - -cx
+    - |
+      # Provision the AlloyDB database user using gcloud CLI
+      gcloud auth activate-service-account --key-file=/secrets/creds
+      gcloud config set project $PROJECT
+
+      if gcloud alloydb users list --region $REGION --cluster=$CLUSTERNAME --format="value(name)" | grep -qw "$NEWUSER"; then
+        echo "User already exists: $NEWUSER"
+      else
+        gcloud alloydb users create $NEWUSER --region $REGION --cluster=$CLUSTERNAME --type=IAM_BASED
+      fi
+    env:
+      - name: REGION
+        value: us-east1
+      - name: PROJECT
+        value: gcp-eng-ddiaas-dev
+      - name: NEWUSER
+        value: "alloydb-test-sa@gcp-eng-ddiaas-dev.iam"
+      - name: INSTANCENAME
+        value: alloydb-psc-test
+      - name: CLUSTERNAME
+        value: alloydb-psc-test
+      - name: PGHOST
+        value: "127.0.0.1"
+      - name: PGPORT
+        value: "5432"
+      - name: NEWDB
+        value: "mydb"
+    volumeMounts:
+    - name: service-account
+      mountPath: /secrets
+      readOnly: true
+  containers:
+  - name: proxy
+    image: gcr.io/alloydb-connectors/alloydb-auth-proxy:1.11.0-bullseye
+    command: ["/alloydb-auth-proxy"]
+    args:
+      - projects/gcp-eng-ddiaas-dev/locations/us-east1/clusters/alloydb-psc-test/instances/alloydb-psc-test
+      - --credentials-file=/secrets/creds
+      - --auto-iam-authn
+      - --run-connection-test
+      - --psc
+      - --debug-logs
+      - --health-check
+      - --address=0.0.0.0
+    # livenessProbe:
+    #   httpGet:
+    #     path: /liveness
+    #     port: 9090
+    #   initialDelaySeconds: 15
+    #   periodSeconds: 20
+    readinessProbe:
+      httpGet:
+        path: /readiness
+        port: 9090
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    volumeMounts:
+      - name: service-account
+        mountPath: /secrets
+        readOnly: true
+  - name: cli
+    image: postgres:15-alpine
+    command:
+      - "bash"
+      - "-c"
+    args:
+      - |
+        export PGPASSWORD=$(cat /creds/password)
+        until timeout 10 psql -h localhost -U "$USER" -d postgres -c 'SELECT 1'; do
+          echo "Waiting to connection to be ready..."
+          sleep 3
+        done
+        # @echo "Provision Database"
+        # psql -U "$USER" postgres << EOF
+        # CREATE DATABASE $NEWDB;
+        # EOF
+
+        sleep infinity;
+    env:
+      - name: USER
+        value: "alloydb-test-sa@gcp-eng-ddiaas-dev.iam"
+      - name: PGHOST
+        value: "127.0.0.1"
+      - name: PGPORT
+        value: "5432"
+      - name: PGDATABASE
+        value: "mydb"
+    volumeMounts:
+      - name: service-account
+        mountPath: /secrets
+        readOnly: true
+      - name: psql-creds
+        mountPath: /creds
+        readOnly: true
+  volumes:
+  - name: service-account
+    secret:
+      secretName: gcp-secret
+  - name: psql-creds
+    secret:
+      secretName: alloydb-psc-test-creds
