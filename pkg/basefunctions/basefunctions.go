@@ -257,5 +257,5 @@ func GetDynamicHostWaitTime(viperConfig *viper.Viper) time.Duration {
 
 // GetDBIdentifierPrefix returns the prefix for the database identifier.
 func GetDBIdentifierPrefix(viperConfig *viper.Viper) string {
-	return viperConfig.GetString("dbIdentifierPrefix")
+	return GetSystemFunctions(viperConfig)["ib_env"]
 }
