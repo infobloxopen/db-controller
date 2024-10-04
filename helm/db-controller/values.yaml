@@ -11,9 +11,6 @@ env: local
 ib:
   realm: "us"
 lifecycle: "dev"
-db:
-  identifier:
-    prefix: "{{ .Values.env }}"
 dbController:
   class: default
 
