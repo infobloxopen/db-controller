@@ -158,6 +158,7 @@ controllerConfig:
   region: us-east-1
   project: gcp-eng-ddiaas-dev
   network: "ddiaas-dev-use1-vpc"
+  # This value is only used for gcp
   subnetwork: "psc-{{ .Values.env }}-subnet"
   numbackupstoretain: 3
   # The number of days for which automated backups are retained. Setting this parameter to a positive number enables backups.
