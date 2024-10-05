@@ -35,6 +35,10 @@ var _ = Describe("dsnexec defaulting", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: "default-db"}, resource)
+			return err == nil
+		}).Should(BeTrue())
 
 	})
 
