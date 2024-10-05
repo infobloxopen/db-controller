@@ -14,7 +14,7 @@ import (
 
 var ErrInvalidCredentialsPasswordMissing = fmt.Errorf("invalid_credentials_password_missing")
 
-func getSourceDataFromDSN(ctx context.Context, cli client.Reader, dbClaim *v1.DatabaseClaim) (*v1.DatabaseClaimConnectionInfo, error) {
+func getSourceDataFromSecretRef(ctx context.Context, cli client.Reader, dbClaim *v1.DatabaseClaim) (*v1.DatabaseClaimConnectionInfo, error) {
 
 	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
 	if ns == "" {

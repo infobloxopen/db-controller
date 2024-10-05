@@ -8,6 +8,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/kctlutils"
@@ -78,8 +79,16 @@ func fetchAdminFromSourceDataFrom(ctx context.Context, cli client.Reader, dbClai
 	// Fetch source from sourcedatafrom location
 	if dbClaim.Spec.SourceDataFrom != nil {
 		srcAdmin = dbClaim.Spec.SourceDataFrom.Database.DSN
-		if srcAdmin == "" {
-			info, err := getSourceDataFromDSN(ctx, cli, dbClaim)
+		log.FromContext(ctx).Info("fetchAdminFromSourceDataFrom", "dsn", srcAdmin)
+		// Check for password as well
+		u, err := url.Parse(srcAdmin)
+		var ok bool
+		if err == nil {
+			_, ok = u.User.Password()
+		}
+		// DSN is invalid, has no password, or is empty. Check SecretRef and throw error if not available
+		if err != nil || ok || srcAdmin == "" {
+			info, err := getSourceDataFromSecretRef(ctx, cli, dbClaim)
 			if err != nil {
 				return "", err
 			}
