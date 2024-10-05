@@ -31,6 +31,7 @@ import (
 	"github.com/infobloxopen/db-controller/test/utils"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -151,10 +152,6 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 
-	// By("Uninstalling the manager")
-	// cmd := exec.Command("make", "undeploy")
-	// _, err := utils.Run(cmd)
-	// Expect(err).NotTo(HaveOccurred())
 	if os.Getenv("NOCLEANUP") != "" {
 		return
 	}
@@ -168,21 +165,39 @@ var _ = AfterSuite(func() {
 			Name:      db,
 			Namespace: namespace,
 		}
+		By("Checking Databaseclaim: " + db)
 		if err := k8sClient.Get(ctx, nname, claim); err == nil {
 			By("Deleting DatabaseClaim: " + db)
 			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+			Eventually(func() bool {
+				return errors.IsNotFound(k8sClient.Get(ctx, nname, claim))
+			}).Should(BeTrue())
 		}
 	}
 
-	inst := &crossplaneaws.DBInstance{}
+	inst := crossplaneaws.DBInstance{}
 	for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
 		nname := types.NamespacedName{
 			Name:      db,
 			Namespace: namespace,
 		}
-		if err := k8sClient.Get(ctx, nname, inst); err == nil {
+		if err := k8sClient.Get(ctx, nname, &inst); err == nil {
 			By("Deleting DBInstance   : " + db)
-			Expect(k8sClient.Delete(ctx, inst)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, &inst)).Should(Succeed())
+			// CR is stuck in deletion, force a deletion by removing the finalizer
+			err := k8sClient.Get(ctx, nname, &inst)
+			if errors.IsNotFound(err) {
+				// patch the finalizer to prevent crossplane from blocking the deletion
+				inst.SetFinalizers([]string{})
+				Expect(k8sClient.Update(ctx, &inst)).Should(Succeed())
+
+				Expect(k8sClient.Delete(ctx, &inst)).Should(Succeed())
+
+				Eventually(func() bool {
+					return errors.IsNotFound(k8sClient.Get(ctx, nname, &inst))
+				}, timeout_e2e, interval_e2e).Should(Succeed())
+			}
+
 		}
 	}
 

@@ -264,7 +264,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 		return false, err
 	}
 
-	return r.isResourceReady(dbCluster.Status.ResourceStatus)
+	return r.isResourceReady("alloydb.cluster", dbHostName, dbCluster.Status.ResourceStatus)
 }
 
 // https://cloud.google.com/alloydb/docs/reference/rest/v1beta/DatabaseVersion
@@ -354,7 +354,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 				return false, err
 			}
 			//create DBInstance
-			logr.Info("creating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
+			logr.Info("creating crossplane alloydb.instance", "instance", dbInstance.Name)
 			if err := r.Client.Create(ctx, dbInstance); err != nil {
 				return false, err
 			}
@@ -369,7 +369,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 		return false, err
 	}
 
-	return r.isResourceReady(dbInstance.Status.ResourceStatus)
+	return r.isResourceReady("alloydb.instance", dbHostName, dbInstance.Status.ResourceStatus)
 }
 
 func (r *DatabaseClaimReconciler) updateDBClusterGCP(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, dbCluster *crossplanegcp.Cluster) (bool, error) {

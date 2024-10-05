@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/go-logr/logr"
 	"github.com/infobloxopen/db-controller/dbproxy"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -35,6 +36,8 @@ func init() {
 	flag.StringVar(&addr, "addr", "0.0.0.0:5432", "address to listen to clients on")
 }
 
+var logger logr.Logger
+
 func main() {
 
 	opts := zap.Options{
@@ -44,7 +47,8 @@ func main() {
 
 	flag.Parse()
 
-	dbproxy.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	logger = zap.New(zap.UseFlagOptions(&opts))
+	dbproxy.SetLogger(logger)
 	mgr, err := dbproxy.New(context.TODO(), dbproxy.Config{
 		DBCredentialPath: dbCredentialPath,
 		PGCredentialPath: pbCredentialPath,
@@ -62,7 +66,9 @@ func main() {
 	catch(cancel)
 
 	// Blocking call
-	log.Fatal(mgr.Start(ctx))
+	if err := mgr.Start(ctx); err != nil {
+		logger.Error(err, "failed to start dbproxy")
+	}
 }
 
 func catch(cancel func()) {
@@ -76,33 +82,35 @@ func catch(cancel func()) {
 	go func() {
 		sig := <-sigs
 		cancel()
-		fmt.Println("Received signal:", sig)
+		logger.Info("Received signal", "signal", sig)
 		// Path set in ini file
 		bs, err := ioutil.ReadFile(filepath.Join("pgbouncer.pid"))
 		if err != nil {
-			log.Fatal(err)
+			logger.Error(err, "failed to read pgbouncer pid file")
+			os.Exit(1)
 		}
 		pid, err := strconv.Atoi(string(bytes.TrimSpace(bs)))
 		if err != nil {
-			log.Fatal(err)
+			logger.Error(err, "failed to convert pid to int")
+			os.Exit(1)
 		}
-		fmt.Println("terminating pgbouncer pid:", pid)
+		logger.Info("terminating pgbouncer pid", "pid", pid)
 		// Terminate pgbouncer
 		cmd := exec.Command("sh", "-c", fmt.Sprintf("kill -s 9 %d", pid))
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Fatal(err)
+			logger.Error(err, "failed to kill pgbouncer")
 		}
-		fmt.Println(stdoutStderr)
+		logger.Info("pgbouncer stop executed", "output", stdoutStderr)
 
 		// Capture log pgbouncer.log and write to stdout
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("cat %s", "pgbouncer.log"))
 		stdoutStderr, err = cmd.CombinedOutput()
 		if err != nil {
-			log.Fatalf("failed to cat log: %s", err)
+			logger.Error(err, "failed to cat log", "output", string(stdoutStderr))
+		} else {
+			logger.Info("pgbouncer.log", "output", string(stdoutStderr))
 		}
-		log.Println("pgbouncer.log")
-		fmt.Println(string(stdoutStderr))
 
 		os.Exit(0)
 	}()

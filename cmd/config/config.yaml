@@ -1,3 +1,4 @@
+env: "testenv"
 athena-shared:
   masterUsername: root
 authSource: secret
@@ -41,9 +42,7 @@ passwordConfig:
   passwordRotationPeriod: 60
 
 systemFunctions:
-  ib_realm: "{{ .Values.ib.realm }}"
-  ib_env: "{{ .Values.env }}"
-  ib_lifecycle: "{{ .Values.lifecycle }}"
-  
-
+  ib_realm: "ib_realm"
+  ib_env: "ib_env"
+  ib_lifecycle: "ib_lifecycle"
 

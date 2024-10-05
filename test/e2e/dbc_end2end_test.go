@@ -82,7 +82,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 			Expect(db1).NotTo(BeEmpty())
 			key := types.NamespacedName{
-				Name:      env + "-" + db1,
+				Name:      db1,
 				Namespace: namespace,
 			}
 
@@ -123,7 +123,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				dbinstance1 = fmt.Sprintf("%s-%s-%s", env, db1, hostParams.Hash())
 			}
 
-			By("Checking if dbinstance exists")
+			By(fmt.Sprintf("Checking if dbinstance exists: %s", dbinstance1))
 			Expect(dbinstance1).NotTo(BeEmpty())
 			dbInst := utils.DBInstanceType(cloud)
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1}, dbInst)
@@ -137,7 +137,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 
 			Expect(k8sClient.Create(ctx, dbClaim)).Should(Succeed())
 
-			By(fmt.Sprintf("checking %s status.error message is not empty", key.String()))
+			By(fmt.Sprintf("dbc status.error messages it not empty: %s", key.String()))
 			Eventually(func() string {
 				Expect(k8sClient.Get(ctx, key, dbClaim)).Should(Succeed())
 				return dbClaim.Status.Error
@@ -148,7 +148,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 		It("Updating a databaseclaim", func() {
 			By("setting DBVersion to empty should use value 15")
 			key := types.NamespacedName{
-				Name:      env + "-" + db1,
+				Name:      db1,
 				Namespace: namespace,
 			}
 
@@ -284,7 +284,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					SecretName: secretName,
 					SourceDatabaseClaim: &v1.SourceDatabaseClaim{
 						Namespace: namespace,
-						Name:      env + "-" + db1,
+						Name:      db1,
 					},
 					SchemaRoleMap: map[string]v1.RoleType{
 						"schemaapp111": v1.ReadOnly,
@@ -622,36 +622,10 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 		})
 	})
 
-	// FIXME: only clean up resources that this test suite created
+	// FIXME: afterall is not executed, move these to AfterSuite
 	var afterall = func() {
 		if os.Getenv("NOCLEANUP") != "" {
 			return
-		}
-		By("Cleaning up resources")
-
-		// delete db1 if it exists
-		claim := &v1.DatabaseClaim{}
-		for _, db := range []string{db1, db2} {
-			nname := types.NamespacedName{
-				Name:      db,
-				Namespace: namespace,
-			}
-			if err := k8sClient.Get(ctx, nname, claim); err == nil {
-				By("Deleting DatabaseClaim: " + db)
-				Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
-			}
-		}
-
-		inst := &crossplaneaws.DBInstance{}
-		for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
-			nname := types.NamespacedName{
-				Name:      db,
-				Namespace: namespace,
-			}
-			if err := k8sClient.Get(ctx, nname, inst); err == nil {
-				By("Deleting DBInstance: " + db)
-				Expect(k8sClient.Delete(ctx, inst)).Should(Succeed())
-			}
 		}
 
 		return

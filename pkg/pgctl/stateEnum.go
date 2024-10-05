@@ -16,6 +16,7 @@ const (
 	S_RerouteTargetSecret
 	S_WaitToDisableSource
 	S_DisableSourceAccess
+	S_MigrationInProgress
 	S_ValidateMigrationStatus
 	S_DisableSubscription
 	S_DeleteSubscription
@@ -50,6 +51,8 @@ func (s StateEnum) String() string {
 		return "wait_to_disable_source"
 	case S_DisableSourceAccess:
 		return "disable_source_access"
+	case S_MigrationInProgress:
+		return "migration_in_progress"
 	case S_ValidateMigrationStatus:
 		return "validate_migration_status"
 	case S_DisableSubscription:
@@ -80,6 +83,7 @@ func init() {
 	stateMap[S_ResetTargetSequence.String()] = S_ResetTargetSequence
 	stateMap[S_RerouteTargetSecret.String()] = S_RerouteTargetSecret
 	stateMap[S_DisableSourceAccess.String()] = S_DisableSourceAccess
+	stateMap[S_MigrationInProgress.String()] = S_MigrationInProgress
 	stateMap[S_ValidateMigrationStatus.String()] = S_ValidateMigrationStatus
 	stateMap[S_WaitToDisableSource.String()] = S_WaitToDisableSource
 	stateMap[S_DisableSubscription.String()] = S_DisableSubscription

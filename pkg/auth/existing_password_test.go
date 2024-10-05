@@ -1,6 +1,7 @@
-package databaseclaim
+package auth
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,6 +10,8 @@ import (
 )
 
 func TestExistingDSN(t *testing.T) {
+
+	ctx := context.Background()
 
 	for _, tt := range []struct {
 		name       string
@@ -29,7 +32,8 @@ func TestExistingDSN(t *testing.T) {
 			user: "postgres",
 			name: "no dsn w/no secret password",
 			secretData: map[string][]byte{
-				"dsn.txt": []byte("postgres://postgres:dsnPassword@localhost:5432/postgres?sslmode=disable"),
+				"dsn.txt":     []byte("host=localhost port=5432 user=postgres password=dsnPassword dbname=postgres sslmode=disable"),
+				"uri_dsn.txt": []byte("postgres://postgres:dsnPassword@localhost:5432/postgres?sslmode=disable"),
 			},
 			dsn:      "postgres://postgres@localhost:5432/postgres?sslmode=disable",
 			expected: "postgres://postgres:dsnPassword@localhost:5432/postgres?sslmode=disable",
@@ -57,7 +61,7 @@ func TestExistingDSN(t *testing.T) {
 					},
 				},
 			}
-			actual, err := parseExistingDSN(tt.secretData, claim)
+			actual, err := parseExistingDSN(ctx, tt.secretData, claim)
 			if !errors.Is(err, tt.error) {
 				t.Errorf("got: %v, wanted: %v", err, tt.error)
 			}

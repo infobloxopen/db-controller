@@ -20,6 +20,7 @@ var (
 	LabelCheckExec          = "persistance.atlas.infoblox.com/dsnexec"
 	LabelConfigExec         = "persistance.atlas.infoblox.com/dsnexec-config"
 	LabelClaim              = "persistance.atlas.infoblox.com/claim"
+	LabelClass              = "persistance.atlas.infoblox.com/class"
 	AnnotationInjectedProxy = "persistance.atlas.infoblox.com/injected-dbproxy"
 	AnnotationInjectedExec  = "persistance.atlas.infoblox.com/injected-dsnexec"
 	SecretKey               = v1.DSNURIKey
@@ -100,12 +101,12 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 
 	var claim v1.DatabaseClaim
 	if err := p.k8sClient.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: claimName}, &claim); err != nil {
-		log.Info("unable to find databaseclaim", "claimName", claimName, "error", err)
+		//log.Info("unable to find databaseclaim", "claimName", claimName, "error", err)
 		// return fmt.Errorf("unable to find databaseclaim %q check label %s: %s", claimName, LabelClaim, err)
 	}
 	var role v1.DbRoleClaim
-	if err := p.k8sClient.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: claimName}, &role); err != nil {
-		log.Info("unable to find roleclaim", "claimName", claimName, "error", err)
+	if rErr := p.k8sClient.Get(ctx, types.NamespacedName{Namespace: pod.Namespace, Name: claimName}, &role); rErr != nil {
+		//log.Info("unable to find roleclaim", "claimName", claimName, "error", err)
 		// return fmt.Errorf("unable to find databaseclaim %q check label %s: %s", claimName, LabelClaim, err)
 	}
 
@@ -114,13 +115,15 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 		return fmt.Errorf("unable to locate databaseclaim/dbroleclaim %q", claimName)
 	}
 
-	secretName, class, err := getSecretNameClass(claim, role)
-	if err != nil {
-		return err
-	}
+	class := pod.Labels[LabelClass]
 	if class != p.class {
 		log.Info("Skipping Pod, class mismatch", "class", class, "expected", p.class)
 		return nil
+	}
+
+	secretName, err := getSecretNameClass(claim, role)
+	if err != nil {
+		return err
 	}
 
 	if pod.Annotations == nil {
@@ -153,21 +156,19 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 }
 
 // getSecretNameClass returns the secret managed by db-controller and class for the claim
-func getSecretNameClass(claim v1.DatabaseClaim, role v1.DbRoleClaim) (string, string, error) {
-	var secretName, className string
+func getSecretNameClass(claim v1.DatabaseClaim, role v1.DbRoleClaim) (string, error) {
+	var secretName string
 	var claimName string
 	if role.Name != "" {
 		claimName = role.Name
 		secretName = role.Spec.SecretName
-		className = *role.Spec.Class
 	} else {
 		claimName = claim.Name
 		secretName = claim.Spec.SecretName
-		className = *claim.Spec.Class
 	}
 
 	if secretName == "" {
-		return "", "", fmt.Errorf("claim %q does not have secret reference", claimName)
+		return "", fmt.Errorf("claim %q does not have secret reference", claimName)
 	}
-	return secretName, className, nil
+	return secretName, nil
 }

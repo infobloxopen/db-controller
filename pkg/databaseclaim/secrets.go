@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	_ "github.com/lib/pq"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,17 +14,16 @@ import (
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/dbclient"
+	"github.com/infobloxopen/db-controller/pkg/pgctl"
 
 	// FIXME: upgrade kubebuilder so this package will be removed
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo, cloud string) error {
-	logr := log.FromContext(ctx)
 	gs := &corev1.Secret{}
 	dbType := dbClaim.Spec.Type
 	secretName := dbClaim.Spec.SecretName
-	logr.Info("createOrUpdateSecret being executed. SecretName: " + secretName)
 	var dsn, dsnURI, replicaDsnURI string = "", "", ""
 
 	switch dbType {
@@ -109,4 +109,266 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsn, dbURI, 
 	logr.Info("updating connection info SECRET: "+exSecret.Name, "secret", exSecret.Name, "namespace", exSecret.Namespace)
 
 	return r.Client.Update(ctx, exSecret)
+}
+
+func (r *DatabaseClaimReconciler) getTargetPasswordFromTempSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+
+	secretName := "temp-" + dbClaim.Spec.SecretName
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+	return string(gs.Data[tempTargetPassword]), nil
+}
+
+func (r *DatabaseClaimReconciler) getMasterPasswordFromTempSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+
+	secretName := "temp-" + dbClaim.Spec.SecretName
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+	return string(gs.Data[cachedMasterPasswdForExistingDB]), nil
+}
+
+func (r *DatabaseClaimReconciler) setSourceDsnInTempSecret(ctx context.Context, dsn string, dbClaim *v1.DatabaseClaim) error {
+
+	tSecret, err := r.getTempSecret(ctx, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	tSecret.Data[tempSourceDsn] = []byte(dsn)
+	return r.Client.Update(ctx, tSecret)
+}
+
+func (r *DatabaseClaimReconciler) setTargetPasswordInTempSecret(ctx context.Context, password string, dbClaim *v1.DatabaseClaim) error {
+
+	tSecret, err := r.getTempSecret(ctx, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	tSecret.Data[tempTargetPassword] = []byte(password)
+	return r.Client.Update(ctx, tSecret)
+}
+
+func (r *DatabaseClaimReconciler) setMasterPasswordInTempSecret(ctx context.Context, password string, dbClaim *v1.DatabaseClaim) error {
+
+	tSecret, err := r.getTempSecret(ctx, dbClaim)
+	if err != nil {
+		return err
+	}
+
+	tSecret.Data[cachedMasterPasswdForExistingDB] = []byte(password)
+	return r.Client.Update(ctx, tSecret)
+}
+
+func (r *DatabaseClaimReconciler) getTempSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (*corev1.Secret, error) {
+
+	logr := log.FromContext(ctx)
+
+	gs := &corev1.Secret{}
+	secretName := getTempSecretName(dbClaim)
+
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: dbClaim.Namespace,
+		Name:      secretName,
+	}, gs)
+
+	if err == nil {
+		logr.Info("secret exists returning temp secret", "name", secretName)
+		return gs, nil
+	}
+	if !errors.IsNotFound(err) {
+		return nil, err
+	}
+
+	truePtr := true
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: dbClaim.Namespace,
+			Name:      secretName,
+			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "persistance.atlas.infoblox.com/v1",
+					Kind:               "DatabaseClaim",
+					Name:               dbClaim.Name,
+					UID:                dbClaim.UID,
+					Controller:         &truePtr,
+					BlockOwnerDeletion: &truePtr,
+				},
+			},
+		},
+		Data: map[string][]byte{
+			tempTargetPassword:              nil,
+			tempSourceDsn:                   nil,
+			tempTargetDsn:                   nil,
+			cachedMasterPasswdForExistingDB: nil,
+		},
+	}
+
+	logr.V(1).Info("creating temp secret", "secret", fmt.Sprintf("%s/%s", secret.Namespace, secret.Name))
+	err = r.Client.Create(ctx, secret)
+	return secret, err
+
+}
+
+func getTempSecretName(dbClaim *v1.DatabaseClaim) string {
+	return "temp-" + dbClaim.Spec.SecretName
+}
+
+func (r *DatabaseClaimReconciler) getSrcAdminPasswdFromSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+	secretKey := "password"
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Spec.SourceDataFrom.Database.SecretRef.Namespace
+	if ns == "" {
+		ns = dbClaim.Namespace
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      dbClaim.Spec.SourceDataFrom.Database.SecretRef.Name,
+	}, gs)
+	if err == nil {
+		return string(gs.Data[secretKey]), nil
+	}
+	//err!=nil
+	if !errors.IsNotFound(err) {
+		return "", err
+	}
+	//not found - check temp secret
+	p, err := r.getMasterPasswordFromTempSecret(ctx, dbClaim)
+	if err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+func (r *DatabaseClaimReconciler) getSrcAppDsnFromSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+	migrationState := dbClaim.Status.MigrationState
+	state, err := pgctl.GetStateEnum(migrationState)
+	if err != nil {
+		return "", err
+	}
+
+	if state > pgctl.S_RerouteTargetSecret {
+		//dsn is pulled from temp secret since app secret is not using new db
+		return r.getSourceDsnFromTempSecret(ctx, dbClaim)
+	}
+
+	secretName := dbClaim.Spec.SecretName
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		log.FromContext(ctx).Error(err, "getSrcAppPasswdFromSecret failed")
+		return "", err
+	}
+	return string(gs.Data[v1.DSNURIKey]), nil
+
+}
+
+func (r *DatabaseClaimReconciler) deleteTempSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+	secretName := getTempSecretName(dbClaim)
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	return r.Client.Delete(ctx, gs)
+}
+
+func (r *DatabaseClaimReconciler) getSourceDsnFromTempSecret(ctx context.Context, dbClaim *v1.DatabaseClaim) (string, error) {
+	secretName := getTempSecretName(dbClaim)
+
+	gs := &corev1.Secret{}
+
+	ns := dbClaim.Namespace
+	if ns == "" {
+		ns = "default"
+	}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: ns,
+		Name:      secretName,
+	}, gs)
+	if err != nil {
+		return "", err
+	}
+
+	return string(gs.Data[tempSourceDsn]), nil
+}
+
+// manageMasterPassword creates the master password that
+// crossplane uses to create root user in the database.
+func (r *DatabaseClaimReconciler) manageMasterPassword(ctx context.Context, secret *xpv1.SecretKeySelector) error {
+	logr := log.FromContext(ctx).WithValues("func", "manageMasterPassword")
+	masterSecret := &corev1.Secret{}
+	password, err := generateMasterPassword()
+	if err != nil {
+		return err
+	}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name:      secret.SecretReference.Name,
+		Namespace: secret.SecretReference.Namespace,
+	}, masterSecret)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		//master secret not found, create it
+		masterSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: secret.SecretReference.Namespace,
+				Name:      secret.SecretReference.Name,
+			},
+			Data: map[string][]byte{
+				secret.Key: []byte(password),
+			},
+		}
+		logr.Info("creating master secret", "name", secret.Name, "namespace", secret.Namespace, "key", secret.Key)
+		return r.Client.Create(ctx, masterSecret)
+	}
+	logr.Info("master secret exists")
+	return nil
 }
