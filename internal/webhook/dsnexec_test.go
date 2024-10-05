@@ -8,7 +8,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 )
@@ -32,7 +31,6 @@ var _ = Describe("dsnexec defaulting", func() {
 				Namespace: "default",
 			},
 			Spec: v1.DatabaseClaimSpec{
-				Class:      ptr.To("default"),
 				SecretName: "test",
 			},
 		}
@@ -169,6 +167,7 @@ func makePodExec(name, claimName string) *corev1.Pod {
 			LabelCheckExec:  "enabled",
 			LabelClaim:      claimName,
 			LabelConfigExec: "dsnexec-config-secret",
+			LabelClass:      "default",
 		}
 	case "annotation-disabled":
 		pod.Labels = map[string]string{}

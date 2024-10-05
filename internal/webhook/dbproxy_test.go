@@ -8,7 +8,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 )
@@ -32,7 +31,6 @@ var _ = Describe("dbproxy defaulting", func() {
 				Namespace: "default",
 			},
 			Spec: v1.DatabaseClaimSpec{
-				Class:      ptr.To("default"),
 				SecretName: "test",
 			},
 		}
@@ -164,6 +162,7 @@ func makePodProxy(name, claimName string) *corev1.Pod {
 		pod.Labels = map[string]string{
 			LabelCheckProxy: "enabled",
 			LabelClaim:      claimName,
+			LabelClass:      "default",
 		}
 	case "annotation-disabled":
 		pod.Labels = map[string]string{}

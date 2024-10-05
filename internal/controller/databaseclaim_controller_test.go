@@ -198,6 +198,7 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 		It("dbproxy mutated pod", func() {
 
+			class := "testenv"
 			// FIXME: can this be done without standing up
 			// a full manager?
 			mgr, err := manager.New(cfg, manager.Options{
@@ -213,7 +214,7 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 			Expect(mutating.SetupWebhookWithManager(mgr, mutating.SetupConfig{
 				Namespace:  namespace,
-				Class:      env,
+				Class:      class,
 				DBProxyImg: "test-db-proxy:latest",
 				DSNExecImg: "test-dsn-exec:latest",
 			})).To(Succeed())
@@ -235,7 +236,7 @@ var _ = Describe("DatabaseClaim Controller", func() {
 					Labels: map[string]string{
 						mutating.LabelCheckProxy: "enabled",
 						mutating.LabelClaim:      resourceName,
-						mutating.LabelClass:      env,
+						mutating.LabelClass:      class,
 					},
 				},
 				Spec: corev1.PodSpec{
