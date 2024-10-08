@@ -61,8 +61,10 @@ To use the dbproxy mutating webhook, add labels to the pod:
       name: dbproxy-test
       namespace: default
       labels:
-        persistance.atlas.infoblox.com/databaseclaim: "identity"
+        # Supports dbroleclaim and databaseclaim
+        persistance.atlas.infoblox.com/claim: dbproxy-test
         persistance.atlas.infoblox.com/class: "default"
+        persistance.atlas.infoblox.com/dbproxy: enabled
       containers:
         - name: client
           image: postgres
@@ -80,6 +82,53 @@ To use the dbproxy mutating webhook, add labels to the pod:
               done
               echo "Connection successful!"
               sleep 10000
+
+To use dsnexec, a similar set of labels is required
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      labels:
+        persistance.atlas.infoblox.com/claim: dsnexec-test
+        persistance.atlas.infoblox.com/class: default
+        persistance.atlas.infoblox.com/dsnexec: enabled
+        persistance.atlas.infoblox.com/dsnexec-config: dwells-dsnexec-config
+      name: dwells-dsnexec-test
+      namespace: dwells
+    spec:
+      containers:
+      - command:
+        - /bin/bash
+        - -cx
+        - |
+          echo "Waiting for dsnexec to run..."
+        image: postgres:15
+        name: wait
+
+Example of a dsnexec secret
+
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: dwells-dsnexec-config
+      namespace: dwells
+    secretData:
+      config.yaml:
+        configs:
+          sql:
+            disabled: false
+            sources:
+            - driver: postgres
+              # This is not supported in code
+              filename: /var/run/db-dsn/dsn.txt
+            destination:
+              driver: "postgres"
+              dsn: "postgres://user:password@hostname:5432/mydb?sslmode=disable"
+            commands:
+            - command: |-
+                -- FIXME: The random tableName isn't unique across multiple helm test runs
+                DROP TABLE IF EXISTS dnsexec_qrqc;
+                CREATE TABLE dnsexec_qrqc ( first_column text );
 
 ## Requirements
 | Requirements           | Description                                                                                   |
