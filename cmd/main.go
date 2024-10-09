@@ -182,6 +182,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(ctlConfig.GetString("env")) == 0 {
+		setupLog.Error(fmt.Errorf("empty_env"), "env must be set")
+		os.Exit(1)
+	}
+
 	namespace := os.Getenv("SERVICE_NAMESPACE")
 	if len(namespace) == 0 {
 		setupLog.Error(fmt.Errorf("empty_namespace"), "namespace must be set")
