@@ -147,6 +147,7 @@ controllerConfig:
   defaultDeletionPolicy: orphan
   dynamicHostWaitTimeMin: 1
   enablePerfInsight: true
+  env: '{{ .Values.env | required ".Values.env must be specified" }}'
   # Possible values for enableCloudwatchLogsExport are all, none, postgresql and upgrade.
   enableCloudwatchLogsExport: "none"
   providerConfig: default
