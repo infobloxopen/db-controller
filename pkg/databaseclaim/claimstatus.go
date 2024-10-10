@@ -86,13 +86,42 @@ func manageError(ctx context.Context, cli client.Client, claim *v1.DatabaseClaim
 	return ctrl.Result{}, wrappedErr
 }
 
+func SetDBClaimCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) {
+	logf := log.FromContext(ctx)
+
+	condition.LastTransitionTime = metav1.Now()
+	condition.ObservedGeneration = dbClaim.Generation
+
+	for idx, cond := range dbClaim.Status.Conditions {
+		if cond.Type == condition.Type {
+			// No status change, so do not update LastTransitionTime
+			if condition.Status == cond.Status && !condition.LastTransitionTime.IsZero() {
+				condition.LastTransitionTime = cond.LastTransitionTime
+			} else {
+				logf.V(1).Info("Condition status changed %s -> %s", cond.Status, condition.Status)
+			}
+			dbClaim.Status.Conditions[idx] = condition
+			return
+		}
+	}
+	// We didn't find a matching condition, so add it
+	condition.ObservedGeneration = dbClaim.Generation
+	dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, condition)
+}
+
 func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
 
 	dbClaim.Status.Error = ""
+	SetDBClaimCondition(ctx, dbClaim, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Ready",
+		Message: "databaseclaim up to date and is ready",
+	})
 
 	if err := r.Client.Status().Update(ctx, dbClaim); err != nil {
 		logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
-		logr.Error(err, "manage_success_update_claim")
+		logr.Error(err, "manage_success_update_claim", "conditions", dbClaim)
 		return ctrl.Result{}, err
 	}
 	//if object is getting deleted then call requeue immediately
