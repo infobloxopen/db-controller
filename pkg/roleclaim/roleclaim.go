@@ -502,15 +502,20 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 	}
 	masterUserDBConnInfo, err := r.readResourceSecret(ctx, dbcBaseConfig, sourceDbClaim)
 	if err != nil {
-		log.Error(err, "reading resource secret")
-		return errors.New("reading resource secret")
+		// Ignore error completely if it is errors.IsNotFound
+		// Otherwise, log and continue
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "reading resource secret")
+		}
+
 	}
 
-	// get client to DB
+	// If unable to connect to database, assume the database is already
+	// deleted and complete teardown
 	dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, log)
 	if err != nil {
-		log.Error(err, "creating database client error.")
-		return err
+		log.Error(err, "unable to connect to postgres, cowardly deleting roleclaim")
+		return nil
 	}
 	defer dbClient.Close()
 
@@ -518,14 +523,14 @@ func (r *DbRoleClaimReconciler) deleteExternalResources(ctx context.Context, dbR
 		dbcBaseConfig.EnableSuperUser = *sourceDbClaim.Spec.EnableSuperUser
 	}
 
-	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixA)
+	log.Info("dropping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixA)
 	//delete users linked to this DBRoleClaim
 	if err = dbClient.DeleteUser(masterUserDBConnInfo.DatabaseName, dbRoleClaim.Name+"_user"+dbuser.SuffixA, masterUserDBConnInfo.Username); err != nil {
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixA)
 		return err
 	}
 
-	log.Info("droping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixB)
+	log.Info("dropping user: " + dbRoleClaim.Name + "_user" + dbuser.SuffixB)
 	if err = dbClient.DeleteUser(masterUserDBConnInfo.DatabaseName, dbRoleClaim.Name+"_user"+dbuser.SuffixB, masterUserDBConnInfo.Username); err != nil {
 		log.Error(err, "droping user: "+dbRoleClaim.Name+"_user"+dbuser.SuffixB)
 		return err

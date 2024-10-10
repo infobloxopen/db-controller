@@ -13,7 +13,7 @@ metadata:
     persistance.atlas.infoblox.com/dsnexec-config: {{ .Release.Name }}-dsnexec-config
   annotations:
     helm.sh/hook: test
-    # helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
+    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
 spec:
   serviceAccountName: {{ .Release.Name }}-dbproxy-test
   initContainers:
@@ -71,14 +71,15 @@ spec:
               # Fallback to grep when pidof fails
               if check_table_exists; then
                   echo "Table $TABLE_NAME exists!"
+                  # Try this multiple times
                   PID=$(pidof dsnexec)
                   if [ -n "$PID" ]; then
                     echo "Killing dsnexec..."
                     kill -s INT $PID
+                    exit 0
                   else
                     echo "dsnexec not running..."
                   fi
-                  exit 0
               else
                   echo "Table $TABLE_NAME does not exist. Checking again in 2 seconds..."
                   sleep 1

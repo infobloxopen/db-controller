@@ -112,7 +112,7 @@ undeploy:
 	helm -n `cat .id` uninstall `cat .id`
 
 helm-test:
-	helm -n `cat .id` test `cat .id`
+	helm -n `cat .id` test `cat .id` --debug
 
 manifests: test/crd
 
