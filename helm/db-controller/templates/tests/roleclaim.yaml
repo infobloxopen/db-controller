@@ -1,0 +1,99 @@
+apiVersion: persistance.atlas.infoblox.com/v1
+kind: DbRoleClaim
+metadata:
+  name: {{ .Release.Name }}-roleclaim-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "-4"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  class: {{ .Values.dbController.class }}
+  sourceDatabaseClaim:
+    namespace: {{ .Release.Namespace }}
+    name: {{ .Release.Name }}-dbproxy-test
+  secretName: {{ .Release.Name }}-roleclaim-test
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-roleclaim-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "db-controller.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: "before-hook-creation,hook-succeeded"
+spec:
+  serviceAccountName: {{ .Release.Name }}-dbproxy-test
+  containers:
+    - name: psql
+      image: postgres:15
+      env:
+        - name: PGCONNECT_TIMEOUT
+          value: "2"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          uri_dsn=$(cat /etc/secrets/uri_dsn.txt)
+          role_to_check="{{ .Release.Name }}-roleclaim-test"
+          max_attempts=10
+
+          # Function to attempt PostgreSQL connection
+          attempt_connection() {
+              for i in $(seq 1 $max_attempts); do
+                  echo "Connection attempt $i of $max_attempts..."
+                  if psql "$uri_dsn" -c 'SELECT 1' &>/dev/null; then
+                      echo "Connection successful!"
+                      return 0
+                  fi
+                  echo "Failed to connect. Retrying in 1 second..."
+                  sleep 1
+              done
+              echo "Failed to connect after $max_attempts attempts."
+              return 1
+          }
+
+          check_role_exists() {
+              for i in $(seq 1 $max_attempts); do
+                  echo "Checking role existence attempt $i of $max_attempts..."
+                  role_exists=$(psql "$uri_dsn" -tAc "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = '$role_to_check');" 2>/dev/null)
+                  if [ $? -eq 0 ]; then
+                      if [ "$role_exists" = "t" ]; then
+                          echo "The role '$role_to_check' exists."
+                      else
+                          echo "The role '$role_to_check' does not exist."
+                      fi
+                      return 0
+                  fi
+                  echo "Failed to check role. Retrying in 1 second..."
+                  sleep 1
+              done
+              echo "Failed to check role after $max_attempts attempts."
+              return 1
+          }
+
+          if ! attempt_connection; then
+              echo "Unable to establish connection. Exiting."
+              exit 1
+          fi
+          if ! check_role_exists; then
+              echo "Unable to verify role existence. Exiting."
+              exit 1
+          fi
+          echo "Successfully verified role exists"
+          exit 0
+      volumeMounts:
+        - name: dsn-volume
+          mountPath: /etc/secrets
+          readOnly: true
+  shareProcessNamespace: true
+  restartPolicy: OnFailure
+  volumes:
+    - name: dsn-volume
+      secret:
+        secretName: {{ .Release.Name }}-roleclaim-test
+---

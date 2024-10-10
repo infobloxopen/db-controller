@@ -13,7 +13,6 @@ spec:
   selector:
     matchLabels:
       {{- include "db-controller.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: manager
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -22,7 +21,6 @@ spec:
       {{- end }}
       labels:
         {{- include "db-controller.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: manager
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

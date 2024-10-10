@@ -75,6 +75,7 @@ metadata:
     # ensure this runs on the new db-controller, not the existing one
     "helm.sh/hook": "test"
     "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   class: {{ .Values.dbController.class }}
   databaseName: mydb
