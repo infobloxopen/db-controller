@@ -90,10 +90,18 @@ type DbRoleClaimStatus struct {
 	SchemasRolesUpdatedAt *metav1.Time `json:"schemasrolesupdatedat,omitempty"`
 
 	Username string `json:"username"`
+
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status"
+// +kubebuilder:printcolumn:name="Status",type="string",priority=1,JSONPath=".status.conditions[?(@.type==\"Ready\")].message"
 
 // DbRoleClaim is the Schema for the dbroleclaims API
 type DbRoleClaim struct {

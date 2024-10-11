@@ -86,9 +86,37 @@ func manageError(ctx context.Context, cli client.Client, claim *v1.DatabaseClaim
 	return ctrl.Result{}, wrappedErr
 }
 
+func SetDBClaimCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) {
+	logf := log.FromContext(ctx)
+
+	condition.LastTransitionTime = metav1.Now()
+	condition.ObservedGeneration = dbClaim.Generation
+
+	for idx, cond := range dbClaim.Status.Conditions {
+		if cond.Type == condition.Type {
+			// No status change, so do not update LastTransitionTime
+			if condition.Status == cond.Status && !condition.LastTransitionTime.IsZero() {
+				condition.LastTransitionTime = cond.LastTransitionTime
+			} else {
+				logf.V(1).Info("Condition status changed %s -> %s", cond.Status, condition.Status)
+			}
+			dbClaim.Status.Conditions[idx] = condition
+			return
+		}
+	}
+
+	dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, condition)
+}
+
 func (r *DatabaseClaimReconciler) manageSuccess(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
 
 	dbClaim.Status.Error = ""
+	SetDBClaimCondition(ctx, dbClaim, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Ready",
+		Message: "databaseclaim is up to date and ready",
+	})
 
 	if err := r.Client.Status().Update(ctx, dbClaim); err != nil {
 		logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
