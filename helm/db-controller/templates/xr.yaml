@@ -1,4 +1,4 @@
-{{- if .Values.xr.create }}
+{{- if and (.Values.xr.create) (eq .Values.controllerConfig.cloud "gcp") }}
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
