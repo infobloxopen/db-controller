@@ -370,7 +370,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 		return nil, err
 	}
 
-	restore := NewRestore(s.config.TargetDBAdminDsn)
+	restore := NewRestore(s.config.TargetDBUserDsn)
 	restore.EnableVerbose()
 	restore.SetPath(s.config.ExportFilePath)
 
@@ -750,7 +750,7 @@ func (s *validate_migration_status_state) Execute() (State, error) {
 		targetTableCount int64
 	)
 
-	targetDBUser, err := getDB(s.config.TargetDBAdminDsn, nil)
+	targetDBUser, err := getDB(s.config.TargetDBUserDsn, nil)
 	if err != nil {
 		log.Error(err, "connection test failed for targetDBUser")
 		return nil, err

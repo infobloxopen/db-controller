@@ -24,6 +24,11 @@ var (
 	TargetDBUserDsn      string
 	dropSchemaDBAdminDsn string
 
+	DataTestSourceAdminDsn string
+	DataTestSourceUserDsn  string
+	DataTestTargetAdminDsn string
+	DataTestTargetUserDsn  string
+
 	ExportFilePath = "/tmp/"
 	repository     = "postgres"
 	sourceVersion  = "13.14"
@@ -32,17 +37,6 @@ var (
 	targetPort     = "15436"
 	testDBNetwork  = "testDBNetwork"
 )
-
-type PgInfo struct {
-	user     string
-	password string
-	db       string
-	dbHost   string
-	port     string
-	version  string
-	dialect  string
-	dsn      string
-}
 
 var logger logr.Logger
 
@@ -61,6 +55,10 @@ func setupAndRunTests(m *testing.M) int {
 	networkName := "pgctl"
 	removeNetwork := dockerdb.StartNetwork(networkName)
 	defer removeNetwork()
+
+	// -----------------------------------------------------------------------
+	// Set up source and target databases for unit testing each step of the
+	// migration.
 
 	// FIXME: randomly generate network name
 	_, sourceDSN, sourceClose := dockerdb.Run(dockerdb.Config{
@@ -87,6 +85,65 @@ func setupAndRunTests(m *testing.M) int {
 	})
 	defer targetClose()
 
+	if err := loadTargetTestData(targetDSN); err != nil {
+		panic(err)
+	}
+
+	if _, err := url.Parse(sourceDSN); err != nil {
+		panic(err)
+	}
+
+	TargetDBAdminDsn = targetDSN
+	SourceDBAdminDsn = sourceDSN
+
+	TargetDBUserDsn = changeUserInfo(TargetDBAdminDsn, "appuser_b", "secret")
+	SourceDBUserDsn = changeUserInfo(SourceDBAdminDsn, "appuser_a", "secret")
+
+	// -----------------------------------------------------------------------
+	// Set up source and target databases for unit testing each step of the
+	// migration.
+
+	_, dataTestSourceAdminDSN, dataTestSourceClose := dockerdb.Run(dockerdb.Config{
+		HostName:  "dataTestSourceHost",
+		DockerTag: sourceVersion,
+		Database:  "dataTestSource",
+		Username:  "dataTestSourceAdmin",
+		Password:  "dataTestSourceSecret",
+		Network:   networkName,
+	})
+	defer dataTestSourceClose()
+
+	if err := loadSourceTestData(dataTestSourceAdminDSN); err != nil {
+		panic(err)
+	}
+
+	_, dataTestTargetAdminDSN, dataTestTargetClose := dockerdb.Run(dockerdb.Config{
+		HostName:  "dataTestTargetHost",
+		DockerTag: targetVersion,
+		Database:  "dataTestTarget",
+		Username:  "dataTestTargetAdmin",
+		Password:  "dataTestTargetSecret",
+		Network:   networkName,
+	})
+	defer dataTestTargetClose()
+
+	if err := loadTargetTestData(dataTestTargetAdminDSN); err != nil {
+		panic(err)
+	}
+
+	if _, err := url.Parse(dataTestSourceAdminDSN); err != nil {
+		panic(err)
+	}
+
+	DataTestSourceAdminDsn = dataTestSourceAdminDSN
+	DataTestTargetAdminDsn = dataTestTargetAdminDSN
+
+	DataTestSourceUserDsn = changeUserInfo(DataTestSourceAdminDsn, "appuser_a", "secret")
+	DataTestTargetUserDsn = changeUserInfo(DataTestTargetAdminDsn, "appuser_b", "secret")
+
+	// -----------------------------------------------------------------------
+	// Set up a database for testing the drop schema functionality.
+
 	_, dropSchemaDSN, dropSchemaClose := dockerdb.Run(dockerdb.Config{
 		HostName:  "dropSchemaHost",
 		DockerTag: targetVersion,
@@ -97,21 +154,9 @@ func setupAndRunTests(m *testing.M) int {
 	})
 	defer dropSchemaClose()
 
-	if err := loadTargetTestData(targetDSN); err != nil {
-		panic(err)
-	}
-
-	if _, err := url.Parse(sourceDSN); err != nil {
-		panic(err)
-	}
-
-	// Set a bunch of package variables. This should be done in the test setup
-	TargetDBAdminDsn = targetDSN
-	SourceDBAdminDsn = sourceDSN
 	dropSchemaDBAdminDsn = dropSchemaDSN
 
-	TargetDBUserDsn = changeUserInfo(TargetDBAdminDsn, "appuser_b", "secret")
-	SourceDBUserDsn = changeUserInfo(SourceDBAdminDsn, "appuser_a", "secret")
+	// -----------------------------------------------------------------------
 
 	return m.Run()
 }
@@ -132,17 +177,7 @@ func loadTargetTestData(dsn string) error {
 	return nil
 }
 
-func setWalLevel(repo string, tag string, port string) error {
-	panic("nope, dont restart the container")
-	// _, err := Exec("./test/change_wal_level.sh", repo, tag, port)
-	// if err != nil {
-	// 	return err
-	// }
-	// return nil
-}
-
 func TestEachStateTransitions(t *testing.T) {
-	t.Skipf("skipping test")
 	testInitialState(t)
 	testValidateConnectionStateExecute(t)
 	testCreatePublicationStateExecute(t)
@@ -158,57 +193,6 @@ func TestEachStateTransitions(t *testing.T) {
 	testDisableSubscriptionStateExecute(t)
 	testDeleteSubscriptionStateExecute(t)
 	testDeletePublicationStateExecute(t)
-}
-
-func TestDataIntegrityAfterMigration(t *testing.T) {
-	// Setup Config for migration.
-	config := Config{
-		Log:              logger,
-		SourceDBAdminDsn: SourceDBAdminDsn,
-		SourceDBUserDsn:  SourceDBUserDsn,
-		TargetDBUserDsn:  TargetDBUserDsn,
-		TargetDBAdminDsn: TargetDBAdminDsn,
-		ExportFilePath:   ExportFilePath,
-	}
-
-	// Get initial state and begin executing the migration.
-	state, err := GetReplicatorState("", config)
-	if err != nil {
-		t.Fatalf("failed to get initial state: %v", err)
-	}
-
-	maxRetries := 10 // Limit the number of retries to avoid infinite loops.
-	retryCount := 0
-	for {
-		next, err := state.Execute()
-		if err != nil {
-			t.Fatalf("error during state execution: %v", err)
-		}
-
-		// Check if the state has returned a retry.
-		if _, isRetry := next.(*retry_state); isRetry {
-			retryCount++
-			if retryCount > maxRetries {
-				t.Fatalf("exceeded maximum retry attempts")
-			}
-			t.Logf("retrying... attempt %d", retryCount)
-			time.Sleep(2 * time.Second) // Add a delay between retries to avoid busy looping.
-			continue
-		}
-
-		// Reset retry count if we move past a retry state.
-		retryCount = 0
-
-		// Check for completion.
-		if next.Id() == S_Completed {
-			break
-		}
-
-		state = next
-	}
-
-	// Validate data integrity after migration is complete.
-	testDataIntegrityAfterMigration(t)
 }
 
 func testInitialState(t *testing.T) {
@@ -843,18 +827,86 @@ func testDeletePublicationStateExecute(t *testing.T) {
 	}
 }
 
-func testDataIntegrityAfterMigration(t *testing.T) {
-	verifyDataIntegrity(t, SourceDBAdminDsn, TargetDBAdminDsn)
+func TestDataAfterMigration(t *testing.T) {
+	// Setup Config for migration.
+	config := Config{
+		Log:              logger,
+		SourceDBAdminDsn: DataTestSourceAdminDsn,
+		SourceDBUserDsn:  DataTestSourceUserDsn,
+		TargetDBUserDsn:  DataTestTargetUserDsn,
+		TargetDBAdminDsn: DataTestTargetAdminDsn,
+		ExportFilePath:   ExportFilePath,
+	}
+
+	oldGrantSuper := grantSuperUserAccess
+	oldRevokeSuper := revokeSuperUserAccess
+
+	// Get initial state and begin executing the migration.
+	state, err := GetReplicatorState("", config)
+	if err != nil {
+		t.Fatalf("failed to get initial state: %v", err)
+	}
+
+	maxRetries := 10 // Limit the number of retries to avoid infinite loops.
+	retryCount := 0
+	for {
+		if next := state.Id(); next == S_CopySchema {
+			// This overrides a var grantSuperUserAccess to handle the special case in unit test.
+			grantSuperUserAccess = func(DBAdmin *sql.DB, role string, cloud string) error {
+				_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH SUPERUSER;", pq.QuoteIdentifier(role)))
+				return err
+			}
+			revokeSuperUserAccess = func(DBAdmin *sql.DB, role string, cloud string) error {
+				_, err := DBAdmin.Exec(fmt.Sprintf("ALTER ROLE %s WITH NOSUPERUSER;", pq.QuoteIdentifier(role)))
+				return err
+			}
+		}
+
+		next, err := state.Execute()
+		if err != nil {
+			t.Fatalf("error during state execution: %v", err)
+		}
+
+		if next.Id() != S_CopySchema {
+			// Reset grantSuperUserAccess and revokeSuperUserAccess to original functions.
+			grantSuperUserAccess = oldGrantSuper
+			revokeSuperUserAccess = oldRevokeSuper
+		}
+
+		// Check if the state has returned a retry.
+		if _, isRetry := next.(*retry_state); isRetry {
+			retryCount++
+			if retryCount > maxRetries {
+				t.Fatalf("exceeded maximum retry attempts")
+			}
+			t.Logf("retrying... attempt %d", retryCount)
+			time.Sleep(2 * time.Second) // Add a delay between retries to avoid busy looping.
+			continue
+		}
+
+		// Reset retry count if we move past a retry state.
+		retryCount = 0
+
+		// Check for completion.
+		if next.Id() == S_Completed {
+			break
+		}
+
+		state = next
+	}
+
+	// Validate data after migration is complete.
+	testDataAfterMigration(t)
 }
 
-func verifyDataIntegrity(t *testing.T, sourceDSN, targetDSN string) {
-	srcDB, err := sql.Open("postgres", sourceDSN)
+func testDataAfterMigration(t *testing.T) {
+	srcDB, err := sql.Open("postgres", DataTestSourceAdminDsn)
 	if err != nil {
 		t.Fatalf("failed to connect to source: %v", err)
 	}
 	defer srcDB.Close()
 
-	tgtDB, err := sql.Open("postgres", targetDSN)
+	tgtDB, err := sql.Open("postgres", DataTestTargetAdminDsn)
 	if err != nil {
 		t.Fatalf("failed to connect to target: %v", err)
 	}
