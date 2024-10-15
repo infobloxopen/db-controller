@@ -151,12 +151,11 @@ func StartNetwork(networkName string) func() {
 				logger.V(debugLevel).Info(cmd.String())
 				cmd.Stderr = &errBuf
 				buf, err := cmd.Output()
-				if err != nil {
+				if err != nil && !strings.Contains(errBuf.String(), "marked for removal") {
 					logger.Error(err, "failed to disconnect container", "container", container, "stderr", errBuf.String())
 				}
 				logger.V(debugLevel).Info(string(buf))
 			}
-
 		}
 
 		err = RetryFn(nil, func() error {
