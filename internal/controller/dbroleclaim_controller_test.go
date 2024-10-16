@@ -146,6 +146,10 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 				Data: map[string][]byte{
 					"password": []byte("masterpassword"),
 					"username": []byte("user_a"),
+					"port":     []byte("5432"),
+					"database": []byte("postgres"),
+					"hostname": []byte("localhost"),
+					"sslmode":  []byte("disable"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, sec)).To(Succeed())
