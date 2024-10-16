@@ -4,8 +4,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
-    app.kubernetes.io/component: dbproxy-test
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": "test"
 ---
@@ -15,7 +14,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": "test"
 rules:
@@ -34,7 +33,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": "test"
 roleRef:
@@ -52,7 +51,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
   annotations:
     # ensure this runs on the new db-controller, not the existing one
     "helm.sh/hook": "test"
@@ -70,7 +69,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
   annotations:
     # ensure this runs on the new db-controller, not the existing one
     "helm.sh/hook": "test"
@@ -100,7 +99,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test-db
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
 spec:
   selector:
     app: dbproxy-test-db
@@ -116,7 +115,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     app: dbproxy-test-db
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
 spec:
   containers:
     - name: postgres
@@ -135,7 +134,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "db-controller.labels" . | nindent 4 }}
+    {{- include "db-proxy-test.labels" . | nindent 4 }}
     persistance.atlas.infoblox.com/claim: {{ .Release.Name }}-dbproxy-test
     persistance.atlas.infoblox.com/class: {{ .Values.dbController.class | quote }}
     persistance.atlas.infoblox.com/dbproxy: enabled
