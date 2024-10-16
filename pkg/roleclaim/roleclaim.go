@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// RoleConfig is the configuration for the Role controller.
 type RoleConfig struct {
 	Viper      *viper.Viper
 	MasterAuth *rdsauth.MasterAuth
@@ -56,17 +57,13 @@ type dbcBaseConfig struct {
 	EnableSuperUser  bool
 }
 
-// RoleReconciler reconciles a DatabaseClaim object
+// DbRoleClaimReconciler reconciles a DatabaseClaim object
 type DbRoleClaimReconciler struct {
 	client.Client
 	Config *RoleConfig
-	//Input  *input
 }
 
-func Reconcile(r *DbRoleClaimReconciler, ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	return r.Reconcile(ctx, req)
-}
-
+// Reconcile reconciles the DbRoleClaim object.
 func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// FIXME: dont shadow log package
 	log := log.FromContext(ctx).WithValues("databaserole", req.NamespacedName)
@@ -271,7 +268,6 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	dbRoleClaim.Status.SecretUpdatedAt = &timeNow
 
 	return r.manageSuccess(ctx, &dbRoleClaim)
-
 }
 
 func (r *DbRoleClaimReconciler) readResourceSecret(ctx context.Context, dbcBaseConfig *dbcBaseConfig, dbClaim *v1.DatabaseClaim) (v1.DatabaseClaimConnectionInfo, error) {
@@ -584,6 +580,7 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	secretName := dbRoleClaim.Spec.SecretName
 	sourceSecretData := sourceSecret.Data
 
+	// Updates the secret data with the new user and password if they are provided.
 	if newUser != "" {
 		sourceSecretData["username"] = []byte(newUser)
 	}
@@ -591,18 +588,41 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 		sourceSecretData["password"] = []byte(newPassword)
 	}
 
-	role_secret := &corev1.Secret{}
+	// Check if source secret data is valid, if not: return error.
+	if sourceSecretData["database"] == nil ||
+		sourceSecretData["hostname"] == nil ||
+		sourceSecretData["password"] == nil ||
+		sourceSecretData["port"] == nil ||
+		sourceSecretData["sslmode"] == nil ||
+		sourceSecretData["username"] == nil {
+		return fmt.Errorf("source secret data is incomplete")
+	}
 
-	//find SECRET
+	database := string(sourceSecretData["database"])
+	hostname := string(sourceSecretData["hostname"])
+	password := string(sourceSecretData["password"])
+	port := string(sourceSecretData["port"])
+	sslmode := string(sourceSecretData["sslmode"])
+	username := string(sourceSecretData["username"])
+
+	sourceSecretData["dsn.txt"] = []byte(dbclient.PostgresConnectionString(hostname, port, username, password, database, sslmode))
+	sourceSecretData["uri_dsn.txt"] = []byte(dbclient.PostgresURI(hostname, port, username, password, database, sslmode))
+	if sourceSecretData["ro_uri_dsn.txt"] != nil {
+		sourceSecretData["ro_uri_dsn.txt"] = []byte(strings.Replace(string(sourceSecretData["uri_dsn.txt"]), ".cluster-", ".cluster-ro-", -1))
+	}
+
+	roleSecret := &corev1.Secret{}
+
+	// Check if secret exists, if not: create it.
 	err := r.Client.Get(ctx, client.ObjectKey{
 		Namespace: dbRoleClaim.Namespace,
 		Name:      secretName,
-	}, role_secret)
+	}, roleSecret)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return err
 		}
-		role_secret = &corev1.Secret{
+		roleSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: dbRoleClaim.Namespace,
 				Name:      secretName,
@@ -621,11 +641,11 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 			Data: sourceSecretData,
 		}
 		log.Info("creating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
-		return r.Client.Create(ctx, role_secret)
+		return r.Client.Create(ctx, roleSecret)
 	}
 
-	role_secret.Data = sourceSecretData
+	roleSecret.Data = sourceSecretData
 	log.Info("updating secret", "secret", secretName, "namespace", dbRoleClaim.Namespace)
-	return r.Client.Update(ctx, role_secret)
+	return r.Client.Update(ctx, roleSecret)
 
 }
