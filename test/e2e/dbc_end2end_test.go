@@ -100,7 +100,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					AppID:                 "sample-app",
 					DatabaseName:          "sample_db",
 					SecretName:            "newdb-secret-db1",
-					DeletionPolicy:        "orphan",
+					DeletionPolicy:        "delete",
 					Username:              "sample_user",
 					Type:                  "postgres",
 					EnableReplicationRole: ptr.To(false),
@@ -141,7 +141,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			Eventually(func() string {
 				Expect(k8sClient.Get(ctx, key, dbClaim)).Should(Succeed())
 				return dbClaim.Status.Error
-			}, time.Minute*3, time.Second*3).ShouldNot(ContainSubstring(v1.ErrInvalidDBVersion.Error()))
+			}, time.Minute*3, time.Second*3).Should(ContainSubstring(v1.ErrInvalidDBVersion.Error()))
 
 		})
 
@@ -165,6 +165,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			Eventually(func() (v1.DbState, error) {
 				Expect(k8sClient.Get(ctx, key, updatedDbClaim)).ToNot(HaveOccurred())
 				Expect(updatedDbClaim.Spec.DBVersion).To(Equal(""))
+				Expect(updatedDbClaim.Status.Error).ShouldNot(ContainSubstring("does not exist"))
 				return updatedDbClaim.Status.ActiveDB.DbState, nil
 			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
 

@@ -272,6 +272,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
 							EngineVersion:               ptr.To(getEngineVersion(params, r)),
 						},
+						DBName:              &dbClaim.Spec.DatabaseName,
 						Engine:              &params.Type,
 						MultiAZ:             &multiAZ,
 						DBInstanceClass:     &params.InstanceClass,
@@ -869,7 +870,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, reqInfo 
 		} else {
 			maxStorageVal = &params.MaxStorageGB
 		}
-
+		dbInstance.Spec.ForProvider.DBName = &dbClaim.Spec.DatabaseName
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = reqInfo.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
