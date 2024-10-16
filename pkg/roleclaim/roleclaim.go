@@ -581,39 +581,24 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	sourceSecretData := sourceSecret.Data
 
 	if newUser != "" {
-		oldUser := string(sourceSecretData["username"])
-
-		dsn := string(sourceSecretData["dsn.txt"])
-		dsn = strings.Replace(dsn, "user="+oldUser, "user="+newUser, 1)
-		sourceSecretData["dsn.txt"] = []byte(dsn)
-
-		roDsn := string(sourceSecretData["ro_uri_dsn.txt"])
-		roDsn = strings.Replace(roDsn, oldUser, newUser, 1)
-		sourceSecretData["ro_uri_dsn.txt"] = []byte(roDsn)
-
-		uriDsn := string(sourceSecretData["uri_dsn.txt"])
-		uriDsn = strings.Replace(uriDsn, oldUser, newUser, 1)
-		sourceSecretData["uri_dsn.txt"] = []byte(uriDsn)
-
 		sourceSecretData["username"] = []byte(newUser)
 	}
 
 	if newPassword != "" {
-		oldPassword := string(sourceSecretData["password"])
-
-		dsn := string(sourceSecretData["dsn.txt"])
-		dsn = strings.Replace(dsn, "password="+oldPassword, "password="+newPassword, 1)
-		sourceSecretData["dsn.txt"] = []byte(dsn)
-
-		roDsn := string(sourceSecretData["ro_uri_dsn.txt"])
-		roDsn = strings.Replace(roDsn, oldPassword, newPassword, 1)
-		sourceSecretData["ro_uri_dsn.txt"] = []byte(roDsn)
-
-		uriDsn := string(sourceSecretData["uri_dsn.txt"])
-		uriDsn = strings.Replace(uriDsn, oldPassword, newPassword, 1)
-		sourceSecretData["uri_dsn.txt"] = []byte(uriDsn)
-
 		sourceSecretData["password"] = []byte(newPassword)
+	}
+
+	database := string(sourceSecretData["database"])
+	hostname := string(sourceSecretData["hostname"])
+	password := string(sourceSecretData["password"])
+	port := string(sourceSecretData["port"])
+	sslmode := string(sourceSecretData["sslmode"])
+	username := string(sourceSecretData["username"])
+
+	sourceSecretData["dsn.txt"] = []byte(dbclient.PostgresConnectionString(hostname, port, username, password, database, sslmode))
+	sourceSecretData["uri_dsn.txt"] = []byte(dbclient.PostgresURI(hostname, port, username, password, database, sslmode))
+	if sourceSecretData["ro_uri_dsn.txt"] != nil {
+		sourceSecretData["ro_uri_dsn.txt"] = []byte(dbclient.PostgresURI(hostname, port, username, password, database, sslmode))
 	}
 
 	roleSecret := &corev1.Secret{}
