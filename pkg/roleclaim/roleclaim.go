@@ -608,7 +608,7 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	sourceSecretData["dsn.txt"] = []byte(dbclient.PostgresConnectionString(hostname, port, username, password, database, sslmode))
 	sourceSecretData["uri_dsn.txt"] = []byte(dbclient.PostgresURI(hostname, port, username, password, database, sslmode))
 	if sourceSecretData["ro_uri_dsn.txt"] != nil {
-		sourceSecretData["ro_uri_dsn.txt"] = []byte(dbclient.PostgresURI(hostname, port, username, password, database, sslmode))
+		sourceSecretData["ro_uri_dsn.txt"] = []byte(strings.Replace(string(sourceSecretData["uri_dsn.txt"]), ".cluster-", ".cluster-ro-", -1))
 	}
 
 	roleSecret := &corev1.Secret{}
