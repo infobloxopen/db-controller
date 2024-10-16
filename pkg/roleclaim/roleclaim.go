@@ -580,12 +580,22 @@ func (r *DbRoleClaimReconciler) copySourceSecret(ctx context.Context, sourceSecr
 	secretName := dbRoleClaim.Spec.SecretName
 	sourceSecretData := sourceSecret.Data
 
+	// Updates the secret data with the new user and password if they are provided.
 	if newUser != "" {
 		sourceSecretData["username"] = []byte(newUser)
 	}
-
 	if newPassword != "" {
 		sourceSecretData["password"] = []byte(newPassword)
+	}
+
+	// Check if source secret data is valid, if not: return error.
+	if sourceSecretData["database"] == nil ||
+		sourceSecretData["hostname"] == nil ||
+		sourceSecretData["password"] == nil ||
+		sourceSecretData["port"] == nil ||
+		sourceSecretData["sslmode"] == nil ||
+		sourceSecretData["username"] == nil {
+		return fmt.Errorf("source secret data is incomplete")
 	}
 
 	database := string(sourceSecretData["database"])
