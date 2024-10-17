@@ -136,6 +136,15 @@ var _ = BeforeSuite(func() {
 	})
 	logger.Info("postgres_setup_took", "duration", time.Since(now))
 
+	// Mock table for testing migrations
+	_, err = testdb.Exec(`CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		name TEXT NOT NULL,
+		email TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Setup controller
 	By("setting up the database controller")
 	configPath, err := filepath.Abs(filepath.Join("..", "..", "cmd", "config", "config.yaml"))
