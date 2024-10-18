@@ -1139,7 +1139,9 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 	if err != nil {
 		return err
 	}
-	if roleCreated && operationalMode != M_MigrateExistingToNewDB && operationalMode != M_MigrationInProgress {
+
+	if roleCreated && operationalMode == M_UseNewDB {
+		// This only runs on new databases, and perhaps should not even be run there
 		// take care of special extensions related to the user
 		err = dbClient.CreateSpecialExtensions(dbName, baseUsername)
 		if err != nil {

@@ -2,6 +2,7 @@ package dockerdb
 
 import (
 	"context"
+	"database/sql"
 	"net/url"
 	"strings"
 
@@ -12,10 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func MockRDS(t GinkgoTInterface, ctx context.Context, cli client.Client, secretName, userName, databaseName string) (string, func()) {
+func MockRDS(t GinkgoTInterface, ctx context.Context, cli client.Client, secretName, userName, databaseName string) (*sql.DB, string, func()) {
 	t.Helper()
 
-	_, fakeDSN, clean := Run(Config{
+	dbCli, fakeDSN, clean := Run(Config{
 		Database:  databaseName,
 		Username:  userName,
 		Password:  "postgres",
@@ -46,9 +47,9 @@ func MockRDS(t GinkgoTInterface, ctx context.Context, cli client.Client, secretN
 		t.Fatalf("failed to create secret: %v", err)
 	}
 
-	return fakeDSN, func() {
+	return dbCli, fakeDSN, func() {
 		if err := cli.Delete(ctx, secret); err != nil {
-			t.Fatalf("failed to delete secret: %v", err)
+			t.Logf("failed to delete secret: %v", err)
 		}
 		clean()
 	}
