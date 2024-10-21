@@ -62,6 +62,7 @@ var (
 	ErrInvalidDSNName = fmt.Errorf("dsn name must be: %s", v1.DSNKey)
 )
 
+// DatabaseClaimConfig is the configuration for the DatabaseClaimReconciler.
 type DatabaseClaimConfig struct {
 	Viper                 *viper.Viper
 	MasterAuth            *rdsauth.MasterAuth
@@ -130,6 +131,16 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
+	// Increment total claims count.
+	metrics.TotalDatabaseClaims.Inc()
+
+	// Track if the claim is using an existing source.
+	if dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource {
+		metrics.ExistingSourceClaims.WithLabelValues("true").Inc()
+	} else {
+		metrics.ExistingSourceClaims.WithLabelValues("false").Inc()
+	}
+
 	// Avoid updates to the claim until we know we should be looking at it
 
 	if !isClassPermitted(r.Config.Class, dbClaim.Spec.Class) {
@@ -165,6 +176,9 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Increment total claims count.
+		metrics.TotalDatabaseClaims.Dec()
+
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
 			logr.Info("clean_up_finalizer")
@@ -222,6 +236,22 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		return res, err
 	}
+
+	// Track claims in error state.
+	if dbClaim.Status.Error != "" {
+		metrics.ErrorStateClaims.Inc()
+	}
+
+	// Track migration state.
+	if dbClaim.Status.MigrationState != "" {
+		metrics.MigrationStateClaims.WithLabelValues(dbClaim.Status.MigrationState).Inc()
+	}
+
+	// Track active DB state.
+	if dbClaim.Status.ActiveDB.DbState != "" {
+		metrics.ActiveDBState.WithLabelValues(string(dbClaim.Status.ActiveDB.DbState)).Inc()
+	}
+
 	return res, nil
 }
 
@@ -313,13 +343,14 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 
 	if operationMode == M_UseExistingDB {
 		logr.Info("existing db reconcile started")
+
 		err := r.reconcileUseExistingDB(ctx, reqInfo, dbClaim, operationMode)
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
 		}
 
-		copy := dbClaim.Status.NewDB.DeepCopy()
-		dbClaim.Status.ActiveDB = *copy
+		newDBCopy := dbClaim.Status.NewDB.DeepCopy()
+		dbClaim.Status.ActiveDB = *newDBCopy
 		dbClaim.Status.NewDB = v1.Status{}
 
 		if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
@@ -331,7 +362,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 	if operationMode == M_MigrateExistingToNewDB {
 		logr.Info("migrate to new  db reconcile started")
 		//check if existingDB has been already reconciled, else reconcileUseExistingDB
-		existing_db_conn, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
+		existingDbConn, err := v1.ParseUri(dbClaim.Spec.SourceDataFrom.Database.DSN)
 		logr.V(debugLevel).Info("M_MigrateExistingToNewDB", "dsn", basefun.SanitizeDsn(dbClaim.Spec.SourceDataFrom.Database.DSN))
 		if err != nil {
 			return r.manageError(ctx, dbClaim, err)
@@ -339,8 +370,8 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 
 		activeConn := dbClaim.Status.ActiveDB.ConnectionInfo
 
-		if (activeConn.DatabaseName != existing_db_conn.DatabaseName) ||
-			(activeConn.Host != existing_db_conn.Host && activeConn.Port != existing_db_conn.Port) {
+		if (activeConn.DatabaseName != existingDbConn.DatabaseName) ||
+			(activeConn.Host != existingDbConn.Host && activeConn.Port != existingDbConn.Port) {
 
 			logr.Info("existing db was not reconciled, calling reconcileUseExistingDB before reconcileUseExistingDB")
 

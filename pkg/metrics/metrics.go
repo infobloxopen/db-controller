@@ -78,6 +78,43 @@ var (
 		Name: "password_rotation_time_seconds",
 		Help: "Histogram of password rotation time in seconds",
 	})
+
+	// -----------------------------------------------------------------------
+	// Database controller metrics
+
+	TotalDatabaseClaims = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "dbcontroller_total_database_claims",
+			Help: "Total number of database claims",
+		},
+	)
+	ExistingSourceClaims = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dbcontroller_existing_source_claims",
+			Help: "Number of database claims using existing source",
+		},
+		[]string{"use_existing_source"},
+	)
+	ErrorStateClaims = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "dbcontroller_error_state_claims",
+			Help: "Number of database claims in error state",
+		},
+	)
+	MigrationStateClaims = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dbcontroller_migration_state_claims",
+			Help: "Number of database claims in each migration state",
+		},
+		[]string{"migration_state"},
+	)
+	ActiveDBState = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dbcontroller_active_db_state",
+			Help: "State of active databases",
+		},
+		[]string{"db_state"},
+	)
 )
 
 func init() {
@@ -86,4 +123,9 @@ func init() {
 	metrics.Registry.MustRegister(UsersUpdated, UsersUpdatedErrors, UsersDeletedErrors, UsersUpdateTime)
 	metrics.Registry.MustRegister(DBCreated, DBProvisioningErrors)
 	metrics.Registry.MustRegister(PasswordRotated, PasswordRotatedErrors, PasswordRotateTime)
+	metrics.Registry.MustRegister(TotalDatabaseClaims)
+	metrics.Registry.MustRegister(ExistingSourceClaims)
+	metrics.Registry.MustRegister(ErrorStateClaims)
+	metrics.Registry.MustRegister(MigrationStateClaims)
+	metrics.Registry.MustRegister(ActiveDBState)
 }
