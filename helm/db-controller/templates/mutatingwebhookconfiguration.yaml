@@ -9,13 +9,41 @@ webhooks:
 - clientConfig:
     service:
       name: {{ include "db-controller.fullname" . }}
+      path: /convert-deprecated-pod
+      port: 9443
+      namespace: {{ .Release.Namespace }}
+  admissionReviewVersions: ["v1"]
+  # Support existing pods that are not using labels to
+  # indicate db-controller sidecar mutations are needed.
+  # Use an ignore failurepolicy because this intercepts
+  # all pod mutations in the cluster.
+  failurePolicy: Ignore
+  name: podconversion.persistance.atlas.infoblox.com
+  reinvocationPolicy: Never
+  objectSelector: {}
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+    scope: "Namespaced"
+  sideEffects: None
+  timeoutSeconds: 10
+- clientConfig:
+    service:
+      name: {{ include "db-controller.fullname" . }}
       path: /mutate--v1-pod
       port: 9443
       namespace: {{ .Release.Namespace }}
-  sideEffects: None
   admissionReviewVersions: ["v1"]
   failurePolicy: Fail
   name: dbproxy.persistance.atlas.infoblox.com
+  reinvocationPolicy: IfNeeded
   objectSelector:
     matchExpressions:
       # This will locate a databaseclaim or a dbroleclaim
@@ -41,6 +69,8 @@ webhooks:
     resources:
     - pods
     scope: "Namespaced"
+  sideEffects: None
+  timeoutSeconds: 10
 - clientConfig:
     service:
       name: {{ include "db-controller.fullname" . }}
@@ -49,8 +79,10 @@ webhooks:
       namespace: {{ .Release.Namespace }}
   sideEffects: None
   admissionReviewVersions: ["v1"]
+  timeoutSeconds: 10
   failurePolicy: Fail
   name: dsnexec.persistance.atlas.infoblox.com
+  reinvocationPolicy: IfNeeded
   objectSelector:
     matchExpressions:
       # This will locate a databaseclaim or a dbroleclaim

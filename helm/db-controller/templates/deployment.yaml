@@ -49,6 +49,7 @@ spec:
             - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
             - --leader-elect
             - --enable-db-proxy={{ .Values.dbproxy.enabled }}
+            - --enable-deprecation-conversion-webhook={{ .Values.deprecationConversionWebhook.enabled }}
             - --config-file=/etc/config/config.yaml
             - --dsnexec-sidecar-config-path=config/dsnexec/dsnexecsidecar.json
             - --class={{ .Values.dbController.class }}
