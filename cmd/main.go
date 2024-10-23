@@ -94,6 +94,7 @@ func main() {
 	var metricsDepYamlPath string
 	var metricsConfigYamlPath string
 	var enableDBProxyWebhook bool
+	var enableDeprecatedConversionWebhook bool
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
 
@@ -101,7 +102,8 @@ func main() {
 	flag.StringVar(&dsnExecSidecarConfigPath, "dsnexec-sidecar-config-path", "/etc/config/dsnexec/dsnexecsidecar.json", "Mutating webhook sidecar configuration.")
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
-	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. Enabling this option will cause the db-controller to inject db proxy pod into pods with the infoblox.com/db-secret-path annotation set.")
+	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. See docs for usage: https://infobloxopen.github.io/db-controller/#quick-start")
+	flag.BoolVar(&enableDBProxyWebhook, "enable-deprecation-conversion-webhook", false, "Enable conversion of deprecated pods using dbproxy and/or dsnexec annotations")
 
 	opts := zap.Options{
 		Development: true,
@@ -252,6 +254,17 @@ func main() {
 		}); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
+		}
+
+		if enableDeprecatedConversionWebhook {
+
+			if err := mutating.SetupConversionWebhookWithManager(mgr, mutating.SetupConfig{
+				Namespace: namespace,
+				Class:     class,
+			}); err != nil {
+				setupLog.Error(err, "failed to setup conversion webhooks")
+				os.Exit(1)
+			}
 		}
 	}
 

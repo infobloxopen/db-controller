@@ -122,6 +122,9 @@ dsnexec:
     repository: "ghcr.io/infobloxopen/dsnexec"
     tag: ""
 
+deprecationConversionWebhook:
+  enabled: false
+
 zapLogger:
   encoding: json
   level: info
