@@ -137,29 +137,38 @@ var getDefaulExtensions = func() []string {
 	return defaultExtensions
 }
 
+// CreateDatabase creates a database if it does not exist.
 func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	var exists bool
-	db := pc.DB
 	log := pc.log.WithValues("database", dbName, "dsn", pc.SanitizeDSN())
 
-	log.Info("pinging database", "ping", db.Ping())
-
-	err := db.QueryRow(`SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)`, dbName).Scan(&exists)
+	err := pc.DB.QueryRow(`SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)`, dbName).Scan(&exists)
 	if err != nil {
+		// TODO: use error codes provided by the pq driver.
+		if strings.Contains(err.Error(), "does not exist") {
+			return pc.createDatabase(dbName, log)
+		}
+
 		log.Error(err, "could not query for database name", "query", fmt.Sprintf(`SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = '%s')`, dbName))
-		metrics.DBProvisioningErrors.WithLabelValues("read error")
+		metrics.DBProvisioningErrors.WithLabelValues("read error").Inc()
 		return false, err
 	}
+
 	if exists {
 		return false, nil
 	}
 
-	// create the database
-	if _, err := db.Exec(fmt.Sprintf("create database %s", pq.QuoteIdentifier(dbName))); err != nil {
+	return pc.createDatabase(dbName, log)
+}
+
+func (pc *client) createDatabase(dbName string, log logr.Logger) (bool, error) {
+	_, err := pc.DB.Exec(fmt.Sprintf("CREATE DATABASE %s", pq.QuoteIdentifier(dbName)))
+	if err != nil {
 		log.Error(err, "could not create database")
-		metrics.DBProvisioningErrors.WithLabelValues("create error")
+		metrics.DBProvisioningErrors.WithLabelValues("create error").Inc()
 		return false, err
 	}
+
 	metrics.DBCreated.Inc()
 	return true, nil
 }

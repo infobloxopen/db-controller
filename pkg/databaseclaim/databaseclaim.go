@@ -565,10 +565,6 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	reqInfo.MasterConnInfo.DatabaseName = connInfo.DatabaseName
 	reqInfo.MasterConnInfo.SSLMode = connInfo.SSLMode
 
-	// This is a hack to remove the database name from the connection info because the database
-	// was not created yet and the connection info is used to create the database client.
-	connInfo.DatabaseName = ""
-
 	dbClient, err := dbclient.New(dbclient.Config{
 		Log:    log.FromContext(ctx).WithValues("caller", "reconcileNewDB"),
 		DBType: "postgres",
