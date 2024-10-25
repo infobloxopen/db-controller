@@ -26,8 +26,8 @@ var defaultExtensions = []string{"citext", "uuid-ossp",
 	"plpgsql", "hll"}
 
 var specialExtensionsMap = map[string]func(*client, string, string) error{
-	"pg_partman": (*client).pg_partman,
-	"pg_cron":    (*client).pg_cron,
+	"pg_partman": (*client).CreatePgPartmanExtension,
+	"pg_cron":    (*client).CreatePgCronExtension,
 }
 
 type client struct {
@@ -220,7 +220,7 @@ func (pc *client) CreateSpecialExtensions(dbName string, role string) error {
 	return nil
 }
 
-func (pc *client) pg_cron(dbName string, role string) error {
+func (pc *client) CreatePgCronExtension(dbName string, role string) error {
 	// create extension pg_cron and grant usage to public
 	db, err := pc.getDB(dbName)
 	if err != nil {
@@ -245,7 +245,7 @@ func (pc *client) pg_cron(dbName string, role string) error {
 	return nil
 }
 
-func (pc *client) pg_partman(dbName string, role string) error {
+func (pc *client) CreatePgPartmanExtension(dbName string, role string) error {
 
 	db, err := pc.getDB(dbName)
 	if err != nil {
