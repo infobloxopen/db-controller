@@ -12,7 +12,8 @@ webhooks:
       namespace: system
       path: /mutate--v1-pod
   failurePolicy: Fail
-  name: persistance.atlas.infoblox.com
+  name: dbproxy.persistance.atlas.infoblox.com
+  reinvocationPolicy: IfNeeded
   rules:
   - apiGroups:
     - ""
@@ -24,3 +25,47 @@ webhooks:
     resources:
     - pods
   sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate--v1-pod
+  failurePolicy: Fail
+  name: dsnexec.persistance.atlas.infoblox.com
+  reinvocationPolicy: IfNeeded
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+  sideEffects: None
+  timeoutSeconds: 10
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /convert-deprecated-pod
+  failurePolicy: Fail
+  name: podconversion.persistance.atlas.infoblox.com
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+  sideEffects: None
+  timeoutSeconds: 10

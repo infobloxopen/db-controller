@@ -57,6 +57,7 @@ var controllerReconciler *DatabaseClaimReconciler
 var namespace string
 var logger logr.Logger
 var env = "testenv"
+var class = "testenv"
 
 // Stand up postgres in a container
 var (
@@ -92,7 +93,7 @@ var _ = BeforeSuite(func() {
 		},
 		ErrorIfCRDPathMissing: true,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			Paths: []string{filepath.Join("testdata", "mutatingwebhook.yaml")},
+			// Paths: []string{filepath.Join("..", "..", "config", "webhook")},
 		},
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
 		// without call the makefile target test. If not informed it will look for the
@@ -101,6 +102,7 @@ var _ = BeforeSuite(func() {
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
 			fmt.Sprintf("1.30.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+		AttachControlPlaneOutput: false,
 	}
 
 	var err error

@@ -26,7 +26,8 @@ var (
 	SecretKey               = v1.DSNURIKey
 )
 
-// +kubebuilder:webhook:path=/mutate--v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=persistance.atlas.infoblox.com,sideEffects=None,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate--v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=dbproxy.persistance.atlas.infoblox.com,sideEffects=None,admissionReviewVersions=v1,timeoutSeconds=10,reinvocationPolicy=IfNeeded
+// +kubebuilder:webhook:path=/mutate--v1-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=dsnexec.persistance.atlas.infoblox.com,sideEffects=None,admissionReviewVersions=v1,timeoutSeconds=10,reinvocationPolicy=IfNeeded
 
 // (for webhooks the path is of format /mutate-<group>-<version>-<kind>. Since this documentation uses Pod from the core API group, the group needs to be an empty string).
 

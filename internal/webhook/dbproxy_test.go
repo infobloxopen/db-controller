@@ -67,8 +67,8 @@ var _ = Describe("dbproxy defaulting", func() {
 	})
 
 	// TODO: change to table driven tests
-	It("should successfully mutating a pod", func() {
-		By("Check pod is mutated")
+	It("should successfully create a mock pod", func() {
+		By("Check mock pod is created")
 
 		name := "annotation-enabled"
 		Expect(k8sClient.Create(ctx, makePodProxy(name, "default-db"))).NotTo(HaveOccurred())
@@ -114,6 +114,11 @@ var _ = Describe("dbproxy defaulting", func() {
 		Expect(pod.Spec.Volumes[0].Name).To(Equal(VolumeNameProxy))
 		Expect(pod.Spec.Volumes[0].VolumeSource.Secret.SecretName).To(Equal("test"))
 		Expect(pod.Spec.Volumes[0].VolumeSource.Secret.Optional).To(BeNil())
+		Expect(pod.Spec.Containers).To(HaveLen(2))
+		Expect(pod.Spec.Containers[1].Env).To(HaveLen(1))
+		envvar := pod.Spec.Containers[1].Env[0]
+		Expect(envvar.Name).To(Equal("DBPROXY_CREDENTIAL"))
+		Expect(envvar.Value).To(Equal("/dbproxy/uri_dsn.txt"))
 
 		By("Check sidecar pod is injected")
 		sidecar := pod.Spec.Containers[len(pod.Spec.Containers)-1]
