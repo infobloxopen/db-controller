@@ -3,7 +3,6 @@ package dbclient
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -124,12 +123,6 @@ func (pc *client) SanitizeDSN() string {
 		return ""
 	}
 	return u.Redacted()
-}
-
-// CreateDataBase implements typo func name incase anybody is using it
-func (pc *client) CreateDataBase(name string) (bool, error) {
-	pc.log.Error(errors.New("CreateDataBase called, use CreateDatabase"), "old_interface_called")
-	return pc.CreateDatabase(name)
 }
 
 // unit test override
