@@ -39,20 +39,20 @@ type client struct {
 	log    logr.Logger
 }
 
-func (p *client) GetDB() *sql.DB {
-	return p.DB
+func (pc *client) GetDB() *sql.DB {
+	return pc.DB
 }
 
-func (p *client) Ping() error {
-	err := p.DB.Ping()
+func (pc *client) Ping() error {
+	err := pc.DB.Ping()
 	if err != nil {
-		return fmt.Errorf("ping_failed: %s %w", p.SanitizeDSN(), err)
+		return fmt.Errorf("ping_failed: %s %w", pc.SanitizeDSN(), err)
 	}
 	return nil
 }
 
-func (p *client) getDB(dbname string) (*sql.DB, error) {
-	u, err := url.Parse(p.dbURL)
+func (pc *client) getDB(dbname string) (*sql.DB, error) {
+	u, err := url.Parse(pc.dbURL)
 	if err != nil {
 		return nil, err
 	}
