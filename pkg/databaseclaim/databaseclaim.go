@@ -150,6 +150,9 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if err := validateDBClaim(&dbClaim); err != nil {
 		res, err := r.manageError(ctx, &dbClaim, err)
+		if dbClaim.Status.Error != "" {
+			metrics.ErrorStateClaims.Inc()
+		}
 		// TerminalError, do not requeue
 		return res, reconcile.TerminalError(err)
 	}
@@ -169,7 +172,11 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	reqInfo, err := NewRequestInfo(ctx, r.Config.Viper, &dbClaim)
 	if err != nil {
-		return r.manageError(ctx, &dbClaim, err)
+		res, err := r.manageError(ctx, &dbClaim, err)
+		if dbClaim.Status.Error != "" {
+			metrics.ErrorStateClaims.Inc()
+		}
+		return res, err
 	}
 
 	// name of our custom finalizer
@@ -177,7 +184,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		// Increment total claims count.
-		metrics.TotalDatabaseClaims.Dec()
+		metrics.TotalDatabaseClaimsDeleted.Inc()
 
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
@@ -234,12 +241,10 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	res, err := r.executeDbClaimRequest(ctx, &reqInfo, &dbClaim)
 	if err != nil {
+		if dbClaim.Status.Error != "" {
+			metrics.ErrorStateClaims.Inc()
+		}
 		return res, err
-	}
-
-	// Track claims in error state.
-	if dbClaim.Status.Error != "" {
-		metrics.ErrorStateClaims.Inc()
 	}
 
 	// Track migration state.

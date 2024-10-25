@@ -88,6 +88,12 @@ var (
 			Help: "Total number of database claims",
 		},
 	)
+	TotalDatabaseClaimsDeleted = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "dbcontroller_total_database_claims_deleted",
+			Help: "Total number of database claims marked for deletion",
+		},
+	)
 	ExistingSourceClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_existing_source_claims",
