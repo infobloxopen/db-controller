@@ -870,7 +870,6 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, reqInfo 
 		} else {
 			maxStorageVal = &params.MaxStorageGB
 		}
-		dbInstance.Spec.ForProvider.DBName = &dbClaim.Spec.DatabaseName
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = reqInfo.EnableCloudwatchLogsExport
 		dbInstance.Spec.ForProvider.MultiAZ = &multiAZ
