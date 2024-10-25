@@ -553,7 +553,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	}
 
 	logr.V(1).Info("cloud instance ready. reading generated master secret", "instance", dbHostIdentifier)
-	connInfo, err := r.kctl.GetMasterCredsDeprecated(ctx, dbHostIdentifier, dbClaim.Spec.DatabaseName, basefun.GetDefaultSSLMode(r.Config.Viper))
+	connInfo, err := r.kctl.GetMasterCredsDeprecated(ctx, dbHostIdentifier, "", basefun.GetDefaultSSLMode(r.Config.Viper))
 	if err != nil {
 		logr.Error(err, "error retrieving master credentials", "operationMode", operationalMode)
 		return ctrl.Result{RequeueAfter: basefun.GetDynamicHostWaitTime(r.Config.Viper)}, nil

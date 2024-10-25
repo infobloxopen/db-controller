@@ -40,9 +40,6 @@ func (c *Client) GetMasterDSN(ctx context.Context, secretName, databaseName, ssl
 func (c *Client) GetMasterCredsDeprecated(ctx context.Context, secretName, databaseName string, sslMode string) (v1.DatabaseClaimConnectionInfo, error) {
 
 	connInfo := v1.DatabaseClaimConnectionInfo{}
-	if databaseName == "" {
-		return connInfo, fmt.Errorf("database name is required")
-	}
 	if c.serviceNS == "" {
 		return connInfo, fmt.Errorf("service namespace is required")
 	}
