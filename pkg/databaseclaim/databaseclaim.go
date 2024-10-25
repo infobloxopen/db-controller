@@ -586,21 +586,22 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 
 	// Updates the database name
 	if err := r.createDatabaseAndExtensions(ctx, reqInfo, dbClient, &dbClaim.Status.NewDB, operationalMode); err != nil {
-		return ctrl.Result{}, err
+		logr.Error(err, "unable to create database and extensions")
+		return r.manageError(ctx, dbClaim, err)
 	}
 
 	// Updates the connection info username
 	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username, operationalMode)
 	if err != nil {
-		logr.Error(err, "unable to update users, user credents not persisted to status object")
-		return ctrl.Result{}, err
+		logr.Error(err, "unable to update users, user credentials not persisted to status object")
+		return r.manageError(ctx, dbClaim, err)
 	}
 
 	// TODO: I don't know what purpose these serve
 	// ref: https://github.com/infobloxopen/db-controller/pull/193
 	err = dbClient.ManageSystemFunctions(dbClaim.Spec.DatabaseName, basefun.GetSystemFunctions(r.Config.Viper))
 	if err != nil {
-		return ctrl.Result{}, err
+		return r.manageError(ctx, dbClaim, err)
 	}
 	logr.V(debugLevel).Info("populated_newdb_information", "newdb", dbClaim.Status.NewDB)
 	return ctrl.Result{}, nil
