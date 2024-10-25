@@ -32,11 +32,12 @@ var specialExtensionsMap = map[string]func(*client, string, string) error{
 
 type client struct {
 	// cloud is `aws` or `gcp`
-	cloud  string
-	dbType string
-	dbURL  string
-	DB     *sql.DB
-	log    logr.Logger
+	cloud   string
+	dbType  string
+	dbURL   string
+	DB      *sql.DB
+	adminDB *sql.DB
+	log     logr.Logger
 }
 
 func (p *client) GetDB() *sql.DB {
@@ -77,7 +78,7 @@ func New(cfg Config) (*client, error) {
 	return newPostgresClient(context.TODO(), cfg)
 }
 
-// creates postgres client
+// newPostgresClient creates a new client for postgres.
 func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 
 	if cfg.Cloud == "" {
@@ -97,12 +98,32 @@ func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// create a new connection to the database to run admin commands.
+
+	dsnURL, err := url.Parse(authedDSN)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse DSN: %w", err)
+	}
+	dsnURL.Path = "/postgres"
+
+	adminDB, err := sql.Open(PostgresType, dsnURL.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := adminDB.PingContext(ctx); err != nil {
+		adminDB.Close()
+		return nil, fmt.Errorf("could not connect to admin database: %w", err)
+	}
+
 	return &client{
-		cloud:  cfg.Cloud,
-		dbType: PostgresType,
-		DB:     db,
-		log:    cfg.Log,
-		dbURL:  cfg.DSN,
+		cloud:   cfg.Cloud,
+		dbType:  PostgresType,
+		DB:      db,
+		adminDB: adminDB,
+		log:     cfg.Log,
+		dbURL:   cfg.DSN,
 	}, nil
 }
 
@@ -135,7 +156,8 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	var exists bool
 	log := pc.log.WithValues("database", dbName, "dsn", pc.SanitizeDSN())
 
-	err := pc.DB.QueryRow(`SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)`, dbName).Scan(&exists)
+	query := `SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)`
+	err := pc.adminDB.QueryRow(query, dbName).Scan(&exists)
 	if err != nil {
 		// TODO: use error codes provided by the pq driver.
 		if strings.Contains(err.Error(), "does not exist") {
@@ -155,10 +177,16 @@ func (pc *client) CreateDatabase(dbName string) (bool, error) {
 }
 
 func (pc *client) createDatabase(dbName string, log logr.Logger) (bool, error) {
-	_, err := pc.DB.Exec(fmt.Sprintf("CREATE DATABASE %s", pq.QuoteIdentifier(dbName)))
+	_, err := pc.adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", pq.QuoteIdentifier(dbName)))
 	if err != nil {
 		log.Error(err, "could not create database")
 		metrics.DBProvisioningErrors.WithLabelValues("create error").Inc()
+		return false, err
+	}
+
+	if err := pc.DB.Ping(); err != nil {
+		log.Error(err, "could not connect to database")
+		metrics.DBProvisioningErrors.WithLabelValues("ping error").Inc()
 		return false, err
 	}
 
