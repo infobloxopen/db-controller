@@ -103,7 +103,7 @@ func main() {
 	flag.StringVar(&metricsDepYamlPath, "metrics-dep-yaml", "/config/postgres-exporter/deployment.yaml", "path to the metrics deployment yaml")
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
 	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. See docs for usage: https://infobloxopen.github.io/db-controller/#quick-start")
-	flag.BoolVar(&enableDBProxyWebhook, "enable-deprecation-conversion-webhook", false, "Enable conversion of deprecated pods using dbproxy and/or dsnexec annotations")
+	flag.BoolVar(&enableDeprecatedConversionWebhook, "enable-deprecation-conversion-webhook", false, "Enable conversion of deprecated pods using dbproxy and/or dsnexec annotations")
 
 	opts := zap.Options{
 		Development: true,
