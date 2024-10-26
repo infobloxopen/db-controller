@@ -71,10 +71,11 @@ func TestPostgresClientOperations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pc := &client{
-				dbType: "postgres",
-				dbURL:  dsn,
-				DB:     db,
-				log:    NewTestLogger(t),
+				dbType:  "postgres",
+				dbURL:   dsn,
+				DB:      db,
+				adminDB: db,
+				log:     NewTestLogger(t),
 			}
 
 			got, err := pc.CreateDatabase(tt.args.dbName)

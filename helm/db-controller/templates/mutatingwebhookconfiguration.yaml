@@ -6,6 +6,7 @@ metadata:
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}-webhook
 webhooks:
+  {{- if .Values.deprecationConversionWebhook.enabled }}
 - clientConfig:
     service:
       name: {{ include "db-controller.fullname" . }}
@@ -34,6 +35,7 @@ webhooks:
     scope: "Namespaced"
   sideEffects: None
   timeoutSeconds: 10
+{{- end }}
 - clientConfig:
     service:
       name: {{ include "db-controller.fullname" . }}

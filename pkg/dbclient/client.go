@@ -3,7 +3,6 @@ package dbclient
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -27,17 +26,18 @@ var defaultExtensions = []string{"citext", "uuid-ossp",
 	"plpgsql", "hll"}
 
 var specialExtensionsMap = map[string]func(*client, string, string) error{
-	"pg_partman": (*client).pg_partman,
-	"pg_cron":    (*client).pg_cron,
+	"pg_partman": (*client).CreatePgPartmanExtension,
+	"pg_cron":    (*client).CreatePgCronExtension,
 }
 
 type client struct {
 	// cloud is `aws` or `gcp`
-	cloud  string
-	dbType string
-	dbURL  string
-	DB     *sql.DB
-	log    logr.Logger
+	cloud   string
+	dbType  string
+	dbURL   string
+	DB      *sql.DB
+	adminDB *sql.DB
+	log     logr.Logger
 }
 
 func (p *client) GetDB() *sql.DB {
@@ -78,7 +78,7 @@ func New(cfg Config) (*client, error) {
 	return newPostgresClient(context.TODO(), cfg)
 }
 
-// creates postgres client
+// newPostgresClient creates a new client for postgres.
 func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 
 	if cfg.Cloud == "" {
@@ -98,12 +98,32 @@ func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// create a new connection to the database to run admin commands.
+
+	dsnURL, err := url.Parse(authedDSN)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse DSN: %w", err)
+	}
+	dsnURL.Path = "/postgres"
+
+	adminDB, err := sql.Open(PostgresType, dsnURL.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := adminDB.PingContext(ctx); err != nil {
+		adminDB.Close()
+		return nil, fmt.Errorf("could not connect to admin database: %w", err)
+	}
+
 	return &client{
-		cloud:  cfg.Cloud,
-		dbType: PostgresType,
-		DB:     db,
-		log:    cfg.Log,
-		dbURL:  cfg.DSN,
+		cloud:   cfg.Cloud,
+		dbType:  PostgresType,
+		DB:      db,
+		adminDB: adminDB,
+		log:     cfg.Log,
+		dbURL:   cfg.DSN,
 	}, nil
 }
 
@@ -126,40 +146,50 @@ func (pc *client) SanitizeDSN() string {
 	return u.Redacted()
 }
 
-// CreateDataBase implements typo func name incase anybody is using it
-func (pc *client) CreateDataBase(name string) (bool, error) {
-	pc.log.Error(errors.New("CreateDataBase called, use CreateDatabase"), "old_interface_called")
-	return pc.CreateDatabase(name)
-}
-
 // unit test override
 var getDefaulExtensions = func() []string {
 	return defaultExtensions
 }
 
+// CreateDatabase creates a database if it does not exist.
 func (pc *client) CreateDatabase(dbName string) (bool, error) {
 	var exists bool
-	db := pc.DB
 	log := pc.log.WithValues("database", dbName, "dsn", pc.SanitizeDSN())
 
-	log.Info("pinging database", "ping", db.Ping())
-
-	err := db.QueryRow(`SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)`, dbName).Scan(&exists)
+	query := `SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = $1)`
+	err := pc.adminDB.QueryRow(query, dbName).Scan(&exists)
 	if err != nil {
+		// TODO: use error codes provided by the pq driver.
+		if strings.Contains(err.Error(), "does not exist") {
+			return pc.createDatabase(dbName, log)
+		}
+
 		log.Error(err, "could not query for database name", "query", fmt.Sprintf(`SELECT EXISTS(SELECT datname FROM pg_catalog.pg_database WHERE datname = '%s')`, dbName))
-		metrics.DBProvisioningErrors.WithLabelValues("read error")
+		metrics.DBProvisioningErrors.WithLabelValues("read error").Inc()
 		return false, err
 	}
+
 	if exists {
 		return false, nil
 	}
 
-	// create the database
-	if _, err := db.Exec(fmt.Sprintf("create database %s", pq.QuoteIdentifier(dbName))); err != nil {
+	return pc.createDatabase(dbName, log)
+}
+
+func (pc *client) createDatabase(dbName string, log logr.Logger) (bool, error) {
+	_, err := pc.adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", pq.QuoteIdentifier(dbName)))
+	if err != nil {
 		log.Error(err, "could not create database")
-		metrics.DBProvisioningErrors.WithLabelValues("create error")
+		metrics.DBProvisioningErrors.WithLabelValues("create error").Inc()
 		return false, err
 	}
+
+	if err := pc.DB.Ping(); err != nil {
+		log.Error(err, "could not connect to database")
+		metrics.DBProvisioningErrors.WithLabelValues("ping error").Inc()
+		return false, err
+	}
+
 	metrics.DBCreated.Inc()
 	return true, nil
 }
@@ -218,7 +248,7 @@ func (pc *client) CreateSpecialExtensions(dbName string, role string) error {
 	return nil
 }
 
-func (pc *client) pg_cron(dbName string, role string) error {
+func (pc *client) CreatePgCronExtension(dbName string, role string) error {
 	// create extension pg_cron and grant usage to public
 	db, err := pc.getDB(dbName)
 	if err != nil {
@@ -243,7 +273,7 @@ func (pc *client) pg_cron(dbName string, role string) error {
 	return nil
 }
 
-func (pc *client) pg_partman(dbName string, role string) error {
+func (pc *client) CreatePgPartmanExtension(dbName string, role string) error {
 
 	db, err := pc.getDB(dbName)
 	if err != nil {
