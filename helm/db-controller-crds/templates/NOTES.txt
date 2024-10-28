@@ -1,0 +1,3 @@
+Installed the CRDs for this application. Check the status of these CRDs.
+
+    kubectl api-resources --api-group=persistance.atlas.infoblox.com
