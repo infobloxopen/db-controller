@@ -272,7 +272,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 							MasterUserPasswordSecretRef: &dbMasterSecretInstance,
 							EngineVersion:               ptr.To(getEngineVersion(params, r)),
 						},
-						DBName:              &dbClaim.Spec.DatabaseName,
 						Engine:              &params.Type,
 						MultiAZ:             &multiAZ,
 						DBInstanceClass:     &params.InstanceClass,
