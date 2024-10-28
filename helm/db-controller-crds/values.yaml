@@ -1,5 +1,6 @@
-tools:
-  kubectl:
-    repository: bitnami/kubectl
-    pullPolicy: IfNotPresent
-    tag: 1.28.5
+crds:
+  # This is a hack to render CRDs even if they're installed
+  # Use this with caution as it will also uninstall CRDs
+  # We can now do this with CreateReplace in flux so
+  # this is being disabled.
+  install: false
