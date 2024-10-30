@@ -19,10 +19,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
@@ -37,6 +40,8 @@ const debugLevel = 1
 type DatabaseClaimReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	start time.Time
 
 	Config     *databaseclaim.DatabaseClaimConfig
 	reconciler *databaseclaim.DatabaseClaimReconciler
@@ -62,6 +67,14 @@ func (r *DatabaseClaimReconciler) Reconciler() *databaseclaim.DatabaseClaimRecon
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.2/pkg/reconcile
 func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	defer func() {
+		// Restart infrequently to release leaked database connections
+		if time.Since(r.start) > 24*time.Hour {
+			logr := log.FromContext(ctx)
+			logr.Info("shutting down to release database connections")
+			os.Exit(0)
+		}
+	}()
 	return r.reconciler.Reconcile(ctx, req)
 }
 
@@ -81,6 +94,8 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Client == nil {
 		return fmt.Errorf("client is not set")
 	}
+
+	r.start = time.Now()
 
 	return ctrl.NewControllerManagedBy(mgr).
 		// Ignore status updates in objects being watched
