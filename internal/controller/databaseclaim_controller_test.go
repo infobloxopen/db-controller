@@ -120,6 +120,9 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			// Reconcile again to finalize the finalizer
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
+			old, new := controllerReconciler.reconciler.DBStats()
+			Expect(old.OpenConnections).To(Equal(0))
+			Expect(new.OpenConnections).To(Equal(0))
 
 			By("Ensure the resource is deleted")
 			err = k8sClient.Get(ctx, typeNamespacedName, resource)
@@ -144,6 +147,10 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(claim.Status.Error).To(Equal(""))
+			old, new := controllerReconciler.reconciler.DBStats()
+			Expect(old.OpenConnections).To(Equal(0))
+			Expect(new.OpenConnections).To(Equal(0))
+
 		})
 
 		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
@@ -160,6 +167,9 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource.Status.Error).To(Equal(""))
+			old, new := controllerReconciler.reconciler.DBStats()
+			Expect(old.OpenConnections).To(Equal(0))
+			Expect(new.OpenConnections).To(Equal(0))
 
 			var instance crossplaneaws.DBInstance
 			viper := controllerReconciler.Config.Viper
@@ -188,6 +198,9 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource.Status.Error).To(Equal(""))
+			old, new := controllerReconciler.reconciler.DBStats()
+			Expect(old.OpenConnections).To(Equal(0))
+			Expect(new.OpenConnections).To(Equal(0))
 
 		})
 

@@ -1,6 +1,7 @@
 package dbclient
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -72,7 +73,7 @@ func TestPostgresClientOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pc := &client{
 				dbType:  "postgres",
-				dbURL:   dsn,
+				dsn:     dsn,
 				DB:      db,
 				adminDB: db,
 				log:     NewTestLogger(t),
@@ -122,7 +123,8 @@ func TestPostgresClientOperations(t *testing.T) {
 			t.Logf("\t%s CreateRole() is passed", succeed)
 
 			t.Logf("CreateUser()")
-			got, err = pc.CreateUser(tt.args.username, tt.args.role, tt.args.userPassword)
+
+			got, err = pc.CreateUser(context.TODO(), tt.args.username, tt.args.role, tt.args.userPassword)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("\t%s CreateUser() error = %v, wantErr %v", failed, err, tt.wantErr)
 				return

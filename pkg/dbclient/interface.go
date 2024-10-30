@@ -1,6 +1,7 @@
 package dbclient
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,7 +15,7 @@ type Clienter interface {
 	DBCloser
 
 	GetDB() *sql.DB
-	Ping() error
+	PingContext(context.Context) error
 	SanitizeDSN() string
 
 	ManageReplicationRole(username string, enableReplicationRole bool) error
@@ -22,13 +23,13 @@ type Clienter interface {
 	ManageCreateRole(username string, enableCreateRole bool) error
 	ManageSystemFunctions(dbName string, functions map[string]string) error
 
-	GetUserRoles(username string) ([]string, error)
+	GetUserRoles(ctx context.Context, username string) ([]string, error)
 }
 
 type Creater interface {
 	CreateDatabase(dbName string) (bool, error)
 	//Creates a user in the the database
-	CreateUser(username, role, userPassword string) (bool, error)
+	CreateUser(ctx context.Context, username, role, userPassword string) (bool, error)
 	//Creates a role in the specified DB and SCHEMA - with access to this specific SCHEMA only
 	CreateRole(dbName, rolename, schema string) (bool, error)
 	CreateAdminRole(dbName, rolename, schema string) (bool, error)

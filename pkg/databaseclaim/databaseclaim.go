@@ -2,6 +2,7 @@ package databaseclaim
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/url"
 	"strings"
@@ -78,6 +79,10 @@ type DatabaseClaimReconciler struct {
 	client.Client
 	Config *DatabaseClaimConfig
 	kctl   *kctlutils.Client
+
+	// db is a client for the current database
+	db    *dbclient.Client
+	dbNew *dbclient.Client
 }
 
 // New returns a configured databaseclaim reconciler
@@ -114,6 +119,17 @@ func validateDBClaim(dbClaim *v1.DatabaseClaim) error {
 		return ErrInvalidDSNName
 	}
 	return nil
+}
+
+func (r *DatabaseClaimReconciler) DBStats() (sql.DBStats, sql.DBStats) {
+	var old, new sql.DBStats
+	if r.db != nil {
+		old = r.db.DB.Stats()
+	}
+	if r.dbNew != nil {
+		new = r.dbNew.DB.Stats()
+	}
+	return old, new
 }
 
 // Reconcile is the main reconciliation function for the DatabaseClaimReconciler.
@@ -480,6 +496,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 		return err
 	}
 	dbClient, err := r.getClientForExistingDB(ctx, dbClaim, existingDBConnInfo)
+	r.db = dbClient
 	if err != nil {
 		logr.Error(err, "creating database client error")
 		return err
@@ -579,6 +596,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 		logr.Error(err, "unable_dbclient")
 		return ctrl.Result{}, err
 	}
+	r.dbNew = dbClient
 	defer dbClient.Close()
 
 	// Series of partial updates to the status newb, get ready
@@ -981,7 +999,7 @@ func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, 
 
 }
 
-func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
+func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (*dbclient.Client, error) {
 
 	if connInfo == nil {
 		return nil, fmt.Errorf("invalid connection info")
@@ -1011,14 +1029,6 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, db
 	//log.Log.V(DebugLevel).Info("GET CLIENT FOR EXISTING DB> Full URI: " + connInfo.Uri())
 
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: connInfo.Uri()})
-}
-
-func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
-
-	logr.V(debugLevel).Info("GET DBCLIENT", "DSN", basefun.SanitizeDsn(r.getMasterDefaultDsn(reqInfo)))
-	updateHostPortStatus(&dbClaim.Status.NewDB, reqInfo.MasterConnInfo.Host, reqInfo.MasterConnInfo.Port, reqInfo.MasterConnInfo.SSLMode)
-	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: r.getMasterDefaultDsn(reqInfo)})
 }
 
 func (r *DatabaseClaimReconciler) getMasterDefaultDsn(reqInfo *requestInfo) string {
@@ -1225,7 +1235,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		}
 
 		nextUser := dbu.NextUser(status.ConnectionInfo.Username)
-		created, err := dbClient.CreateUser(nextUser, baseUsername, userPassword)
+		created, err := dbClient.CreateUser(ctx, nextUser, baseUsername, userPassword)
 		if err != nil {
 			metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 			return err

@@ -3,6 +3,7 @@ package roleclaim
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,7 +27,6 @@ type reconciler struct {
 	Scheme             *runtime.Scheme
 	Config             *RoleConfig
 	DbIdentifierPrefix string
-	Context            context.Context
 	Request            controllerruntime.Request
 }
 
@@ -78,9 +78,15 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 			Client: tt.rec.Client,
 			Config: tt.rec.Config,
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
 
-		result, err := r.Reconcile(tt.rec.Context, tt.rec.Request)
-		Expect(err != nil != tt.wantErr).Should(BeFalse())
+		result, err := r.Reconcile(ctx, tt.rec.Request)
+		Expect((err != nil) != tt.wantErr).Should(BeFalse())
+		if tt.wantErr {
+			continue
+		}
+		Expect(r.dbCli.GetDB().Stats().OpenConnections).Should(BeZero())
 
 		Expect(result.Requeue).Should(BeFalse())
 
@@ -180,6 +186,8 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 		false,
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	r := &DbRoleClaimReconciler{
 		Client: test.rec.Client,
 		Config: test.rec.Config,
@@ -194,10 +202,14 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 	//seed database to simulate existing user
 	dbClient.CreateSchema("schema1")
 	dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema1_admin", "schema1")
-	dbClient.CreateUser("testclaim_user_a", "schema1_admin", "123")
+	dbClient.CreateUser(ctx, "testclaim_user_a", "schema1_admin", "123")
 
-	result, err := r.Reconcile(test.rec.Context, test.rec.Request)
+	result, err := r.Reconcile(ctx, test.rec.Request)
 	Expect((err != nil) != test.wantErr).Should(BeFalse())
+	if test.wantErr {
+		return
+	}
+	Expect(r.dbCli.GetDB().Stats().OpenConnections).Should(BeZero())
 
 	Expect(result.Requeue).Should(BeFalse())
 
@@ -289,6 +301,8 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 		Config: test.rec.Config,
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	existingDBConnInfo, err := persistancev1.ParseUri(dsn)
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -308,7 +322,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 	Expect(err).Should(BeNil())
 	_, err = dbClient.CreateRegularRole(existingDBConnInfo.DatabaseName, "schema3_readonly", "schema3")
 	Expect(err).Should(BeNil())
-	_, err = dbClient.CreateUser("testclaim_user_a", "", "123")
+	_, err = dbClient.CreateUser(ctx, "testclaim_user_a", "", "123")
 	Expect(err).Should(BeNil())
 	err = dbClient.AssignRoleToUser("testclaim_user_a", "schema1_regular")
 	Expect(err).Should(BeNil())
@@ -317,8 +331,12 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 	err = dbClient.AssignRoleToUser("testclaim_user_a", "schema3_readonly")
 	Expect(err).Should(BeNil())
 
-	result, err := r.Reconcile(test.rec.Context, test.rec.Request)
+	result, err := r.Reconcile(ctx, test.rec.Request)
 	Expect((err != nil) != test.wantErr).Should(BeFalse())
+	if test.wantErr {
+		return
+	}
+	Expect(r.dbCli.GetDB().Stats().OpenConnections).Should(BeZero())
 
 	Expect(result.Requeue).Should(BeFalse())
 
@@ -336,7 +354,7 @@ func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
 
 	//-----------------
 	//VERIFY THAT USER MUST HAVE ACCESS TO ONLY 1 ROLE AFTER RECONCILE
-	userRoles, err := dbClient.GetUserRoles("testclaim_user_a")
+	userRoles, err := dbClient.GetUserRoles(context.TODO(), "testclaim_user_a")
 	Expect(err).Should(BeNil())
 	Expect(userRoles).Should(HaveLen(1))
 	Expect(userRoles).Should(ContainElement("schema4_admin"))

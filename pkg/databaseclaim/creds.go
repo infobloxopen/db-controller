@@ -31,7 +31,7 @@ func validateAndUpdateCreds(ctx context.Context, cli dbclient.Clienter, currentC
 		return nil
 	}
 
-	if err := cli.Ping(); err != nil {
+	if err := cli.PingContext(ctx); err != nil {
 		logger.Error(err, "admin_unable_connect")
 		return fmt.Errorf("unable_connect: %w", err)
 	}

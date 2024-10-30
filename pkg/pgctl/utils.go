@@ -3,11 +3,13 @@ package pgctl
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
 	"net/url"
 	"os/exec"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -89,6 +91,7 @@ func streamExecOutput(out io.ReadCloser, options ExecOptions) string {
 	return output
 }
 
+// getDB always initializes a connection
 func getDB(dsn string, db *sql.DB) (*sql.DB, error) {
 
 	var err error
@@ -97,11 +100,11 @@ func getDB(dsn string, db *sql.DB) (*sql.DB, error) {
 			return nil, err
 		}
 	}
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
 
-	return db, nil
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	err = db.PingContext(ctx)
+	cancel()
+	return db, err
 }
 
 func Exec(name string, arg ...string) (string, error) {

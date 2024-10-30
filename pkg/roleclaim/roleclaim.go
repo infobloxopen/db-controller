@@ -60,6 +60,7 @@ type dbcBaseConfig struct {
 // DbRoleClaimReconciler reconciles a DatabaseClaim object
 type DbRoleClaimReconciler struct {
 	client.Client
+	dbCli  dbclient.Clienter
 	Config *RoleConfig
 }
 
@@ -140,12 +141,12 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 
 		// get client to DB
-		dbClient, err := basefun.GetClientForExistingDB(&masterUserDBConnInfo, &log)
+		r.dbCli, err = basefun.GetClientForExistingDB(&masterUserDBConnInfo, &log)
 		if err != nil {
 			log.Error(err, "creating database client error.")
 			return ctrl.Result{}, err
 		}
-		defer dbClient.Close()
+		defer r.dbCli.Close()
 
 		initStatusValues(&dbRoleClaim)
 
@@ -164,7 +165,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				schemaName = strings.ToLower(schemaName)
 
 				//if schema doesn't exist, create it
-				err := createSchema(dbClient, schemaName, log)
+				err := createSchema(r.dbCli, schemaName, log)
 				if err != nil {
 					return ctrl.Result{}, err
 				}
@@ -174,7 +175,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				//create role
 				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
 				// check if role exists, if not: create it
-				if err = createRole(dbClient, roleName, &log, masterUserDBConnInfo.DatabaseName, schemaName); err != nil {
+				if err = createRole(r.dbCli, roleName, &log, masterUserDBConnInfo.DatabaseName, schemaName); err != nil {
 					return ctrl.Result{}, err
 				}
 				//update role status
@@ -191,7 +192,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			nextUser := dbu.NextUser(dbRoleClaim.Status.Username)
 			dbRoleClaim.Status.Username = nextUser
-			created, err := dbClient.CreateUser(nextUser, "", userPassword) //role will be assigned later on
+			created, err := r.dbCli.CreateUser(ctx, nextUser, "", userPassword) //role will be assigned later on
 			if err != nil {
 				metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 				return ctrl.Result{}, err
@@ -199,12 +200,12 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			//existing user, so update password
 			if !created {
-				if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
+				if err := r.dbCli.UpdatePassword(nextUser, userPassword); err != nil {
 					return ctrl.Result{}, err
 				}
 			}
 
-			curUserRoles, err := dbClient.GetUserRoles(nextUser)
+			curUserRoles, err := r.dbCli.GetUserRoles(ctx, nextUser)
 			if err != nil {
 				metrics.UsersUpdated.Inc()
 				return ctrl.Result{}, err
@@ -212,7 +213,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			//revoke access to all roles the user currently has access to, so it doesn't accumulate accesses
 			for _, userRole := range curUserRoles {
-				if err := dbClient.RevokeAccessToRole(nextUser, userRole); err != nil {
+				if err := r.dbCli.RevokeAccessToRole(nextUser, userRole); err != nil {
 					metrics.UsersUpdated.Inc()
 					return ctrl.Result{}, err
 				}
@@ -224,7 +225,7 @@ func (r *DbRoleClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				roleName := strings.ToLower(schemaName + "_" + strings.ToLower(string(role)))
 
 				//user already exists, so assign role to it
-				if err := dbClient.AssignRoleToUser(nextUser, roleName); err != nil {
+				if err := r.dbCli.AssignRoleToUser(nextUser, roleName); err != nil {
 					metrics.UsersUpdated.Inc()
 					return ctrl.Result{}, err
 				}
