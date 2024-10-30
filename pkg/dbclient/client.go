@@ -58,7 +58,13 @@ func (p *client) getDB(dbname string) (*sql.DB, error) {
 		return nil, err
 	}
 	u.Path = "/" + dbname
-	return sql.Open("postgres", u.String())
+	// thayward: Why is this creating a new pool instead of using p.DB?
+	db, err := sql.Open("postgres", u.String())
+	if err != nil {
+		return nil, err
+	}
+	db.SetConnMaxIdleTime(time.Minute)
+	return db, nil
 }
 
 type Config struct {
@@ -98,6 +104,7 @@ func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.SetConnMaxIdleTime(time.Minute)
 
 	// create a new connection to the database to run admin commands.
 
@@ -111,6 +118,7 @@ func newPostgresClient(ctx context.Context, cfg Config) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
+	adminDB.SetConnMaxIdleTime(time.Minute)
 
 	if err := adminDB.PingContext(ctx); err != nil {
 		adminDB.Close()

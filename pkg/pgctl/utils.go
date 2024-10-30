@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"os/exec"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -96,6 +97,7 @@ func getDB(dsn string, db *sql.DB) (*sql.DB, error) {
 		if db, err = sql.Open("postgres", dsn); err != nil {
 			return nil, err
 		}
+		db.SetConnMaxIdleTime(time.Minute)
 	}
 	if err = db.Ping(); err != nil {
 		return nil, err
