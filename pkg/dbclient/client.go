@@ -961,15 +961,27 @@ func (pc *client) RevokeAccessToRole(username, rolename string) error {
 }
 
 func (pc *client) Close() error {
+	var err error
+
 	if pc.DB != nil {
-		return pc.DB.Close()
+		if dbErr := pc.DB.Close(); dbErr != nil {
+			pc.log.Error(dbErr, "could not close DB")
+			err = fmt.Errorf("could not close DB: %w", dbErr)
+		}
 	}
 
 	if pc.adminDB != nil {
-		return pc.adminDB.Close()
+		if adminErr := pc.adminDB.Close(); adminErr != nil {
+			pc.log.Error(adminErr, "could not close admin DB")
+			if err != nil {
+				err = fmt.Errorf("%v; %w", err, adminErr)
+			} else {
+				err = fmt.Errorf("could not close admin DB: %w", adminErr)
+			}
+		}
 	}
 
-	return fmt.Errorf("can't close nil DB")
+	return err
 }
 
 func escapeValue(in string) string {
