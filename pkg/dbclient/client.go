@@ -977,7 +977,8 @@ func (pc *client) Close() error {
 		}
 	}
 
-	return err
+        // This will be nil if all errs are nil
+	return errors.Join(errs)
 }
 
 func escapeValue(in string) string {
