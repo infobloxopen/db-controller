@@ -965,6 +965,10 @@ func (pc *client) Close() error {
 		return pc.DB.Close()
 	}
 
+	if pc.adminDB != nil {
+		return pc.adminDB.Close()
+	}
+
 	return fmt.Errorf("can't close nil DB")
 }
 
