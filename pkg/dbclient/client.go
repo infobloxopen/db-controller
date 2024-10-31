@@ -961,7 +961,7 @@ func (pc *client) RevokeAccessToRole(username, rolename string) error {
 }
 
 func (pc *client) Close() error {
-	var err error
+	var errs []error
 
 	if pc.DB != nil {
 		if dbErr := pc.DB.Close(); dbErr != nil {
