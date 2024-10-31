@@ -3,6 +3,7 @@ package dbclient
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -977,8 +978,8 @@ func (pc *client) Close() error {
 		}
 	}
 
-        // This will be nil if all errs are nil
-	return errors.Join(errs)
+	// This will be nil if all errs are nil
+	return errors.Join(errs...)
 }
 
 func escapeValue(in string) string {
