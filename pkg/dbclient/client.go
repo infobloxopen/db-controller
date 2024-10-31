@@ -3,6 +3,7 @@ package dbclient
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -961,11 +962,24 @@ func (pc *client) RevokeAccessToRole(username, rolename string) error {
 }
 
 func (pc *client) Close() error {
+	var errs []error
+
 	if pc.DB != nil {
-		return pc.DB.Close()
+		if dbErr := pc.DB.Close(); dbErr != nil {
+			pc.log.Error(dbErr, "could not close DB")
+			errs = append(errs, fmt.Errorf("could not user client conn: %w", dbErr))
+		}
 	}
 
-	return fmt.Errorf("can't close nil DB")
+	if pc.adminDB != nil {
+		if adminErr := pc.adminDB.Close(); adminErr != nil {
+			pc.log.Error(adminErr, "could not close admin DB")
+			errs = append(errs, adminErr)
+		}
+	}
+
+	// This will be nil if all errs are nil
+	return errors.Join(errs...)
 }
 
 func escapeValue(in string) string {
