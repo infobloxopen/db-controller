@@ -966,7 +966,7 @@ func (pc *client) Close() error {
 	if pc.DB != nil {
 		if dbErr := pc.DB.Close(); dbErr != nil {
 			pc.log.Error(dbErr, "could not close DB")
-			err = fmt.Errorf("could not close DB: %w", dbErr)
+			errs = append(errs, fmt.Errorf("could not user client conn: %w", dbErr))
 		}
 	}
 
