@@ -973,11 +973,7 @@ func (pc *client) Close() error {
 	if pc.adminDB != nil {
 		if adminErr := pc.adminDB.Close(); adminErr != nil {
 			pc.log.Error(adminErr, "could not close admin DB")
-			if err != nil {
-				err = fmt.Errorf("%v; %w", err, adminErr)
-			} else {
-				err = fmt.Errorf("could not close admin DB: %w", adminErr)
-			}
+			errs = append(errs, adminErr)
 		}
 	}
 
