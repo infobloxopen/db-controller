@@ -42,27 +42,25 @@ import (
 )
 
 const (
-	timeout_e2e  = time.Minute * 20
-	interval_e2e = time.Second * 5
+	timeoutE2e  = time.Minute * 20
+	intervalE2e = time.Second * 5
 )
 
 var (
 	// Referenced in the AfterSuite method
-	db1, db2, dbinstance1, dbinstance1update, dbinstance2 string
-	dbroleclaim1, dbroleclaim2                            string
+	db1, db2, dbinstance1, dbinstance1update string
+	dbroleclaim1, dbroleclaim2               string
+	rds1                                     string
 )
 
 var _ = Describe("dbc-end2end", Ordered, func() {
 
 	var (
 		newdbcMasterSecretName string
-		rds1                   string
 		ctx                    = context.Background()
 	)
 
-	_, _ = dbinstance1update, dbinstance2
-
-	logf.Log.Info("Starting test", "timeout", timeout_e2e, "interval", interval_e2e)
+	logf.Log.Info("Starting test", "timeout", timeoutE2e, "interval", intervalE2e)
 
 	//creates db_1
 	Context("Creating a DB", func() {
@@ -167,7 +165,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				Expect(updatedDbClaim.Spec.DBVersion).To(Equal(""))
 				Expect(updatedDbClaim.Status.Error).ShouldNot(ContainSubstring("does not exist"))
 				return updatedDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
+			}, timeoutE2e, intervalE2e).Should(Equal(v1.Ready))
 
 			Expect(k8sClient.Get(ctx, key, updatedDbClaim)).Should(Succeed())
 			{
@@ -184,7 +182,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			Eventually(func() error {
 				dbInst := utils.DBInstanceType(cloud)
 				return k8sClient.Get(ctx, types.NamespacedName{Name: dbinstance1update}, dbInst)
-			}, timeout_e2e, interval_e2e).Should(Succeed())
+			}, timeoutE2e, intervalE2e).Should(Succeed())
 
 			By("Check Crossplane CR is ready: " + dbinstance1update)
 			Eventually(func() bool {
@@ -194,7 +192,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				status, err := getResourceStatus(dbInst)
 				Expect(err).ToNot(HaveOccurred())
 				return isResourceReady(status) && isResourceSynced(status)
-			}, timeout_e2e, interval_e2e).Should(BeTrue())
+			}, timeoutE2e, intervalE2e).Should(BeTrue())
 
 			var creds corev1.Secret
 			masterName := fmt.Sprintf("%s-master", dbinstance1update)
@@ -239,7 +237,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				}
 
 				return updatedDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(v1.Ready))
+			}, timeoutE2e, intervalE2e).Should(Equal(v1.Ready))
 
 			nname := types.NamespacedName{Namespace: namespace, Name: updatedDbClaim.Spec.SecretName}
 			By(fmt.Sprintf("checking db-controller secret is created: %s", nname.Name))
@@ -300,7 +298,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			secret := &corev1.Secret{}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-			}, timeout_e2e, time.Second*5).Should(BeNil())
+			}, timeoutE2e, time.Second*5).Should(BeNil())
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
@@ -357,7 +355,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 			secret := &corev1.Secret{}
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-			}, timeout_e2e, time.Second*5).Should(BeNil())
+			}, timeoutE2e, time.Second*5).Should(BeNil())
 
 			Expect(string(secret.Data["database"])).Should(Equal("sample_db"))
 			Expect(string(secret.Data["dsn"])).ShouldNot(BeNil())
@@ -504,7 +502,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					return "", err
 				}
 				return createdDbClaim.Status.ActiveDB.DbState, nil
-			}, timeout_e2e, interval_e2e).Should(Equal(v1.UsingExistingDB))
+			}, timeoutE2e, intervalE2e).Should(Equal(v1.UsingExistingDB))
 			//check if eventually the secret sample-secret-db2 is created
 			By("checking if the secret [sample-secret-db2] is created")
 			newSecret := &corev1.Secret{}
@@ -515,7 +513,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				} else {
 					return false
 				}
-			}, timeout_e2e, interval_e2e).Should(BeTrue())
+			}, timeoutE2e, intervalE2e).Should(BeTrue())
 		})
 	})
 
@@ -562,7 +560,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					Type:           createdDbClaim.Status.ActiveDB.Type,
 				}
 				return currentState, nil
-			}, time.Minute*20, interval_e2e).Should(Equal(expectedState))
+			}, time.Minute*20, intervalE2e).Should(Equal(expectedState))
 			//check if eventually the secret sample-secret-db2 is created
 			By("checking if the secret [sample-secret-db2] is created")
 			Eventually(func() (string, error) {
@@ -572,17 +570,17 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 					return "", err
 				}
 				return string(secret.Data["hostname"]), nil
-			}, time.Minute*20, interval_e2e).Should(ContainSubstring(env + "-" + db2 + "-b8487b9c"))
+			}, time.Minute*20, intervalE2e).Should(ContainSubstring(env + "-" + db2 + "-b8487b9c"))
 
 			By("checking if the existing DBRoleClaim1 was copied to the new DB")
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: dbroleclaim1 + "-" + db2Claim.Name, Namespace: namespace}, &v1.DbRoleClaim{})
-			}, timeout_e2e, time.Second*5).Should(BeNil())
+			}, timeoutE2e, time.Second*5).Should(BeNil())
 
 			By("checking if the existing DBRoleClaim2 was copied to the new DB")
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: dbroleclaim2 + "-" + db2Claim.Name, Namespace: namespace}, &v1.DbRoleClaim{})
-			}, timeout_e2e, time.Second*5).Should(BeNil())
+			}, timeoutE2e, time.Second*5).Should(BeNil())
 		})
 	})
 
@@ -606,7 +604,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				} else {
 					return nil
 				}
-			}, timeout_e2e, time.Second*5).Should(Succeed())
+			}, timeoutE2e, time.Second*5).Should(Succeed())
 
 			By("checking dbroleclaim2 does not exist")
 			Eventually(func() error {
@@ -619,7 +617,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				} else {
 					return fmt.Errorf("dbroleclaim2 still exists")
 				}
-			}, timeout_e2e, time.Second*5).Should(Succeed())
+			}, timeoutE2e, time.Second*5).Should(Succeed())
 		})
 	})
 
