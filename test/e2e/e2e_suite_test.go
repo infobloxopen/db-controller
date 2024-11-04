@@ -160,7 +160,7 @@ var _ = AfterSuite(func() {
 	ctx := context.Background()
 	// delete db1 if it exists
 	claim := &v1.DatabaseClaim{}
-	for _, db := range []string{db1, db2} {
+	for _, db := range []string{db1, db2, namespace + "-dbproxy-test"} {
 		nname := types.NamespacedName{
 			Name:      db,
 			Namespace: namespace,
@@ -176,17 +176,23 @@ var _ = AfterSuite(func() {
 	}
 
 	inst := crossplaneaws.DBInstance{}
-	for _, db := range []string{dbinstance1, dbinstance1update, dbinstance2} {
+	for _, db := range []string{dbinstance1, dbinstance1update} {
 		nname := types.NamespacedName{
 			Name:      db,
 			Namespace: namespace,
 		}
+
+		By("Checking DBInstance: " + db)
+
 		if err := k8sClient.Get(ctx, nname, &inst); err == nil {
-			By("Deleting DBInstance   : " + db)
+			By("Deleting DBInstance: " + db)
 			Expect(k8sClient.Delete(ctx, &inst)).Should(Succeed())
+
 			// CR is stuck in deletion, force a deletion by removing the finalizer
 			err := k8sClient.Get(ctx, nname, &inst)
 			if errors.IsNotFound(err) {
+				By("DBInstance is stuck in deletion; removing finalizer for DBInstance: " + db)
+
 				// patch the finalizer to prevent crossplane from blocking the deletion
 				inst.SetFinalizers([]string{})
 				Expect(k8sClient.Update(ctx, &inst)).Should(Succeed())
@@ -195,10 +201,21 @@ var _ = AfterSuite(func() {
 
 				Eventually(func() bool {
 					return errors.IsNotFound(k8sClient.Get(ctx, nname, &inst))
-				}, timeout_e2e, interval_e2e).Should(Succeed())
+				}, timeoutE2e, intervalE2e).Should(Succeed())
+				By("DBInstance successfully deleted: " + db)
 			}
-
 		}
+	}
+
+	// Removes the dbinstance with the 15.3 version error.
+	nname := types.NamespacedName{
+		Name:      rds1,
+		Namespace: namespace,
+	}
+	By("Checking DBInstance: " + rds1)
+	if err := k8sClient.Get(ctx, nname, &inst); err == nil {
+		By("Deleting DBInstance: " + rds1)
+		Expect(k8sClient.Delete(ctx, &inst)).Should(Succeed())
 	}
 
 	secrets := []string{dbinstance1, fmt.Sprintf("%s-master", dbinstance1)}
