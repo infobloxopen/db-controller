@@ -123,7 +123,7 @@ dsnexec:
     tag: ""
 
 deprecationConversionWebhook:
-  enabled: false
+  enabled: true
 
 zapLogger:
   encoding: json
