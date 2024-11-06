@@ -139,6 +139,14 @@ func convertPod(ctx context.Context, reader client.Reader, class string, pod *co
 		secretName = dbSecretPath
 	}
 
+	log = log.WithValues("secret", secretName)
+
+	// db-secret-path has a key in it, so remove the key
+	parts := strings.Split(secretName, "/")
+	if len(parts) > 1 {
+		secretName = parts[0]
+	}
+
 	labelConfigExec := pod.Labels[LabelConfigExec]
 	if labelConfigExec == "" && dsnExecConfigSecret != "" {
 		pod.Labels[LabelConfigExec] = pod.Annotations[DeprecatedAnnotationDSNExecConfig]
@@ -159,7 +167,7 @@ func convertPod(ctx context.Context, reader client.Reader, class string, pod *co
 		var claimName string
 		var err error
 		if claimName, err = getClaimName(ctx, reader, pod.GetNamespace(), secretName); err != nil {
-			log.Error(err, "unable to find claim", "secret", secretName)
+			log.Error(err, "unable to find claim")
 			return err
 		}
 

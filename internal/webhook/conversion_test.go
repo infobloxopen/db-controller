@@ -178,11 +178,11 @@ func makeDeprecatedPod(name, secretName, configSecret string) *corev1.Pod {
 	switch name {
 	case "deprecated-dbproxy":
 		pod.Annotations = map[string]string{
-			DeprecatedAnnotationDBSecretPath: secretName,
+			DeprecatedAnnotationDBSecretPath: secretName + "/" + "dsn.txt",
 		}
 	case "deprecated-both":
 		pod.Annotations = map[string]string{
-			DeprecatedAnnotationDBSecretPath: secretName,
+			DeprecatedAnnotationDBSecretPath: secretName + "/" + "dsn.txt",
 		}
 		fallthrough
 	case "deprecated-dsnexec":
@@ -193,7 +193,7 @@ func makeDeprecatedPod(name, secretName, configSecret string) *corev1.Pod {
 		}
 	case "deprecated-converted":
 		pod.Annotations = map[string]string{
-			DeprecatedAnnotationDBSecretPath: secretName,
+			DeprecatedAnnotationDBSecretPath: secretName + "/" + "dsn.txt",
 		}
 		pod.Labels = map[string]string{
 			LabelConfigExec: "default-db",
