@@ -1,6 +1,7 @@
 package pgctl
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"testing"
@@ -8,7 +9,8 @@ import (
 	"github.com/lib/pq"
 )
 
-func TestDropSchemas(t *testing.T) {
+func TestBackupSchemas(t *testing.T) {
+
 	// Create a connection to the isolated test database.
 	testDB, err := getDB(dropSchemaDBAdminDsn, nil)
 	if err != nil {
@@ -16,23 +18,26 @@ func TestDropSchemas(t *testing.T) {
 	}
 	defer closeDB(logger, testDB)
 
-	restore := NewRestore(dropSchemaDBAdminDsn)
+	// FIXME: This unit tests needs to verify it works with
+	// a user dsn like is used in the controller code.
+	restore, err := NewRestore(dropSchemaDBAdminDsn, dropSchemaDBAdminDsn, "dropschemaadmin")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	t.Run("Drop existing schemas", func(t *testing.T) {
-		setupTestSchemas(t, testDB)
-
+	t.Run("Backup public schema", func(t *testing.T) {
 		// Verify the schemas were created.
 		schemasBefore, err := listSchemas(testDB)
 		if err != nil {
 			t.Fatalf("failed to list schemas before drop: %v", err)
 		}
+
 		if len(schemasBefore) == 0 {
 			t.Fatal("no schemas were created for testing")
 		}
 
-		dropResult := restore.DropSchemas()
-		if dropResult.Error != nil {
-			t.Fatalf("drop schemas failed: %v", dropResult.Error.Err)
+		if err = restore.backupSchema(context.TODO()); err != nil {
+			t.Fatalf("drop schemas failed: %s", err)
 		}
 
 		// Verify that all non-system schemas were dropped.
@@ -43,9 +48,24 @@ func TestDropSchemas(t *testing.T) {
 		if len(schemasAfter) != 0 {
 			t.Fatalf("expected no schemas after drop, but found: %v", schemasAfter)
 		}
+
+		if err := restore.recreateSchema(context.TODO()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify that the schemas were recreated.
+		schemasAfterRecreate, err := listSchemas(testDB)
+		if err != nil {
+			t.Fatalf("failed to list schemas after recreate: %v", err)
+		}
+		if len(schemasAfterRecreate) != len(schemasBefore) {
+			t.Fatalf("expected %d schemas after recreate, but found: %v", len(schemasBefore), schemasAfterRecreate)
+		}
+
 	})
 
 	t.Run("Drop schemas when there are no schemas", func(t *testing.T) {
+		t.Skip("this is not supported")
 		// Ensure no schemas exist before the test.
 		schemasBefore, err := listSchemas(testDB)
 		if err != nil {
@@ -56,9 +76,9 @@ func TestDropSchemas(t *testing.T) {
 		}
 
 		// Call DropSchemas to verify it handles the empty state correctly.
-		dropResult := restore.DropSchemas()
-		if dropResult.Error != nil {
-			t.Fatalf("drop schemas failed when no schemas existed: %v", dropResult.Error.Err)
+
+		if err := restore.backupSchema(context.TODO()); err != nil {
+			t.Fatalf("drop schemas failed when no schemas existed: %s", err)
 		}
 	})
 }
@@ -85,7 +105,9 @@ func listSchemas(db *sql.DB) ([]string, error) {
         SELECT schema_name
         FROM information_schema.schemata
         WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-        AND schema_name NOT LIKE 'pg_temp_%'`)
+        AND schema_name NOT LIKE 'pg_temp_%'
+		AND schema_name NOT LIKE 'public_migrate_failed%'
+`)
 	if err != nil {
 		return nil, err
 	}

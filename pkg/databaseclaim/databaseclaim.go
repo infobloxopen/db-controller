@@ -446,7 +446,9 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 		}
 	}
 
-	logr.Info("status_block", "status", dbClaim.Status)
+	// Reset status as this is a new cycle
+	dbClaim.Status.Error = ""
+	dbClaim.Status.MigrationState = ""
 
 	sourceDSN, err := auth.GetSourceDataFromDSN(ctx, r.Client, dbClaim)
 	if err != nil {
@@ -485,8 +487,6 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 		return err
 	}
 	defer dbClient.Close()
-
-	logr.Info(fmt.Sprintf("processing DBClaim: %s namespace: %s AppID: %s", dbClaim.Name, dbClaim.Namespace, dbClaim.Spec.AppID))
 
 	dbName := existingDBConnInfo.DatabaseName
 	updateDBStatus(&dbClaim.Status.NewDB, dbName)
@@ -915,7 +915,7 @@ loop:
 		logr.Error(err, "ignoring delete temp secret error")
 	}
 	//create connection info secret
-	logr.Info("migration complete")
+	logr.Info("migration complete", "status", dbClaim.Status)
 
 	return r.manageSuccess(ctx, dbClaim)
 }

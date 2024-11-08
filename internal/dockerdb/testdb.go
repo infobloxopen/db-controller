@@ -1,11 +1,14 @@
 package dockerdb
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
@@ -15,29 +18,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"go.uber.org/zap/zapcore"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-// logger is used since some times we run from testing.M and testing.T is not available
+var debugLevel = 1
+
+// This does not write to stdout or stderr
 var logger logr.Logger
-
-// DebugLevel is used to set V level to 1 as suggested by official docs
-// https://github.com/kubernetes-sigs/controller-runtime/blob/main/TMP-LOGGING.md
-const debugLevel = 1
-
-func init() {
-	// Use zap logger
-	opts := zap.Options{
-		Development: true,
-		// Enable this to debug this code
-		//Level: zapcore.DebugLevel,
-		Level: zapcore.InfoLevel,
-	}
-
-	logger = zap.New(zap.UseFlagOptions(&opts))
-
-}
 
 func getEphemeralPort() int {
 	l, err := net.Listen("tcp", "localhost:0")
@@ -182,8 +168,10 @@ type Config struct {
 
 // Run a PostgreSQL database in a Docker container and return a connection to it.
 // The caller is responsible for calling the func() to prevent leaking containers.
-func Run(cfg Config) (*sql.DB, string, func()) {
+func Run(log logr.Logger, cfg Config) (*sql.DB, string, func()) {
 	port := getEphemeralPort()
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	// Required parameters
 	if cfg.Database == "" {
@@ -223,24 +211,27 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 	ctrArgs := []string{fmt.Sprintf("postgres:%s", cfg.DockerTag), "postgres", "-c", "wal_level=logical"}
 
 	// Run PostgreSQL in Docker
-	cmd := exec.Command("docker", append(args, ctrArgs...)...)
-	logger.V(debugLevel).Info(cmd.String())
+	cmd := exec.CommandContext(ctx, "docker", append(args, ctrArgs...)...)
+	log.V(debugLevel).Info(cmd.String())
+
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		logger.Error(err, "failed to run docker container")
-		logger.Info(cmd.String())
-		logger.Info("stderr:" + stderr.String())
+		log.Error(err, "failed to run docker container")
+		log.Info(cmd.String())
+		log.Info("stderr:" + stderr.String())
 		os.Exit(1)
 	}
-	logger.V(debugLevel).Info(string(out))
+	log.V(debugLevel).Info(string(out))
 	container := string(out[:len(out)-1]) // remove newline
+
+	connectLogger(ctx, log, container)
 
 	// Exercise hotload
 	//hotload.RegisterSQLDriver("pgx", stdlib.GetDefaultDriver())
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", url.QueryEscape(cfg.Username), url.QueryEscape(cfg.Password), GetOutboundIP(), port, cfg.Database)
-	logger.V(debugLevel).Info(dsn)
+	log.V(debugLevel).Info(dsn)
 	f, err := os.CreateTemp("", "dsn.txt")
 	if err != nil {
 		panic(err)
@@ -271,40 +262,70 @@ CREATE ROLE alloydbsuperuser WITH INHERIT LOGIN`)
 	}
 
 	if err != nil {
-		logger.Error(err, "failed to connect to database")
+		log.Error(err, "failed to connect to database")
 
 		cmd = exec.Command("docker", "logs", container)
 		cmd.Stderr = os.Stderr
 		out, err := cmd.Output()
 		if err != nil {
-			logger.Error(err, "failed to get logs")
+			log.Error(err, "failed to get logs")
 		}
-		logger.Info(string(out))
+		log.Info(string(out))
 		os.Exit(1)
 	}
 	// TODO: change this to debug logging, just timing jenkins for now
-	logger.Info("db_connected", "dsn", dsn, "duration", time.Since(now))
+	log.Info("db_connected", "dsn", dsn, "duration", time.Since(now))
 
 	return conn, dsn, func() {
 		// Cleanup container on close, dont exit without trying all steps first
 		now := time.Now()
 		defer func() {
-			logger.V(debugLevel).Info("container_cleanup_took", "duration", time.Since(now))
+			cancel()
+			log.V(debugLevel).Info("container_cleanup_took", "duration", time.Since(now))
 		}()
 
 		err := os.Remove(f.Name())
 		if err != nil {
-			logger.Error(err, "failed to remove temp file")
+			log.Error(err, "failed to remove temp file")
 		}
 
 		cmd := exec.Command("docker", "rm", "-f", container)
 		// This take 10 seconds to run, and we don't care if
 		// it was successful. So use Start() to not wait for
 		// it to finish.
-		logger.V(debugLevel).Info(cmd.String())
+		log.V(debugLevel).Info(cmd.String())
 		if err := cmd.Start(); err != nil {
-			logger.Error(err, "failed to remove container")
+			log.Error(err, "failed to remove container")
 		}
+	}
+}
+
+func connectLogger(ctx context.Context, logger logr.Logger, containerID string) {
+
+	log := logger.WithName("testdb")
+	// Connect to the container's logs
+	cmd := exec.CommandContext(ctx, "docker", "logs", "-f", containerID)
+
+	log.Info("connecting to container logs", "cmd", cmd.String())
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Error(err, "failed to get stdout pipe")
+		os.Exit(1)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Error(err, "failed to get stderr pipe")
+		os.Exit(1)
+	}
+
+	go logStdouterr(stdout, log)
+	go logStdouterr(stderr, log)
+
+	err = cmd.Start()
+	if err != nil {
+		logger.Error(err, "failed to start command")
+		return
 	}
 }
 
@@ -318,4 +339,16 @@ func GetOutboundIP() string {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP.String()
+}
+
+func logStdouterr(out io.ReadCloser, logger logr.Logger) {
+	scanner := bufio.NewScanner(out)
+	for scanner.Scan() {
+		// This is very noisy and left off by default
+		// Consider wiring this up to a test verbosity setting
+		//logger.V(1).Info(scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		logger.Error(err, "Error reading command output")
+	}
 }
