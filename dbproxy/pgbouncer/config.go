@@ -174,6 +174,11 @@ func parseURI(c *PGBouncerConfig, dsn string) error {
 	return nil
 }
 
+// As this is a local node connection, we will support non-SSL connections by using
+// the default client SSLMode of prefer. This will allow the client to connect to
+// the server using SSL if the server supports it, otherwise it will connect without SSL.
+// https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-SSLMODE-STATEMENTS
+
 const templateText = `
 [databases]
 {{.LocalDbName}} = host={{.RemoteHost}} port={{.RemotePort}} dbname={{.LocalDbName}}
@@ -189,7 +194,7 @@ admin_users = {{.UserName}}
 remote_user_override = {{.UserName}}
 remote_db_override = {{.LocalDbName}}
 ignore_startup_parameters = extra_float_digits
-client_tls_sslmode = disable
+client_tls_sslmode = prefer
 client_tls_key_file=dbproxy-client.key
 client_tls_cert_file=dbproxy-client.crt
 server_tls_sslmode = {{.SSLMode}}
