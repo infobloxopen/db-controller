@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gcloud-cli-pod
+  annotations:
+    # Workload Identity annotation to use the specific service account
+    #iam.gke.io/gcp-service-account: "db-controller@your-project-id.iam.gserviceaccount.com"
+spec:
+  containers:
+  - name: gcloud-cli
+    image: google/cloud-sdk:slim
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Fetch IAM user name
+        IAM_NAME=$(gcloud auth list --format='get(account)')
+        echo "IAM User: $IAM_NAME"
+        # Sleep indefinitely
+        sleep infinity
+  serviceAccountName: db-controller
+  restartPolicy: Never
