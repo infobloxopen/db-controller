@@ -257,8 +257,9 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var databaseClaims v1.DatabaseClaimList
 	if err := r.List(ctx, &databaseClaims); err != nil {
 		logr.Error(err, "unable to list database claims")
+	} else {
+		metrics.TotalDatabaseClaims.WithLabelValues("total_claims").Set(float64(len(databaseClaims.Items)))
 	}
-	metrics.TotalDatabaseClaims.WithLabelValues("total_claims").Set(float64(len(databaseClaims.Items)))
 
 	return res, nil
 }
