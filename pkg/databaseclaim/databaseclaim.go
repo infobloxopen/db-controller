@@ -131,9 +131,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// Increment total claims count.
-	metrics.TotalDatabaseClaims.Inc()
-
 	// Track if the claim is using an existing source.
 	if dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource {
 		metrics.ExistingSourceClaims.WithLabelValues("true").Inc()
@@ -256,6 +253,12 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if dbClaim.Status.ActiveDB.DbState != "" {
 		metrics.ActiveDBState.WithLabelValues(string(dbClaim.Status.ActiveDB.DbState)).Inc()
 	}
+
+	var databaseClaims v1.DatabaseClaimList
+	if err := r.List(ctx, &databaseClaims); err != nil {
+		logr.Error(err, "unable to list database claims")
+	}
+	metrics.TotalDatabaseClaims.WithLabelValues("total_claims").Set(float64(len(databaseClaims.Items)))
 
 	return res, nil
 }

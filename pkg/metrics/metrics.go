@@ -82,11 +82,12 @@ var (
 	// -----------------------------------------------------------------------
 	// Database controller metrics
 
-	TotalDatabaseClaims = prometheus.NewGauge(
+	TotalDatabaseClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_total_database_claims",
 			Help: "Total number of database claims",
 		},
+		[]string{"total_claims"},
 	)
 	TotalDatabaseClaimsDeleted = prometheus.NewGauge(
 		prometheus.GaugeOpts{
