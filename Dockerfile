@@ -16,6 +16,7 @@ COPY cmd/ cmd/
 COPY api/ api/
 COPY internal/controller/ internal/controller/
 COPY internal/webhook/ internal/webhook/
+COPY internal/metrics/ internal/metrics/
 COPY pkg/ pkg/
 # FIXME: config is for raw manifest yaml that we use in helm, remove this when possible
 COPY config/ config/
