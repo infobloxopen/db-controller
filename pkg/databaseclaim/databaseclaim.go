@@ -131,13 +131,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	// Track if the claim is using an existing source.
-	if dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource {
-		metrics.ExistingSourceClaims.WithLabelValues("true").Inc()
-	} else {
-		metrics.ExistingSourceClaims.WithLabelValues("false").Inc()
-	}
-
 	// Avoid updates to the claim until we know we should be looking at it
 
 	if !isClassPermitted(r.Config.Class, dbClaim.Spec.Class) {
@@ -147,9 +140,6 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if err := validateDBClaim(&dbClaim); err != nil {
 		res, err := r.manageError(ctx, &dbClaim, err)
-		if dbClaim.Status.Error != "" {
-			metrics.ErrorStateClaims.Inc()
-		}
 		// TerminalError, do not requeue
 		return res, reconcile.TerminalError(err)
 	}
@@ -169,19 +159,13 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	reqInfo, err := NewRequestInfo(ctx, r.Config.Viper, &dbClaim)
 	if err != nil {
-		res, err := r.manageError(ctx, &dbClaim, err)
-		if dbClaim.Status.Error != "" {
-			metrics.ErrorStateClaims.Inc()
-		}
-		return res, err
+		return r.manageError(ctx, &dbClaim, err)
 	}
 
 	// name of our custom finalizer
 	dbFinalizerName := "databaseclaims.persistance.atlas.infoblox.com/finalizer"
 
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-		// Increment total claims count.
-		metrics.TotalDatabaseClaimsDeleted.Inc()
 
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
@@ -238,27 +222,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	res, err := r.executeDbClaimRequest(ctx, &reqInfo, &dbClaim)
 	if err != nil {
-		if dbClaim.Status.Error != "" {
-			metrics.ErrorStateClaims.Inc()
-		}
 		return res, err
-	}
-
-	// Track migration state.
-	if dbClaim.Status.MigrationState != "" {
-		metrics.MigrationStateClaims.WithLabelValues(dbClaim.Status.MigrationState).Inc()
-	}
-
-	// Track active DB state.
-	if dbClaim.Status.ActiveDB.DbState != "" {
-		metrics.ActiveDBState.WithLabelValues(string(dbClaim.Status.ActiveDB.DbState)).Inc()
-	}
-
-	var databaseClaims v1.DatabaseClaimList
-	if err := r.List(ctx, &databaseClaims); err != nil {
-		logr.Error(err, "unable to list database claims")
-	} else {
-		metrics.TotalDatabaseClaims.WithLabelValues("total_claims").Set(float64(len(databaseClaims.Items)))
 	}
 
 	return res, nil
