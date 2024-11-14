@@ -25,28 +25,26 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/controller"
+	"github.com/infobloxopen/db-controller/internal/metrics"
+	mutating "github.com/infobloxopen/db-controller/internal/webhook"
+	"github.com/infobloxopen/db-controller/pkg/config"
+	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/internal/controller"
-	mutating "github.com/infobloxopen/db-controller/internal/webhook"
-	"github.com/infobloxopen/db-controller/pkg/config"
-	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
-	"github.com/infobloxopen/db-controller/pkg/rdsauth"
-	"github.com/infobloxopen/db-controller/pkg/roleclaim"
-
-	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	// +kubebuilder:scaffold:imports
-
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 )
@@ -268,8 +266,12 @@ func main() {
 		}
 	}
 
+	setupLog.Info("starting metrics updater")
+	ctx := ctrl.SetupSignalHandler()
+	go metrics.StartUpdater(ctx, mgr.GetClient())
+
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

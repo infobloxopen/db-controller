@@ -87,40 +87,35 @@ var (
 			Name: "dbcontroller_total_database_claims",
 			Help: "Total number of database claims",
 		},
-		[]string{"total_claims"},
-	)
-	TotalDatabaseClaimsDeleted = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "dbcontroller_total_database_claims_deleted",
-			Help: "Total number of database claims marked for deletion",
-		},
+		[]string{"namespace"},
 	)
 	ExistingSourceClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_existing_source_claims",
 			Help: "Number of database claims using existing source",
 		},
-		[]string{"use_existing_source"},
+		[]string{"namespace", "use_existing_source"},
 	)
-	ErrorStateClaims = prometheus.NewGauge(
+	ErrorStateClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_error_state_claims",
 			Help: "Number of database claims in error state",
 		},
+		[]string{"namespace"},
 	)
 	MigrationStateClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_migration_state_claims",
 			Help: "Number of database claims in each migration state",
 		},
-		[]string{"migration_state"},
+		[]string{"namespace", "migration_state"},
 	)
 	ActiveDBState = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_active_db_state",
 			Help: "State of active databases",
 		},
-		[]string{"db_state"},
+		[]string{"namespace", "db_state"},
 	)
 )
 
