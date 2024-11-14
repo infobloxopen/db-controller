@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// StartUpdater starts a metrics updater that updates the metrics every minute.
 func StartUpdater(ctx context.Context, client client.Client) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
@@ -20,7 +21,7 @@ func StartUpdater(ctx context.Context, client client.Client) {
 	for {
 		select {
 		case <-ctx.Done():
-			logr.Info("Shutting down metrics updater")
+			logr.Info("shutting down metrics updater")
 			return
 		case <-ticker.C:
 			updateMetrics(ctx, logr, client)
@@ -36,13 +37,11 @@ func updateMetrics(ctx context.Context, log logr.Logger, client client.Client) {
 		return
 	}
 
-	// Reset relevant metrics to avoid double counting
 	metrics.TotalDatabaseClaims.Reset()
 	metrics.ErrorStateClaims.Reset()
 	metrics.MigrationStateClaims.Reset()
 	metrics.ActiveDBState.Reset()
 
-	// Update metrics based on DatabaseClaim attributes
 	for _, dbClaim := range databaseClaims.Items {
 		metrics.TotalDatabaseClaims.WithLabelValues(dbClaim.Namespace).Inc()
 
