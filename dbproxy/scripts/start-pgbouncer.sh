@@ -16,8 +16,15 @@ openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout dbproxy-clie
 
 pgbouncer -d -v pgbouncer.ini
 
-until timeout 10 psql -h localhost -c 'SELECT 1'; do
+# Test that both SSL and non-SSL connections work
+until timeout 10 psql postgres://localhost:5432/?sslmode=require -c 'SELECT 1'; do
   echo "Waiting for PostgreSQL to be ready..."
   sleep 1
 done
+
+until timeout 10 psql postgres://localhost:5432/?sslmode=disable -c 'SELECT 1'; do
+  echo "Waiting for PostgreSQL to be ready..."
+  sleep 1
+done
+
 echo "PostgreSQL is ready!"
