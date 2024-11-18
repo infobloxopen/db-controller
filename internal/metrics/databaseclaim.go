@@ -41,6 +41,7 @@ func updateMetrics(ctx context.Context, log logr.Logger, client client.Client) {
 	metrics.ErrorStateClaims.Reset()
 	metrics.MigrationStateClaims.Reset()
 	metrics.ActiveDBState.Reset()
+	metrics.ExistingSourceClaims.Reset()
 
 	for _, dbClaim := range databaseClaims.Items {
 		metrics.TotalDatabaseClaims.WithLabelValues(dbClaim.Namespace).Inc()
