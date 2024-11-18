@@ -286,6 +286,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -329,7 +330,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(dbcontroller_active_db_state{db_state=\"ready\"})",
+          "expr": "sum(dbcontroller_active_db_state{app_kubernetes_io_instance=\"db-controller\", db_state=\"ready\"})",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -350,6 +351,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
