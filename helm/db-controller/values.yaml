@@ -185,4 +185,4 @@ controllerConfig:
     ib_lifecycle: "{{ .Values.lifecycle }}"
 
 dashboard:
-  enabled: true
+  enabled: false
