@@ -184,3 +184,5 @@ controllerConfig:
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
 
+dashboard:
+  enabled: false
