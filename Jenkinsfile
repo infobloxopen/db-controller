@@ -16,6 +16,7 @@ pipeline {
         echo "Jenkins may have left over files from previous builds"
         git clean -df
         '''
+        sh 'echo cicd > .id' // Pre-create .id to avoid Makefile execution
       }
     }
     stage('Build') {
