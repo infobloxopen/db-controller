@@ -14,6 +14,9 @@ DBPROXY_IMG ?= ghcr.io/infobloxopen/db-controller/dbproxy:${GIT_COMMIT}
 DSNEXEC_IMG ?= ghcr.io/infobloxopen/db-controller/dsnexec:${GIT_COMMIT}
 
 .id:
+	@echo "Debug: Checking git user email" >&2
+	git config user.email >/dev/null 2>&1 || { echo "Error: No git user email configured!" >&2; exit 1; }
+	@echo "Debug: Git user email is: $(shell git config user.email)" >&2
 	git config user.email | awk -F@ '{print $$1}' > .id
 
 .env: force
