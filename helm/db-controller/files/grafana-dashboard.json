@@ -286,6 +286,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -329,7 +330,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(dbcontroller_active_db_state{app_kubernetes_io_instance=\"db-controller\", db_state=\"ready\"})",
+          "expr": "sum(dbcontroller_active_db_state{db_state=\"ready\", app_kubernetes_io_instance=\"db-controller\"})",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -350,6 +351,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1129,8 +1131,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1254,8 +1255,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1368,8 +1368,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1505,8 +1504,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1568,8 +1566,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -2105,6 +2102,6 @@
   "timezone": "",
   "title": "Database Controller Metrics",
   "uid": "b237b85a-5ea2-4bc3-8411-504e07e0e4f3",
-  "version": 24,
+  "version": 26,
   "weekStart": ""
 }
