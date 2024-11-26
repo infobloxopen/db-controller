@@ -308,11 +308,11 @@ var _ = Describe("claim migrate", func() {
 			Expect(activeDB.ConnectionInfo).NotTo(BeNil())
 			Expect(activeDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
 
-			By(fmt.Sprintf("Verify owner of migrated DB is %s", migratedowner+"_a"))
+			By(fmt.Sprintf("Verify owner of migrated DB is %s", migratedowner))
 			row := fakeCli.QueryRowContext(ctxLogger, "select tableowner from pg_tables where tablename = 'users' AND schemaname = 'public';")
 			var owner string
 			Expect(row.Scan(&owner)).NotTo(HaveOccurred())
-			Expect(owner).To(Equal(migratedowner + "_a"))
+			Expect(owner).To(Equal(migratedowner))
 
 		})
 
