@@ -187,8 +187,6 @@ spec:
                 type: string
               username:
                 type: string
-            required:
-            - username
             type: object
         type: object
     served: true

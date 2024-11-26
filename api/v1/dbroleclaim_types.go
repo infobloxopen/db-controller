@@ -89,7 +89,7 @@ type DbRoleClaimStatus struct {
 	// Time the schemas and roles were updated
 	SchemasRolesUpdatedAt *metav1.Time `json:"schemasrolesupdatedat,omitempty"`
 
-	Username string `json:"username"`
+	Username string `json:"username,omitempty"`
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge
