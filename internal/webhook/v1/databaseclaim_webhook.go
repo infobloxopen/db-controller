@@ -32,6 +32,8 @@ import (
 // nolint:unused
 // log is for logging in this package.
 var databaseclaimlog = logf.Log.WithName("databaseclaim-resource")
+const deletionOverrideKey = "override-deletion"
+
 
 // SetupDatabaseClaimWebhookWithManager registers the webhook for DatabaseClaim in the manager.
 func SetupDatabaseClaimWebhookWithManager(mgr ctrl.Manager) error {
@@ -40,18 +42,9 @@ func SetupDatabaseClaimWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
-// Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
-// +kubebuilder:webhook:path=/validate-persistance-atlas-infoblox-com-v1-databaseclaim,mutating=false,failurePolicy=fail,sideEffects=None,groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=create;update,versions=v1,name=vdatabaseclaim-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-persistance-atlas-infoblox-com-v1-databaseclaim,mutating=false,failurePolicy=fail,sideEffects=None,groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=delete,versions=v1,name=vdatabaseclaim-v1.kb.io,admissionReviewVersions=v1
 
-// DatabaseClaimCustomValidator struct is responsible for validating the DatabaseClaim resource
-// when it is created, updated, or deleted.
-//
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as this struct is used only for temporary operations and does not need to be deeply copied.
 type DatabaseClaimCustomValidator struct {
 	//TODO(user): Add more fields as needed for validation
 }
@@ -60,11 +53,11 @@ var _ webhook.CustomValidator = &DatabaseClaimCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	databaseclaim, ok := obj.(*persistancev1.DatabaseClaim)
+	claim, ok := obj.(*persistancev1.DatabaseClaim)
 	if !ok {
 		return nil, fmt.Errorf("expected a DatabaseClaim object but got %T", obj)
 	}
-	databaseclaimlog.Info("Validation for DatabaseClaim upon creation", "name", databaseclaim.GetName())
+	databaseclaimlog.Info("Validation for DatabaseClaim upon creation", "name", claim.Name)
 
 	// TODO(user): fill in your validation logic upon object creation.
 
@@ -73,26 +66,29 @@ func (v *DatabaseClaimCustomValidator) ValidateCreate(ctx context.Context, obj r
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	databaseclaim, ok := newObj.(*persistancev1.DatabaseClaim)
+	newClaim, ok := newObj.(*persistancev1.DatabaseClaim)
 	if !ok {
 		return nil, fmt.Errorf("expected a DatabaseClaim object for the newObj but got %T", newObj)
 	}
-	databaseclaimlog.Info("Validation for DatabaseClaim upon update", "name", databaseclaim.GetName())
-
-	// TODO(user): fill in your validation logic upon object update.
-
+	databaseclaimlog.Info("Validation for DatabaseClaim upon update", "name", newClaim.Name)
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	databaseclaim, ok := obj.(*persistancev1.DatabaseClaim)
+	claim, ok := obj.(*persistancev1.DatabaseClaim)
 	if !ok {
 		return nil, fmt.Errorf("expected a DatabaseClaim object but got %T", obj)
 	}
-	databaseclaimlog.Info("Validation for DatabaseClaim upon deletion", "name", databaseclaim.GetName())
 
-	// TODO(user): fill in your validation logic upon object deletion.
+	databaseclaimlog.Info("Validation for DatabaseClaim upon deletion", "name", claim.Name)
 
-	return nil, nil
+	if value, exists := claim.GetLabels()[deletionOverrideKey]; exists && value == "true" {
+		databaseclaimlog.Info("Deletion override label found; allowing deletion", "name", claim.Name)
+		return nil, nil
+	}
+
+	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=true' to override", 
+		claim.Name, deletionOverrideKey)
 }
+

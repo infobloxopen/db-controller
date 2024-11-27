@@ -90,8 +90,7 @@ webhooks:
     apiVersions:
     - v1
     operations:
-    - CREATE
-    - UPDATE
+    - DELETE
     resources:
     - databaseclaims
   sideEffects: None
