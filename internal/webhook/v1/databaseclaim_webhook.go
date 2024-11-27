@@ -32,8 +32,8 @@ import (
 // nolint:unused
 // log is for logging in this package.
 var databaseclaimlog = logf.Log.WithName("databaseclaim-resource")
-const deletionOverrideKey = "override-deletion"
 
+const deletionOverrideKey = "override-deletion"
 
 // SetupDatabaseClaimWebhookWithManager registers the webhook for DatabaseClaim in the manager.
 func SetupDatabaseClaimWebhookWithManager(mgr ctrl.Manager) error {
@@ -41,7 +41,6 @@ func SetupDatabaseClaimWebhookWithManager(mgr ctrl.Manager) error {
 		WithValidator(&DatabaseClaimCustomValidator{}).
 		Complete()
 }
-
 
 // +kubebuilder:webhook:path=/validate-persistance-atlas-infoblox-com-v1-databaseclaim,mutating=false,failurePolicy=fail,sideEffects=None,groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=delete,versions=v1,name=vdatabaseclaim-v1.kb.io,admissionReviewVersions=v1
 
@@ -88,7 +87,6 @@ func (v *DatabaseClaimCustomValidator) ValidateDelete(ctx context.Context, obj r
 		return nil, nil
 	}
 
-	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=true' to override", 
+	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=true' to override",
 		claim.Name, deletionOverrideKey)
 }
-
