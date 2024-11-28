@@ -33,7 +33,7 @@ import (
 // log is for logging in this package.
 var databaseclaimlog = logf.Log.WithName("databaseclaim-resource")
 
-const deletionOverrideKey = "override-deletion"
+const deletionOverrideLabel = "persistance.atlas.infoblox.com/allow-deletion"
 
 // SetupDatabaseClaimWebhookWithManager registers the webhook for DatabaseClaim in the manager.
 func SetupDatabaseClaimWebhookWithManager(mgr ctrl.Manager) error {
@@ -67,11 +67,11 @@ func (v *DatabaseClaimCustomValidator) ValidateDelete(ctx context.Context, obj r
 
 	databaseclaimlog.Info("Validation for DatabaseClaim upon deletion", "name", claim.Name)
 
-	if value, exists := claim.GetLabels()[deletionOverrideKey]; exists && value == "true" {
+	if value, exists := claim.GetLabels()[deletionOverrideLabel]; exists && value == "true" {
 		databaseclaimlog.Info("Deletion override label found; allowing deletion", "name", claim.Name)
 		return nil, nil
 	}
 
 	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=true' to override",
-		claim.Name, deletionOverrideKey)
+		claim.Name, deletionOverrideLabel)
 }

@@ -26,7 +26,7 @@ var _ = Describe("DatabaseClaim Webhook", func() {
 	Context("When deleting a DatabaseClaim under Validating Webhook", func() {
 		It("Should allow deletion if the deletion override label is set to true", func() {
 			By("Setting the deletion override label")
-			obj.SetLabels(map[string]string{deletionOverrideKey: "true"})
+			obj.SetLabels(map[string]string{deletionOverrideLabel: "true"})
 
 			By("Calling ValidateDelete")
 			warnings, err := validator.ValidateDelete(ctx, obj)
@@ -49,12 +49,12 @@ var _ = Describe("DatabaseClaim Webhook", func() {
 
 			By("Validating the error message")
 			Expect(err.Error()).To(ContainSubstring("deletion is denied for DatabaseClaim"))
-			Expect(err.Error()).To(ContainSubstring(deletionOverrideKey))
+			Expect(err.Error()).To(ContainSubstring(deletionOverrideLabel))
 		})
 
 		It("Should deny deletion if the deletion override label is set to false", func() {
 			By("Setting the deletion override label to false")
-			obj.SetLabels(map[string]string{deletionOverrideKey: "false"})
+			obj.SetLabels(map[string]string{deletionOverrideLabel: "false"})
 
 			By("Calling ValidateDelete")
 			warnings, err := validator.ValidateDelete(ctx, obj)
@@ -65,7 +65,7 @@ var _ = Describe("DatabaseClaim Webhook", func() {
 
 			By("Validating the error message")
 			Expect(err.Error()).To(ContainSubstring("deletion is denied for DatabaseClaim"))
-			Expect(err.Error()).To(ContainSubstring(deletionOverrideKey))
+			Expect(err.Error()).To(ContainSubstring(deletionOverrideLabel))
 		})
 	})
 

@@ -29,7 +29,7 @@ var _ = Describe("dbproxy defaulting", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "default-db",
 				Namespace: "default",
-				Labels:    map[string]string{"override-deletion": "true"},
+				Labels:    map[string]string{"persistance.atlas.infoblox.com/allow-deletion": "true"},
 			},
 			Spec: v1.DatabaseClaimSpec{
 				SecretName: "test",
