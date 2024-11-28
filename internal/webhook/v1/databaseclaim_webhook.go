@@ -44,32 +44,17 @@ func SetupDatabaseClaimWebhookWithManager(mgr ctrl.Manager) error {
 
 // +kubebuilder:webhook:path=/validate-persistance-atlas-infoblox-com-v1-databaseclaim,mutating=false,failurePolicy=fail,sideEffects=None,groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=delete,versions=v1,name=vdatabaseclaim-v1.kb.io,admissionReviewVersions=v1
 
-type DatabaseClaimCustomValidator struct {
-	//TODO(user): Add more fields as needed for validation
-}
+type DatabaseClaimCustomValidator struct{}
 
 var _ webhook.CustomValidator = &DatabaseClaimCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	claim, ok := obj.(*persistancev1.DatabaseClaim)
-	if !ok {
-		return nil, fmt.Errorf("expected a DatabaseClaim object but got %T", obj)
-	}
-	databaseclaimlog.Info("Validation for DatabaseClaim upon creation", "name", claim.Name)
-
-	// TODO(user): fill in your validation logic upon object creation.
-
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	newClaim, ok := newObj.(*persistancev1.DatabaseClaim)
-	if !ok {
-		return nil, fmt.Errorf("expected a DatabaseClaim object for the newObj but got %T", newObj)
-	}
-	databaseclaimlog.Info("Validation for DatabaseClaim upon update", "name", newClaim.Name)
 	return nil, nil
 }
 
