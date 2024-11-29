@@ -29,10 +29,6 @@ import (
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
-// nolint:unused
-// log is for logging in this package.
-var databaseclaimlog = logf.Log.WithName("databaseclaim-resource")
-
 const deletionOverrideLabel = "persistance.atlas.infoblox.com/allow-deletion"
 
 // SetupDatabaseClaimWebhookWithManager registers the webhook for DatabaseClaim in the manager.
@@ -48,27 +44,33 @@ type DatabaseClaimCustomValidator struct{}
 
 var _ webhook.CustomValidator = &DatabaseClaimCustomValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type DatabaseClaim.
 func (v *DatabaseClaimCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	log := logf.FromContext(ctx).WithName("databaseclaim-webhook")
+
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		log.Error(err, "Unable to retrieve AdmissionRequest from context")
+	}
+	log.Info("Deletion request details", "username", req.UserInfo.Username, "groups", req.UserInfo.Groups, "uid", req.UserInfo.UID)
+
 	claim, ok := obj.(*persistancev1.DatabaseClaim)
 	if !ok {
 		return nil, fmt.Errorf("expected a DatabaseClaim object but got %T", obj)
 	}
 
-	databaseclaimlog.Info("Validation for DatabaseClaim upon deletion", "name", claim.Name)
+	log.Info("Validation for DatabaseClaim upon deletion", "name", claim.Name)
 
 	if value, exists := claim.GetLabels()[deletionOverrideLabel]; exists && value == "true" {
-		databaseclaimlog.Info("Deletion override label found; allowing deletion", "name", claim.Name)
+		log.Info("Deletion override label found; allowing deletion", "name", claim.Name)
 		return nil, nil
 	}
 

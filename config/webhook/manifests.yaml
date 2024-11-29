@@ -94,3 +94,22 @@ webhooks:
     resources:
     - databaseclaims
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-persistance-atlas-infoblox-com-v1-dbroleclaim
+  failurePolicy: Fail
+  name: vdbroleclaim-v1.kb.io
+  rules:
+  - apiGroups:
+    - persistance.atlas.infoblox.com
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - dbroleclaims
+  sideEffects: None

@@ -114,6 +114,9 @@ var _ = BeforeSuite(func() {
 	err = SetupDatabaseClaimWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = SetupDbRoleClaimWebhookWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:webhook
 
 	go func() {
