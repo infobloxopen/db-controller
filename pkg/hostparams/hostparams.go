@@ -146,9 +146,8 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	if hostParams.DBVersion == "" {
 		// If we're managing an existing database, use its version.
 		if dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource {
-			if dbClaim.Status.ActiveDB.DBVersion != "" {
-				hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
-			} else {
+			hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
+			if hostParams.DBVersion == "" {
 				hostParams.IsDefaultVersion = true
 				hostParams.DBVersion = defaultMajorVersion
 			}
