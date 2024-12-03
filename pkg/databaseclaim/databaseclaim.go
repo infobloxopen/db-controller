@@ -461,7 +461,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 
 	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username, operationalMode)
 	if err != nil {
-		logr.Error(err, "unable to update users, user credents not persisted to status object")
+		logr.Error(err, "unable to update users, user credentials not persisted to status object")
 		return err
 	}
 	if err = r.updateClientStatus(ctx, dbClaim); err != nil {
