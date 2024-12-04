@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 
 	"github.com/go-logr/logr"
 	"github.com/infobloxopen/db-controller/pkg/metrics"
@@ -211,7 +212,7 @@ func (s *validate_connection_state) String() string {
 
 func (s *create_publication_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	var (
 		err           error
@@ -229,8 +230,8 @@ func (s *create_publication_state) Execute() (State, error) {
 
 	q := `
 		SELECT EXISTS(
-			SELECT pubname 
-			FROM pg_catalog.pg_publication 
+			SELECT pubname
+			FROM pg_catalog.pg_publication
 			WHERE pubname = $1)`
 
 	// dynamically creating the table list to be included in the publication
@@ -270,16 +271,18 @@ func (s *create_publication_state) Execute() (State, error) {
 		log.Error(err, "could not query for publication name")
 		return nil, err
 	}
-	if !exists {
-		log.Info("creating publication:", "with name", DefaultPubName)
-		if _, err := sourceDBAdmin.Exec(createPub); err != nil {
-			log.Error(err, "create publication failed")
-			return nil, err
-		}
-		log.Info("publication created", "name", DefaultPubName)
-	} else {
+	if exists {
 		log.Info("publication already exists", "with name", DefaultPubName)
+		return &copy_schema_state{
+			config: s.config,
+		}, nil
 	}
+
+	if _, err := sourceDBAdmin.Exec(createPub); err != nil {
+		log.Error(err, "create publication failed")
+		return nil, err
+	}
+	log.V(1).Info("publication created", "name", DefaultPubName)
 
 	return &copy_schema_state{
 		config: s.config,
@@ -315,7 +318,7 @@ var revokeSuperUserAccess = func(DBAdmin *sql.DB, userrole string, cloud string)
 // dumping the schema, and restoring it to the target database.
 func (s *copy_schema_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	//grant rds_superuser to target db user temporarily
 	//this is required to copy schema from source to target and take ownership of the objects
@@ -336,6 +339,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 		return nil, err
 	}
 
+	// FIXME: actually use the role name, not the rotating user name
 	rolename := url.User.Username()
 	log.Info("granting super user access", "role", rolename)
 
@@ -346,49 +350,38 @@ func (s *copy_schema_state) Execute() (State, error) {
 		return nil, err
 	}
 
-	dump := NewDump(s.config.SourceDBAdminDsn)
-	dump.SetupFormat("p")
-	dump.SetPath(s.config.ExportFilePath)
-	dump.EnableVerbose()
-	dump.SetOptions([]string{
+	dump := NewDump(s.config.SourceDBAdminDsn, WithFormat("p"), WithPath(s.config.ExportFilePath), WithLogger(s.config.Log.V(1)), WithVerbose(true), WithOptions([]string{
 		"--schema-only",
 		"--no-publication",
 		"--no-subscriptions",
 		"--no-privileges",
 		"--no-owner",
 		"--exclude-schema=ib",
-	})
+	}))
 
 	dumpExec := dump.Exec(ExecOptions{StreamPrint: true})
 	if dumpExec.Error != nil {
 		return nil, dumpExec.Error.Err
 	}
-	log.Info("executed dump", "full command", dumpExec.FullCommand)
 
 	if err = dump.modifyPgDumpInfo(); err != nil {
 		log.Error(err, "failed to comment create policy")
 		return nil, err
 	}
 
-	restore := NewRestore(s.config.TargetDBUserDsn)
-	restore.EnableVerbose()
-	restore.SetPath(s.config.ExportFilePath)
-
-	restoreExec := restore.Exec(dumpExec.FileName, ExecOptions{StreamPrint: true})
-	if restoreExec.Error != nil {
-		log.Error(restoreExec.Error.Err, "restore failed")
-
-		// Attempt to drop schemas after restore failure.
-		dropResult := restore.DropSchemas()
-		if dropResult.Error != nil {
-			log.Error(dropResult.Error.Err, "failed to drop schemas")
-			return nil, dropResult.Error.Err
-		}
-
-		return nil, restoreExec.Error.Err
+	restore, err := NewRestore(s.config.TargetDBAdminDsn, s.config.TargetDBUserDsn, getParentRole(rolename), WithRestoreLogger(s.config.Log))
+	if err != nil {
+		return nil, err
 	}
+	defer restore.Close()
 
-	log.Info("executed restore", "full command", restoreExec.FullCommand)
+	dumpPath := filepath.Join(s.config.ExportFilePath, dumpExec.FileName)
+	err = restore.Exec(dumpPath, ExecOptions{StreamPrint: true})
+	if err != nil {
+		log.Error(err, "restore failed")
+		return nil, err
+	}
+	log.Info("restore_successful")
 
 	err = revokeSuperUserAccess(targetDBAdmin, rolename, s.config.Cloud)
 	if err != nil {
@@ -397,7 +390,7 @@ func (s *copy_schema_state) Execute() (State, error) {
 		return nil, err
 	}
 
-	log.Info("completed")
+	log.V(1).Info("completed")
 	return &create_subscription_state{
 		config: s.config,
 	}, nil
@@ -417,7 +410,7 @@ var getSourceDbAdminDSNForCreateSubscription = func(c *Config) string {
 
 func (s *create_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 	var exists bool
 
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -434,40 +427,42 @@ func (s *create_subscription_state) Execute() (State, error) {
 		)`
 	createSub := fmt.Sprintf(`
 		CREATE SUBSCRIPTION %s 
-		CONNECTION '%s' 
-		PUBLICATION %s 
+		CONNECTION '%s'
+		PUBLICATION %s
 		WITH (enabled=false)`, DefaultSubName,
 		getSourceDbAdminDSNForCreateSubscription(&s.config),
 		DefaultPubName)
+
+	log.V(1).Info("started subscription", "sub", createSub)
 
 	err = targetDBAdmin.QueryRow(q, DefaultSubName).Scan(&exists)
 	if err != nil {
 		log.Error(err, "could not query for subscription name", "stmt", createSub)
 		return nil, err
 	}
-	if !exists {
-		log.Info("creating subscription:", "with name", DefaultSubName)
-		if _, err := targetDBAdmin.Exec(createSub); err != nil {
-			log.Error(err, "could not create subscription")
-			return nil, err
-		}
-		log.Info("subscription created", "name", DefaultSubName)
+
+	if _, err := targetDBAdmin.Exec(createSub); err != nil {
+		log.Error(err, "could not create subscription")
+		return nil, err
 	}
-	log.Info("completed")
+
+	log.V(1).Info("completed", "subscription_name", DefaultSubName)
 	return &enable_subscription_state{
 		config: s.config,
 	}, nil
 }
+
 func (s *create_subscription_state) Id() StateEnum {
 	return S_CreateSubscription
 }
+
 func (s *create_subscription_state) String() string {
 	return S_CreateSubscription.String()
 }
 
 func (s *enable_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
 	if err != nil {
@@ -501,7 +496,7 @@ func (s *enable_subscription_state) Execute() (State, error) {
 		return nil, fmt.Errorf("unable to enable subscription. subscription not found - %s", DefaultSubName)
 	}
 
-	log.Info("completed")
+	log.V(1).Info("completed")
 
 	return &cut_over_readiness_check_state{
 		config: s.config,
@@ -516,7 +511,7 @@ func (s *enable_subscription_state) String() string {
 
 func (s *cut_over_readiness_check_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 	var exists bool
 	var count int
 
@@ -537,23 +532,24 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 	pubQuery := fmt.Sprintf(`
 		SELECT EXISTS
 		(
-			SELECT 1 
-			FROM pg_replication_slots 
-			WHERE slot_type = 'logical' 
+			SELECT 1
+			FROM pg_replication_slots
+			WHERE slot_type = 'logical'
 			AND slot_name like '%s_%%'
 			AND temporary = 't'
 		)`, DefaultPubName)
+
 	// relExistsQuery := fmt.Sprintf(`
-	// 	SELECT EXISTS
-	// 	(
-	// 		SELECT 1
-	// 		FROM pg_subscription s, pg_subscription_rel sr
-	// 		WHERE s.oid = sr.srsubid
-	// 		AND s.subname = '%s'
-	// 	)`, DefaultSubName)
+	//      SELECT EXISTS
+	//      (
+	//              SELECT 1
+	//              FROM pg_subscription s, pg_subscription_rel sr
+	//              WHERE s.oid = sr.srsubid
+	//              AND s.subname = '%s'
+	//      )`, DefaultSubName)
 
 	subQuery := fmt.Sprintf(`
-		SELECT count(srrelid) 
+		SELECT count(srrelid)
 		FROM pg_subscription s, pg_subscription_rel sr
 		WHERE s.oid = sr.srsubid
 		AND sr.srsubstate not in ('r', 's')
@@ -580,6 +576,13 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 	// 	return retry(s.config), nil
 	// }
 
+	state, err := getSubscriptionStatus(targetDBAdmin, DefaultSubName)
+	if err != nil {
+		log.Error(err, "could not get subscription status")
+	} else {
+		log.Info("subscription_status", "state", state)
+	}
+
 	err = targetDBAdmin.QueryRow(subQuery).Scan(&count)
 	if err != nil {
 		log.Error(err, "could not query for subscription for completion")
@@ -587,9 +590,10 @@ func (s *cut_over_readiness_check_state) Execute() (State, error) {
 	}
 	if count > 0 {
 		log.Info("migration not complete in target - retry check in a few seconds")
+
 		return retry(s.config), nil
 	}
-	log.Info("completed")
+	log.V(1).Info("completed")
 	return &reset_target_sequence_state{
 		config: s.config,
 	}, nil
@@ -603,7 +607,7 @@ func (s *cut_over_readiness_check_state) String() string {
 
 func (s *reset_target_sequence_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	type seqCount struct {
 		seqName string
@@ -660,7 +664,7 @@ func (s *reset_target_sequence_state) Execute() (State, error) {
 			return nil, err
 		}
 	}
-	log.Info("completed")
+	log.V(1).Info("completed")
 	return &reroute_target_secret_state{
 		config: s.config,
 	}, nil
@@ -699,7 +703,7 @@ func (s *wait_to_disable_source_state) String() string {
 
 func (s *disable_source_access_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	sourceDBAdmin, err := getDB(s.config.SourceDBAdminDsn, nil)
 	if err != nil {
@@ -727,7 +731,7 @@ func (s *disable_source_access_state) Execute() (State, error) {
 		log.Error(err, "failed revoking access for source db - "+rolename)
 		return nil, err
 	}
-	log.Info("completed")
+	log.V(1).Info("completed")
 	return &validate_migration_status_state{
 		config: s.config,
 	}, nil
@@ -742,7 +746,7 @@ func (s *disable_source_access_state) String() string {
 
 func (s *validate_migration_status_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	var (
 		sourceTableName  string
@@ -821,7 +825,7 @@ func (s *validate_migration_status_state) Execute() (State, error) {
 		return nil, err
 	}
 	if deuce {
-		log.Info("completed")
+		log.V(1).Info("completed")
 		return &disable_subscription_state{
 			config: s.config,
 		}, nil
@@ -842,7 +846,7 @@ func (s *validate_migration_status_state) String() string {
 
 func (s *disable_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	var exists bool
 
@@ -873,7 +877,7 @@ func (s *disable_subscription_state) Execute() (State, error) {
 		}, nil
 	}
 
-	log.Info("completed")
+	log.V(1).Info("completed")
 
 	return &delete_subscription_state{
 		config: s.config,
@@ -888,7 +892,7 @@ func (s *disable_subscription_state) String() string {
 
 func (s *delete_subscription_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	var exists bool
 	targetDBAdmin, err := getDB(s.config.TargetDBAdminDsn, nil)
@@ -918,7 +922,7 @@ func (s *delete_subscription_state) Execute() (State, error) {
 		}
 		log.Info("Subscription deleted")
 	}
-	log.Info("completed")
+	log.V(1).Info("completed")
 	return &delete_publication_state{
 		config: s.config,
 	}, nil
@@ -932,7 +936,7 @@ func (s *delete_subscription_state) String() string {
 
 func (s *delete_publication_state) Execute() (State, error) {
 	log := s.config.Log.WithValues("state", s.String())
-	log.Info("started")
+	log.V(1).Info("started")
 
 	var exists bool
 
@@ -965,7 +969,7 @@ func (s *delete_publication_state) Execute() (State, error) {
 		log.Info("publication not found. ignoring and moving on")
 	}
 
-	log.Info("completed")
+	log.V(1).Info("completed")
 	return &completed_state{
 		config: s.config,
 	}, nil

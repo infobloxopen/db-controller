@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -149,4 +150,24 @@ func SanitizeDSN(dsn string) string {
 		return ""
 	}
 	return u.Redacted()
+}
+
+// treamExecOutput reads the output of a command and returns it as a string.
+func logStdouterr(out io.ReadCloser, logger logr.Logger, lastLine *string) {
+	scanner := bufio.NewScanner(out)
+	for scanner.Scan() {
+		line := scanner.Text()
+		logger.Info(line)
+		*lastLine = line
+	}
+	if err := scanner.Err(); err != nil {
+		logger.Error(err, "Error reading command output")
+	}
+}
+
+// parseLastLine attempts to normalize lines emitted by pgctl
+// before: sql:/tmp/pub_1731361094.sql:36: ERROR:  function "calculate_user_total" already exists with same argument types
+// after: ERROR:  function "calculate_user_total" already exists with same argument types
+func parseLastLine(sqlFilePath, line string) error {
+	return fmt.Errorf(strings.TrimPrefix(line, fmt.Sprintf("psql:%s:", sqlFilePath)))
 }

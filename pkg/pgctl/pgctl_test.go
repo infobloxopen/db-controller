@@ -14,6 +14,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	"github.com/lib/pq"
+	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
@@ -42,13 +43,14 @@ var logger logr.Logger
 
 func TestMain(m *testing.M) {
 	//need to do this trick to avoid os.Exit bypassing defer logic
-	//with this silly setup, defer is called in realTestMain before the exit is called in this func
+	//with this sill setup, defer is called in realTestMain before the exit is called in this func
 	os.Exit(setupAndRunTests(m))
 }
 
 func setupAndRunTests(m *testing.M) int {
 	opts := zap.Options{
 		Development: true,
+		Level:       zapcore.InfoLevel,
 	}
 	logger = zap.New(zap.UseFlagOptions(&opts))
 
@@ -61,7 +63,7 @@ func setupAndRunTests(m *testing.M) int {
 	// migration.
 
 	// FIXME: randomly generate network name
-	_, sourceDSN, sourceClose := dockerdb.Run(dockerdb.Config{
+	_, sourceDSN, sourceClose := dockerdb.Run(logger, dockerdb.Config{
 		HostName:  "pubHost",
 		DockerTag: sourceVersion,
 		Database:  "pub",
@@ -75,7 +77,7 @@ func setupAndRunTests(m *testing.M) int {
 		panic(err)
 	}
 
-	_, targetDSN, targetClose := dockerdb.Run(dockerdb.Config{
+	_, targetDSN, targetClose := dockerdb.Run(logger, dockerdb.Config{
 		HostName:  "subHost",
 		DockerTag: targetVersion,
 		Database:  "sub",
@@ -103,7 +105,7 @@ func setupAndRunTests(m *testing.M) int {
 	// Set up source and target databases for unit testing each step of the
 	// migration.
 
-	_, dataTestSourceAdminDSN, dataTestSourceClose := dockerdb.Run(dockerdb.Config{
+	_, dataTestSourceAdminDSN, dataTestSourceClose := dockerdb.Run(logger, dockerdb.Config{
 		HostName:  "dataTestSourceHost",
 		DockerTag: sourceVersion,
 		Database:  "dataTestSource",
@@ -117,7 +119,7 @@ func setupAndRunTests(m *testing.M) int {
 		panic(err)
 	}
 
-	_, dataTestTargetAdminDSN, dataTestTargetClose := dockerdb.Run(dockerdb.Config{
+	_, dataTestTargetAdminDSN, dataTestTargetClose := dockerdb.Run(logger, dockerdb.Config{
 		HostName:  "dataTestTargetHost",
 		DockerTag: targetVersion,
 		Database:  "dataTestTarget",
@@ -144,11 +146,11 @@ func setupAndRunTests(m *testing.M) int {
 	// -----------------------------------------------------------------------
 	// Set up a database for testing the drop schema functionality.
 
-	_, dropSchemaDSN, dropSchemaClose := dockerdb.Run(dockerdb.Config{
+	_, dropSchemaDSN, dropSchemaClose := dockerdb.Run(logger, dockerdb.Config{
 		HostName:  "dropSchemaHost",
 		DockerTag: targetVersion,
 		Database:  "sub",
-		Username:  "dropSchemaAdmin",
+		Username:  "dropschemaadmin",
 		Password:  "dropSchemaSecret",
 		Network:   networkName,
 	})

@@ -33,10 +33,11 @@ type reconciler struct {
 var viperObj = viper.New()
 
 func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	logger := zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true))
+	logf.SetLogger(logger)
 	RegisterFailHandler(Fail)
 
-	_, dsn, close := dockerdb.Run(dockerdb.Config{
+	_, dsn, close := dockerdb.Run(logger, dockerdb.Config{
 		Username: "mainUser",
 		Password: "masterpassword",
 		Database: "postgres",
@@ -144,10 +145,11 @@ func TestDBRoleClaimController_CreateSchemasAndRoles(t *testing.T) {
 }
 
 func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	logger := zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true))
+	logf.SetLogger(logger)
 	RegisterFailHandler(Fail)
 
-	_, dsn, close := dockerdb.Run(dockerdb.Config{
+	_, dsn, close := dockerdb.Run(logger, dockerdb.Config{
 		Username: "mainUser",
 		Password: "masterpassword",
 		Database: "postgres",
@@ -248,10 +250,11 @@ func TestDBRoleClaimController_ExistingSchemaRoleAndUser(t *testing.T) {
 }
 
 func TestDBRoleClaimController_RevokeRolesAndAssignNew(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	logger := zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true))
+	logf.SetLogger(logger)
 	RegisterFailHandler(Fail)
 
-	_, dsn, close := dockerdb.Run(dockerdb.Config{
+	_, dsn, close := dockerdb.Run(logger, dockerdb.Config{
 		Username: "mainUser",
 		Password: "masterpassword",
 		Database: "postgres",

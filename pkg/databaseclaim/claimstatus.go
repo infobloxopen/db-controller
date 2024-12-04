@@ -23,7 +23,7 @@ func (r *DatabaseClaimReconciler) manageError(ctx context.Context, dbClaim *v1.D
 	// Class of errors that should stop the reconciliation loop
 	// but not cause a status change on the CR
 	if errors.Is(inErr, ErrDoNotUpdateStatus) {
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: r.getPasswordRotationTime()}, nil
 	}
 	return manageError(ctx, r.Client, dbClaim, inErr)
 }

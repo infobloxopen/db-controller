@@ -41,14 +41,14 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/pgctl"
 )
 
-var _ = Describe("claim migrate", func() {
+var _ = Describe("Migrate", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 
 	var (
 		ctxLogger context.Context
 		cancel    func()
-		success   = ctrl.Result{Requeue: false, RequeueAfter: 60}
+		success   = ctrl.Result{Requeue: false, RequeueAfter: 65 * time.Second}
 	)
 
 	BeforeEach(func() {
@@ -93,12 +93,11 @@ var _ = Describe("claim migrate", func() {
 		// 	Namespace: "default",
 		// }
 
-		claim := &persistancev1.DatabaseClaim{}
-
 		kctx := context.Background()
 
 		BeforeEach(func() {
 
+			claim := &persistancev1.DatabaseClaim{}
 			By("ensuring the resource does not exist")
 			Expect(k8sClient.Get(kctx, typeNamespacedName, claim)).To(HaveOccurred())
 
@@ -119,7 +118,7 @@ var _ = Describe("claim migrate", func() {
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
 					Class:                 ptr.To(""),
-					DatabaseName:          "postgres",
+					DatabaseName:          "sample_app",
 					SecretName:            claimSecretName,
 					EnableSuperUser:       ptr.To(false),
 					EnableReplicationRole: ptr.To(false),
@@ -128,6 +127,7 @@ var _ = Describe("claim migrate", func() {
 					SourceDataFrom: &persistancev1.SourceDataFrom{
 						Type: "database",
 						Database: &persistancev1.Database{
+							DSN: testDSN,
 							SecretRef: &persistancev1.SecretRef{
 								Name:      sourceSecretName,
 								Namespace: "default",
@@ -190,10 +190,12 @@ var _ = Describe("claim migrate", func() {
 
 			_, err := controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
+			var claim persistancev1.DatabaseClaim
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &claim)).NotTo(HaveOccurred())
 			Expect(claim.Status.Error).To(Equal(""))
 			By("Ensuring the active db connection info is set")
 			Eventually(func() *persistancev1.DatabaseClaimConnectionInfo {
-				Expect(k8sClient.Get(ctxLogger, typeNamespacedName, claim)).NotTo(HaveOccurred())
+				Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &claim)).NotTo(HaveOccurred())
 				return claim.Status.ActiveDB.ConnectionInfo
 			}).ShouldNot(BeNil())
 
@@ -223,16 +225,18 @@ var _ = Describe("claim migrate", func() {
 			Expect(dsn.Redacted()).To(Equal(redacted))
 		})
 
-		It("Migrate", func() {
+		It("Populate a new database", func() {
 
 			Expect(controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})).To(Equal(success))
 			var dbc persistancev1.DatabaseClaim
 			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
-			Expect(claim.Status.Error).To(Equal(""))
+			Expect(dbc.Status.Error).To(Equal(""))
 			By("Ensuring the active db connection info is set")
+			Expect(controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})).To(Equal(success))
+
 			Eventually(func() *persistancev1.DatabaseClaimConnectionInfo {
 				Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
-				return claim.Status.ActiveDB.ConnectionInfo
+				return dbc.Status.ActiveDB.ConnectionInfo
 			}).ShouldNot(BeNil())
 
 			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, &dbc)
@@ -242,7 +246,7 @@ var _ = Describe("claim migrate", func() {
 
 			By(fmt.Sprintf("Mocking a RDS pod to look like crossplane set it up: %s", fakeCPSecretName))
 			fakeCli, fakeDSN, fakeCancel := dockerdb.MockRDS(GinkgoT(), ctxLogger, k8sClient, fakeCPSecretName, "migrate", dbc.Spec.DatabaseName)
-			DeferCleanup(fakeCancel)
+			defer fakeCancel()
 
 			fakeCPSecret := corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -269,7 +273,7 @@ var _ = Describe("claim migrate", func() {
 			By("Check source DSN looks roughly correct")
 			activeDB := dbc.Status.ActiveDB
 			Expect(activeDB.ConnectionInfo).NotTo(BeNil())
-			compareDSN := strings.Replace(testDSN, "//postgres:postgres", fmt.Sprintf("//%s_b:", migratedowner), 1)
+			compareDSN := strings.Replace(testDSN, "//postgres:postgres", fmt.Sprintf("//%s_a:", migratedowner), 1)
 			Expect(activeDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
 
 			By("Check target DSN looks roughly correct")
@@ -282,28 +286,18 @@ var _ = Describe("claim migrate", func() {
 			var tempCreds corev1.Secret
 			// temp-migrate-dbclaim-creds
 			Expect(k8sClient.Get(ctxLogger, types.NamespacedName{Name: "temp-" + claimSecretName, Namespace: "default"}, &tempCreds)).NotTo(HaveOccurred())
-			for k, v := range tempCreds.Data {
-				logger.Info("tempcreds", k, string(v))
-			}
 
-			By("CR reconciles but must be requeued to perform migration, reconcile manually for test")
-			res, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).To(BeNil())
-			Expect(res.Requeue).To(BeFalse())
-			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
-			Expect(dbc.Status.Error).To(Equal(""))
+			By("Requeue for as long as Controller requests it")
+			Eventually(func() reconcile.Result {
+				res, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+				Expect(err).To(BeNil())
+				return res
+			}).Should(Equal(success))
 
-			By("Waiting to disable source, reconcile manually again")
-			res, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).To(BeNil())
-			Expect(res.RequeueAfter).To(Equal(time.Duration(60 * time.Second)))
-			By("Verify migration is complete on this reconcile")
-			res, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).To(BeNil())
-			Expect(res.Requeue).To(BeFalse())
 			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
 			Expect(dbc.Status.Error).To(Equal(""))
 			Expect(dbc.Status.MigrationState).To(Equal(pgctl.S_Completed.String()))
+
 			activeDB = dbc.Status.ActiveDB
 			Expect(activeDB.ConnectionInfo).NotTo(BeNil())
 			Expect(activeDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
@@ -313,6 +307,96 @@ var _ = Describe("claim migrate", func() {
 			var owner string
 			Expect(row.Scan(&owner)).NotTo(HaveOccurred())
 			Expect(owner).To(Equal(migratedowner))
+
+		})
+
+		It("Existing schema", func() {
+
+			Expect(controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})).To(Equal(success))
+			var dbc persistancev1.DatabaseClaim
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+			Expect(dbc.Status.Error).To(Equal(""))
+			By("Ensuring the active db connection info is set")
+			Eventually(func() *persistancev1.DatabaseClaimConnectionInfo {
+				Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+				return dbc.Status.ActiveDB.ConnectionInfo
+			}).ShouldNot(BeNil())
+
+			oldDB, err := url.Parse(testDSN)
+			Expect(err).NotTo(HaveOccurred())
+			aConn := dbc.Status.ActiveDB.ConnectionInfo
+			Expect(aConn.Port).To(Equal(oldDB.Port()))
+
+			logger.Info("what", "status", dbc.Status.ActiveDB.ConnectionInfo.Uri())
+
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, &dbc)
+			Expect(err).ToNot(HaveOccurred())
+
+			fakeCPSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+
+			By(fmt.Sprintf("Mocking a RDS pod to look like crossplane set it up: %s", fakeCPSecretName))
+			fakeCli, fakeDSN, fakeCancel := dockerdb.MockRDS(GinkgoT(), ctxLogger, k8sClient, fakeCPSecretName, "migrate", dbc.Spec.DatabaseName)
+			defer fakeCancel()
+
+			dockerdb.MustSQL(ctxLogger, fakeCli, "testdata/mock.sql")
+
+			fakeCPSecret := corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fakeCPSecretName,
+					Namespace: "default",
+				},
+			}
+			nname := types.NamespacedName{
+				Name:      fakeCPSecretName,
+				Namespace: "default",
+			}
+			Eventually(k8sClient.Get(ctxLogger, nname, &fakeCPSecret)).Should(Succeed())
+			logger.Info("debugsecret", "rdssecret", fakeCPSecret)
+
+			By("Disabling UseExistingSource")
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+			dbc.Spec.UseExistingSource = ptr.To(false)
+			Expect(k8sClient.Update(ctxLogger, &dbc)).NotTo(HaveOccurred())
+
+			res, err := controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).To(BeNil())
+			Expect(dbc.Status.Error).To(Equal(""))
+			Expect(res.Requeue).To(BeTrue())
+
+			By("Check DSNs looks roughly correct")
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+			activeDB := dbc.Status.ActiveDB
+			Expect(activeDB.ConnectionInfo).NotTo(BeNil())
+			compareDSN := strings.Replace(testDSN, "//postgres:postgres", fmt.Sprintf("//%s_a:", migratedowner), 1)
+			Expect(activeDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
+
+			newDB := dbc.Status.NewDB
+			compareDSN = strings.Replace(fakeDSN, "//migrate:postgres", fmt.Sprintf("//%s_a:", migratedowner), 1)
+
+			Expect(newDB.ConnectionInfo).NotTo(BeNil())
+			Expect(newDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
+
+			By("Ensuring migration is in progress")
+			Expect(dbc.Status.MigrationState).To(Equal(pgctl.S_MigrationInProgress.String()))
+			var tempCreds corev1.Secret
+			// temp-migrate-dbclaim-creds
+			Expect(k8sClient.Get(ctxLogger, types.NamespacedName{Name: "temp-" + claimSecretName, Namespace: "default"}, &tempCreds)).NotTo(HaveOccurred())
+
+			By("Requeue for as long as Controller requests it")
+			Eventually(func() reconcile.Result {
+
+				res, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+				Expect(err).To(BeNil())
+				return res
+			}).Should(Equal(success))
+
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+			Expect(dbc.Status.Error).To(Equal(""))
+
+			Expect(dbc.Status.MigrationState).To(Equal(pgctl.S_Completed.String()))
+			activeDB = dbc.Status.ActiveDB
+			Expect(activeDB.ConnectionInfo).NotTo(BeNil())
+			Expect(activeDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
 
 		})
 

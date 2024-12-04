@@ -1,12 +1,15 @@
 package pgctl
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 var (
@@ -21,11 +24,10 @@ type Results struct {
 }
 
 type Result struct {
-	Mine        string
-	FileName    string
-	Output      string
-	Error       *ResultError
-	FullCommand string
+	Mine     string
+	FileName string
+	Output   string
+	Error    *ResultError
 }
 
 type ResultError struct {
@@ -41,25 +43,49 @@ type Dump struct {
 	Format   *string
 	Options  []string
 	fileName string
+	logger   logr.Logger
 }
 
-func NewDump(DsnUri string) *Dump {
-	return &Dump{Options: PGDumpOpts, DsnUri: DsnUri}
+type DumpOptions = func(x *Dump)
+
+// NewDump creates a new Dump instance with the provided configuration. DSN must be in URI format.
+func NewDump(DSN string, options ...DumpOptions) *Dump {
+	d := &Dump{Options: PGDumpOpts, DsnUri: DSN}
+	for _, option := range options {
+		option(d)
+	}
+	return d
 }
 
 func (x *Dump) Exec(opts ExecOptions) Result {
 	result := Result{Mine: "application/x-tar"}
 	result.FileName = x.GetFileName()
 	options := append(x.dumpOptions(), fmt.Sprintf(`-f%s%v`, x.Path, result.FileName))
-	result.FullCommand = strings.Join(options, " ")
+
+	// TODO: santitize dsn
+	x.logger.Info("pgdump_database", "full_command", PGDump+" "+strings.Join(options, " "))
+
 	cmd := exec.Command(PGDump, options...)
-	// cmd.Env = append(os.Environ(), x.EnvPassword)
-	stderrIn, _ := cmd.StderrPipe()
+	stderrIn, err := cmd.StderrPipe()
+	if err != nil {
+		result.Error = &ResultError{Err: err}
+		return result
+	}
+
 	go func() {
-		result.Output = streamExecOutput(stderrIn, opts)
+
+		scanner := bufio.NewScanner(stderrIn)
+		for scanner.Scan() {
+			x.logger.Info(scanner.Text())
+		}
+		if err := scanner.Err(); err != nil {
+			x.logger.Error(err, "Error reading command output")
+		}
+
 	}()
+
 	cmd.Start()
-	err := cmd.Wait()
+	err = cmd.Wait()
 	if exitError, ok := err.(*exec.ExitError); ok {
 		result.Error = &ResultError{Err: err, ExitCode: exitError.ExitCode(), CmdOutput: result.Output}
 	}
@@ -67,10 +93,6 @@ func (x *Dump) Exec(opts ExecOptions) Result {
 }
 func (x *Dump) ResetOptions() {
 	x.Options = []string{}
-}
-
-func (x *Dump) EnableVerbose() {
-	x.Verbose = true
 }
 
 func (x *Dump) SetFileName(filename string) {
@@ -85,12 +107,34 @@ func (x *Dump) GetFileName() string {
 	return x.fileName
 }
 
-func (x *Dump) SetupFormat(f string) {
-	x.Format = &f
+func WithFormat(f string) func(x *Dump) {
+	return func(x *Dump) {
+		x.Format = &f
+	}
 }
 
-func (x *Dump) SetPath(path string) {
-	x.Path = path
+func WithPath(path string) func(x *Dump) {
+	return func(x *Dump) {
+		x.Path = path
+	}
+}
+
+func WithLogger(logger logr.Logger) func(x *Dump) {
+	return func(x *Dump) {
+		x.logger = logger.WithName("pg_dump")
+	}
+}
+
+func WithVerbose(verbose bool) func(x *Dump) {
+	return func(x *Dump) {
+		x.Verbose = verbose
+	}
+}
+
+func WithOptions(o []string) func(x *Dump) {
+	return func(x *Dump) {
+		x.Options = o
+	}
 }
 
 func (x *Dump) newFileName() string {
@@ -112,9 +156,6 @@ func (x *Dump) dumpOptions() []string {
 	return options
 }
 
-func (x *Dump) SetOptions(o []string) {
-	x.Options = o
-}
 func (x *Dump) GetOptions() []string {
 	return x.Options
 }
