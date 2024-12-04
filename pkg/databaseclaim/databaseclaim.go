@@ -19,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/auth"
@@ -146,12 +145,9 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if err := validateDBClaim(&dbClaim); err != nil {
-		res, err := r.manageError(ctx, &dbClaim, err)
-		if dbClaim.Status.Error != "" {
-			metrics.ErrorStateClaims.Inc()
-		}
-		// TerminalError, do not requeue
-		return res, reconcile.TerminalError(err)
+		// Validation is weak until all apps are moved to new API
+		logr.Error(err, "dbclaim_failed_validation")
+		// FIXME: mark the claim status as error
 	}
 
 	if dbClaim.Spec.Class == nil {
