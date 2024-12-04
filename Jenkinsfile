@@ -31,6 +31,7 @@ pipeline {
         anyOf {
           branch 'main'
           branch 'hotfix/*'
+          branch 'release/*'
         }
         expression { !isPrBuild() }
       }
