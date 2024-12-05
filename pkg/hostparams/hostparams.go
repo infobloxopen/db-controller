@@ -144,10 +144,11 @@ func New(config *viper.Viper, dbClaim *v1.DatabaseClaim) (*HostParams, error) {
 	}
 
 	if hostParams.DBVersion == "" {
-		if dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource {
+		if dbClaim.Status.ActiveDB.DBVersion != "" {
+			//for an existing (Status.ActiveDB NOT empty) it picks up the Status DBVersion, so no update is triggered.
 			hostParams.DBVersion = dbClaim.Status.ActiveDB.DBVersion
-		}
-		if hostParams.DBVersion == "" {
+		} else {
+			//for a new Claim (Status.ActiveDB empty) it assumes 15 only
 			hostParams.IsDefaultVersion = true
 			hostParams.DBVersion = defaultMajorVersion
 		}
