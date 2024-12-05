@@ -87,7 +87,19 @@ func TestUpdateSecret(t *testing.T) {
 		Data: make(map[string][]byte),
 	}
 
-	err := dbClaimReconciler.updateSecret(ctx, "dsn", "dsnUri", "ro_dsnUri", &claimConnInfo, &secret)
+	dbClaim := v1.DatabaseClaim{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dbClaim",
+			Namespace: "testNamespace",
+		},
+		Spec: v1.DatabaseClaimSpec{
+			SecretName: "create-master-secret",
+		},
+		Status: v1.DatabaseClaimStatus{},
+	}
+
+	err := dbClaimReconciler.updateSecret(ctx, &dbClaim, "dsn", "dsnUri", "ro_dsnUri", &claimConnInfo, &secret)
 
 	Expect(secret.Data[v1.DSNKey]).To(Equal([]byte("dsn")))
 	Expect(secret.Data[v1.DSNURIKey]).To(Equal([]byte("dsnUri")))
