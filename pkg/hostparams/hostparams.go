@@ -25,7 +25,7 @@ var (
 	// These values are purposely moved from the config file to the code to avoid accidental changes.
 	defaultShape         = "db.t4g.medium"
 	defaultEngineVersion = "15.3"
-	defaultMajorVersion  = "15"
+	defaultMajorVersion  = "15.3"
 	defaultEngine        = v1.Postgres
 )
 
