@@ -1,7 +1,6 @@
 package hostparams
 
 import (
-	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -165,7 +164,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "no-change-with-default", want: false,
 			args: args{
-				config:  NewConfig(testConfig),
+				config:  testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 				activeHostParams: &HostParams{Type: "postgres",
 					Shape:        "db.t4g.medium",
@@ -177,7 +176,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "shape-different", want: true,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					Shape:        "db.t4g.medium",
@@ -195,7 +194,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "shape-different-default-shape", want: false,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					MinStorageGB: 20,
@@ -212,7 +211,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "version-different", want: true,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					Shape:        "db.t4g.medium",
@@ -230,7 +229,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "version-different-default-version", want: false,
 			args: args{
-				config:  NewConfig(testConfig),
+				config:  testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 				activeHostParams: &HostParams{Type: "postgres",
 					Shape:         "db.t4g.medium",
@@ -243,7 +242,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "engine-different", want: true,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:  "aurora-postgresql",
 					Shape: "db.t4g.different",
@@ -259,7 +258,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "storage-different-postgres", want: false,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					Shape:        "db.t4g.medium",
@@ -276,7 +275,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "storage-different-aurora", want: false,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					Shape:        "db.t4g.medium",
@@ -293,7 +292,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "storage-different-aurora-with-io-shape", want: false,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					Shape:        "db.t4g.medium!io1",
@@ -310,7 +309,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "dbversion-empty-must-read-status.dbversion", want: false,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{
 					Spec: persistancev1.DatabaseClaimSpec{
 						Type:         "aurora-postgresql",
@@ -334,7 +333,7 @@ func TestHostParams_IsUpgradeRequested(t *testing.T) {
 		{
 			name: "dbversion-empty-must-read-status.dbversion", want: false,
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{
 					Spec: persistancev1.DatabaseClaimSpec{
 						Type:         "aurora-postgresql",
@@ -457,15 +456,6 @@ func TestGetActiveHostParams(t *testing.T) {
 	}
 }
 
-var testConfig = []byte(`defaultMasterPort: 5432
-defaultMasterUsername: root
-defaultSslMode: require
-defaultMinStorageGB: 42
-sample-connection:
-storageType: gp3
-defaultDeletionPolicy: orphan
-`)
-
 func TestNew(t *testing.T) {
 	type args struct {
 		config  *viper.Viper
@@ -480,7 +470,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "use_no_default_ok",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
@@ -500,7 +490,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "aurora_with_io_ok",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
@@ -520,7 +510,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "postgres_ok",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -540,7 +530,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "aurora_with_io_not_ok",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
@@ -555,7 +545,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "use_default_ok",
 			args: args{
-				config:  NewConfig(testConfig),
+				config:  testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{}},
 			},
 			want: &HostParams{Type: "postgres",
@@ -569,7 +559,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "maxStorage-less",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -583,7 +573,7 @@ func TestNew(t *testing.T) {
 		}, {
 			name: "maxStorage-reduced",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -603,7 +593,7 @@ func TestNew(t *testing.T) {
 		}, {
 			name: "maxStorage_increased",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -629,7 +619,7 @@ func TestNew(t *testing.T) {
 		}, {
 			name: "maxStorage-equel-minStorage",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -650,7 +640,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "maxStorage-not-specified-freash-dbc",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -678,7 +668,7 @@ func TestNew(t *testing.T) {
 		{
 			name: "maxStorage-not-specified-after-enabled",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "postgres",
 					DBVersion:    "12.11",
@@ -722,7 +712,7 @@ func TestDeletionPolicy(t *testing.T) {
 		{
 			name: "test_default_deletion_policy",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:         "aurora-postgresql",
 					DBVersion:    "12.11",
@@ -735,7 +725,7 @@ func TestDeletionPolicy(t *testing.T) {
 		{
 			name: "test_delete_deletion_policy",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:           "aurora-postgresql",
 					DBVersion:      "12.11",
@@ -749,7 +739,7 @@ func TestDeletionPolicy(t *testing.T) {
 		{
 			name: "test_orphan_deletion_policy",
 			args: args{
-				config: NewConfig(testConfig),
+				config: testViper,
 				dbClaim: &persistancev1.DatabaseClaim{Spec: persistancev1.DatabaseClaimSpec{
 					Type:           "postgres",
 					DBVersion:      "12.11",
@@ -792,10 +782,68 @@ func TestDBVersions(t *testing.T) {
 
 }
 
-func NewConfig(in []byte) *viper.Viper {
-	c := viper.NewWithOptions(viper.KeyDelimiter(":"))
-	c.SetConfigType("yaml")
-	c.ReadConfig(bytes.NewBuffer(in))
+var testViper *viper.Viper
 
-	return c
+func init() {
+	testViper = viper.NewWithOptions(viper.KeyDelimiter(":"))
+	testViper.SetConfigType("yaml")
+	testViper.ReadConfig(strings.NewReader(`
+defaultMasterPort: 5432
+defaultMasterUsername: root
+defaultSslMode: require
+defaultMinStorageGB: 42
+sample-connection:
+storageType: gp3
+defaultDeletionPolicy: orphan
+`))
+
+}
+
+func TestNew_dbversion(t *testing.T) {
+
+	var tests = []struct {
+		name    string
+		claim   *persistancev1.DatabaseClaim
+		want    *HostParams
+		wantErr bool
+	}{
+		{
+			name: "ctrl_default",
+			claim: &persistancev1.DatabaseClaim{
+				Status: persistancev1.DatabaseClaimStatus{
+					ActiveDB: persistancev1.Status{},
+				},
+			},
+			want: &HostParams{
+				DBVersion: defaultMajorVersion,
+			},
+		},
+		{
+			name: "ctrl_default",
+			claim: &persistancev1.DatabaseClaim{
+				Status: persistancev1.DatabaseClaimStatus{
+					ActiveDB: persistancev1.Status{
+						DBVersion: "12.11",
+					},
+				},
+			},
+			want: &HostParams{
+				DBVersion: "12.11",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := New(testViper, tt.claim)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if got.DBVersion != tt.want.DBVersion {
+				t.Errorf("DBVersion = %v, want %v", got.DBVersion, tt.want.DBVersion)
+			}
+		})
+	}
+
 }
