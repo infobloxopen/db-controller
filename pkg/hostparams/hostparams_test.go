@@ -808,7 +808,7 @@ func TestNew_dbversion(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "ctrl_default",
+			name: "default_version",
 			claim: &persistancev1.DatabaseClaim{
 				Status: persistancev1.DatabaseClaimStatus{
 					ActiveDB: persistancev1.Status{},
@@ -819,7 +819,7 @@ func TestNew_dbversion(t *testing.T) {
 			},
 		},
 		{
-			name: "ctrl_default",
+			name: "implied_version",
 			claim: &persistancev1.DatabaseClaim{
 				Status: persistancev1.DatabaseClaimStatus{
 					ActiveDB: persistancev1.Status{
@@ -829,6 +829,33 @@ func TestNew_dbversion(t *testing.T) {
 			},
 			want: &HostParams{
 				DBVersion: "12.11",
+			},
+		},
+		{
+			name: "specified_version",
+			claim: &persistancev1.DatabaseClaim{
+				Spec: persistancev1.DatabaseClaimSpec{
+					DBVersion: "12.11",
+				},
+			},
+			want: &HostParams{
+				DBVersion: "12.11",
+			},
+		},
+		{
+			name: "new_version_to_migrate_to",
+			claim: &persistancev1.DatabaseClaim{
+				Spec: persistancev1.DatabaseClaimSpec{
+					DBVersion: "16",
+				},
+				Status: persistancev1.DatabaseClaimStatus{
+					ActiveDB: persistancev1.Status{
+						DBVersion: "12.11",
+					},
+				},
+			},
+			want: &HostParams{
+				DBVersion: "16",
 			},
 		},
 	}
