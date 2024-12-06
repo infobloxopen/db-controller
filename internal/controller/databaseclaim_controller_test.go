@@ -191,5 +191,62 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 		})
 
+		It("Should propagate labels from DatabaseClaim to DBInstance", func() {
+			By("Updating CR with labels")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+
+			resource.Labels = map[string]string{
+				"app.kubernetes.io/component": "database",
+				"app.kubernetes.io/instance":  "test-instance",
+				"app.kubernetes.io/name":      "test-name",
+			}
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			var instance crossplaneaws.DBInstance
+			viper := controllerReconciler.Config.Viper
+			hostParams, err := hostparams.New(viper, resource)
+			Expect(err).ToNot(HaveOccurred())
+			instanceName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+
+			By(fmt.Sprintf("Check dbinstance is created with labels: %s", instanceName))
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: instanceName}, &instance)
+			}).Should(Succeed())
+
+			Expect(instance.ObjectMeta.Labels).To(Equal(resource.Labels))
+		})
+
+		It("Should propagate labels from DatabaseClaim to DBCluster", func() {
+			By("Updating CR with labels")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			resource.Labels = map[string]string{
+				"app.kubernetes.io/component": "database",
+				"app.kubernetes.io/instance":  "test-cluster-instance",
+				"app.kubernetes.io/name":      "test-cluster-name",
+			}
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			var cluster crossplaneaws.DBCluster
+			clusterName := fmt.Sprintf("%s-%s-cluster", env, resourceName)
+
+			By(fmt.Sprintf("Check dbcluster is created with labels: %s", clusterName))
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: clusterName}, &cluster)
+			}).Should(Succeed())
+
+			Expect(cluster.ObjectMeta.Labels).To(Equal(resource.Labels))
+		})
+
 	})
+
 })
