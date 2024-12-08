@@ -60,20 +60,17 @@ func (v *DatabaseClaimCustomValidator) ValidateDelete(ctx context.Context, obj r
 	if err != nil {
 		log.Error(err, "Unable to retrieve AdmissionRequest from context")
 	}
-	log.Info("Deletion request details", "username", req.UserInfo.Username, "groups", req.UserInfo.Groups, "uid", req.UserInfo.UID)
 
 	claim, ok := obj.(*persistancev1.DatabaseClaim)
 	if !ok {
 		return nil, fmt.Errorf("expected a DatabaseClaim object but got %T", obj)
 	}
 
-	log.Info("Validation for DatabaseClaim upon deletion", "name", claim.Name)
-
+	log.Info("DatabaseClaim deletion request details", "username", req.UserInfo.Username, "groups", req.UserInfo.Groups, "uid", req.UserInfo.UID, "name", claim.Name)
 	if value, exists := claim.GetLabels()[deletionOverrideLabel]; exists && value == "enabled" {
-		log.Info("Deletion override label found; allowing deletion", "name", claim.Name)
 		return nil, nil
 	}
 
-	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=enabled' to override",
+	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set label '%s=enabled' to override",
 		claim.Name, deletionOverrideLabel)
 }
