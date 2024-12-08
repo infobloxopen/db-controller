@@ -1,0 +1,47 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "db-controller.fullname" . }}-validation-cfg
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}-validating-webhook
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "db-controller.fullname" . }}
+      path: /validate-persistance-atlas-infoblox-com-v1-databaseclaim
+      port: {{ .Values.webhook.port }}
+      namespace: {{ .Release.Namespace }}
+  failurePolicy: Fail
+  name: vdatabaseclaim-v1.kb.io
+  rules:
+  - apiGroups:
+    - persistance.atlas.infoblox.com
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - databaseclaims
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: {{ include "db-controller.fullname" . }}
+      path: /validate-persistance-atlas-infoblox-com-v1-dbroleclaim
+      port: {{ .Values.webhook.port }}
+      namespace: {{ .Release.Namespace }}
+  failurePolicy: Fail
+  name: vdbroleclaim-v1.kb.io
+  rules:
+  - apiGroups:
+    - persistance.atlas.infoblox.com
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - dbroleclaims
+  sideEffects: None
