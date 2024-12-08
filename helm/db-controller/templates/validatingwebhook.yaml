@@ -3,7 +3,7 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: {{ include "db-controller.fullname" . }}-validation-cfg
   annotations:
-    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}-validating-webhook
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "db-controller.fullname" . }}-webhook
 webhooks:
 - admissionReviewVersions:
   - v1
