@@ -29,7 +29,7 @@ var _ = Describe("annotation conversions", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      dbcName,
 				Namespace: "default",
-				Labels:    map[string]string{"persistance.atlas.infoblox.com/allow-deletion": "true"},
+				Labels:    map[string]string{"persistance.atlas.infoblox.com/allow-deletion": "enabled"},
 			},
 			Spec: v1.DatabaseClaimSpec{
 				SecretName: dbcSecretName,

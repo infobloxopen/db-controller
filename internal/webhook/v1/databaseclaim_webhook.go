@@ -69,11 +69,11 @@ func (v *DatabaseClaimCustomValidator) ValidateDelete(ctx context.Context, obj r
 
 	log.Info("Validation for DatabaseClaim upon deletion", "name", claim.Name)
 
-	if value, exists := claim.GetLabels()[deletionOverrideLabel]; exists && value == "true" {
+	if value, exists := claim.GetLabels()[deletionOverrideLabel]; exists && value == "enabled" {
 		log.Info("Deletion override label found; allowing deletion", "name", claim.Name)
 		return nil, nil
 	}
 
-	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=true' to override",
+	return nil, fmt.Errorf("deletion is denied for DatabaseClaim '%s'; set annotation or label '%s=enabled' to override",
 		claim.Name, deletionOverrideLabel)
 }

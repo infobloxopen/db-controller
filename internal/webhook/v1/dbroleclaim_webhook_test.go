@@ -40,9 +40,9 @@ var _ = Describe("DbRoleClaim Webhook", func() {
 	})
 
 	Context("When deleting a DatabaseClaim under Validating Webhook", func() {
-		It("Should allow deletion if the deletion override label is set to true", func() {
+		It("Should allow deletion if the deletion override label is set to enabled", func() {
 			By("Setting the deletion override label")
-			obj.SetLabels(map[string]string{deletionOverrideLabel: "true"})
+			obj.SetLabels(map[string]string{deletionOverrideLabel: "enabled"})
 
 			By("Calling ValidateDelete")
 			warnings, err := validator.ValidateDelete(ctx, obj)
