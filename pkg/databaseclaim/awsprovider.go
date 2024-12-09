@@ -239,7 +239,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 		maxStorageVal = nil
 	} else {
 		maxStorageVal = &params.MaxStorageGB
+
 	}
+
+	labels := propagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -251,6 +254,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+					Labels: labels,
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
@@ -392,7 +396,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 
 	params := &reqInfo.HostParams
 	trueVal := true
+
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
+
+	labels := propagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -405,6 +412,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
+					Labels: labels,
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
@@ -455,7 +463,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 
 	_, err = r.updateDBInstance(ctx, reqInfo, dbClaim, dbInstance)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("error updating DBInstance %s: %w", dbHostName, err)
 	}
 
 	return r.isResourceReady("aurora.instance", dbHostName, dbInstance.Status.ResourceStatus)
