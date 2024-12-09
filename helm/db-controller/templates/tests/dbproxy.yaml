@@ -69,6 +69,7 @@ metadata:
   name: {{ .Release.Name }}-dbproxy-test
   namespace: {{ .Release.Namespace }}
   labels:
+    persistance.atlas.infoblox.com/allow-deletion: enabled
     {{- include "db-proxy-test.labels" . | nindent 4 }}
   annotations:
     # ensure this runs on the new db-controller, not the existing one

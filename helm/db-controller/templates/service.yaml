@@ -12,7 +12,7 @@ spec:
       targetPort: https
       protocol: TCP
       name: https
-    - port: 9443
+    - port: {{ .Values.webhook.port }}
       protocol: TCP
       targetPort: webhook
       name: dbproxy-webhook

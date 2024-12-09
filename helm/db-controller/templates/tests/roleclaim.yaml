@@ -4,6 +4,7 @@ metadata:
   name: {{ .Release.Name }}-roleclaim-test
   namespace: {{ .Release.Namespace }}
   labels:
+    persistance.atlas.infoblox.com/allow-deletion: enabled
     {{- include "db-controller.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test

@@ -16,6 +16,8 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	//+kubebuilder:scaffold:imports
 
+	v1 "github.com/infobloxopen/db-controller/api/v1"
+	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	v1 "github.com/infobloxopen/db-controller/api/v1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -111,6 +111,9 @@ var _ = BeforeSuite(func() {
 		Namespace:  "default",
 		Class:      "default",
 	})
+	Expect(err).NotTo(HaveOccurred())
+
+	err = webhookpersistancev1.SetupDatabaseClaimWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:webhook
