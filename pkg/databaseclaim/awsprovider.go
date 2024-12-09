@@ -399,12 +399,6 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 	params := &reqInfo.HostParams
 	trueVal := true
 
-	serviceNS, err := r.getServiceNamespace()
-	if err != nil {
-		logr.Error(err, "failed to get service namespace")
-		return false, err
-	}
-
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -415,8 +409,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 			logr.Info("aurora db instance not found. creating now")
 			dbInstance = &crossplaneaws.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      dbHostName,
-					Namespace: serviceNS,
+					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 
@@ -469,20 +462,13 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 		return false, err
 	}
 
-	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(
-		DBClaimTags(dbClaim.Spec.Tags).DBTags(),
-		OperationalStatusTagKey,
-		OperationalStatusActiveValue,
-	)
-
 	if dbClaim.Spec.PreferredMaintenanceWindow != nil {
 		dbInstance.Spec.ForProvider.PreferredMaintenanceWindow = dbClaim.Spec.PreferredMaintenanceWindow
 	}
 
 	_, err = r.updateDBInstance(ctx, reqInfo, dbClaim, dbInstance)
 	if err != nil {
-		logr.Error(err, "failed to update crossplane DBInstance", "DBInstance", dbInstance.Name)
-		return false, err
+		return false, fmt.Errorf("error updating DBInstance %s: %w", dbHostName, err)
 	}
 
 	return r.isResourceReady("aurora.instance", dbHostName, dbInstance.Status.ResourceStatus)

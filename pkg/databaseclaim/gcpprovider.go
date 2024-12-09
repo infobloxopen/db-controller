@@ -188,13 +188,11 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
 		dbCluster = &crossplanegcp.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      dbHostName,
-				Namespace: serviceNS,
+				Name: dbHostName,
 				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "db-controller",
-					"app.kubernetes.io/component":  dbClaim.Labels["app.kubernetes.io/component"],
-					"app.kubernetes.io/instance":   dbClaim.Labels["app.kubernetes.io/instance"],
-					"app.kubernetes.io/name":       dbClaim.Labels["app.kubernetes.io/name"],
+					"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
+					"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
+					"app.kubernetes.io/name":      dbClaim.Labels["app.kubernetes.io/name"],
 				},
 			},
 			Spec: crossplanegcp.ClusterSpec{
@@ -316,13 +314,11 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 		if errors.IsNotFound(err) {
 			dbInstance = &crossplanegcp.Instance{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      dbHostName,
-					Namespace: serviceNS,
+					Name: dbHostName,
 					Labels: map[string]string{
-						"app.kubernetes.io/managed-by": "db-controller",
-						"app.kubernetes.io/component":  dbClaim.Labels["app.kubernetes.io/component"],
-						"app.kubernetes.io/instance":   dbClaim.Labels["app.kubernetes.io/instance"],
-						"app.kubernetes.io/name":       dbClaim.Labels["app.kubernetes.io/name"],
+						"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
+						"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
+						"app.kubernetes.io/name":      dbClaim.Labels["app.kubernetes.io/name"],
 					},
 				},
 				Spec: crossplanegcp.InstanceSpec{
