@@ -251,7 +251,6 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-					Namespace: serviceNS,
 					Labels: map[string]string{
 						"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
 						"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
