@@ -239,7 +239,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 		maxStorageVal = nil
 	} else {
 		maxStorageVal = &params.MaxStorageGB
+
 	}
+
+	labels := propagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -251,11 +254,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-					Labels: map[string]string{
-						"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
-						"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
-						"app.kubernetes.io/name":      dbClaim.Labels["app.kubernetes.io/name"],
-					},
+					Labels: labels,
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
@@ -400,6 +399,8 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
+	labels := propagateLabels(dbClaim.Labels)
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
@@ -411,12 +412,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-
-					Labels: map[string]string{
-						"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
-						"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
-						"app.kubernetes.io/name":      dbClaim.Labels["app.kubernetes.io/name"],
-					},
+					Labels: labels,
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
