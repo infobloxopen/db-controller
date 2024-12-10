@@ -66,26 +66,22 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 			condType := "Ready"
 			result, err := m.SuccessAndUpdateCondition(context.Background(), dbClaim, condType)
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected an error but got nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("did not expect an error but got: %v", err)
-				}
+			if tt.expectError && err == nil {
+				t.Errorf("expected an error but got nil")
 			}
-
-			if tt.expectedRequeue {
-				if !result.Requeue {
-					t.Errorf("expected Requeue to be true but got false")
-				}
-			} else {
-				if result.Requeue {
-					t.Errorf("expected Requeue to be false but got true")
-				}
+			
+			if !tt.expectError && err != nil {
+				t.Errorf("did not expect an error but got: %v", err)
 			}
-
+			
+			if tt.expectedRequeue && !result.Requeue {
+				t.Errorf("expected Requeue to be true but got false")
+			}
+			
+			if !tt.expectedRequeue && result.Requeue {
+				t.Errorf("expected Requeue to be false but got true")
+			}
+			
 			if tt.expectedRequeueAfter != 0 && result.RequeueAfter != tt.expectedRequeueAfter {
 				t.Errorf("expected RequeueAfter to be %v but got %v", tt.expectedRequeueAfter, result.RequeueAfter)
 			}

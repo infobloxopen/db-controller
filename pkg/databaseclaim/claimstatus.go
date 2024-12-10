@@ -192,6 +192,13 @@ func (m *manager) UpdateUserStatus(status *v1.Status, reqInfo *requestInfo, user
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
+// TODO: Update this to properly express the following conditions...I dont really think using mode enum makes sense here.
+// database is being provisioned
+// database is being deleted
+// database is being migrated
+// (first) user is created, also consider publishing every password rotation if that is important
+// unable to connect to database auth, network, temporary issue
+// database is synced ie. database state is exactly as specified in the current claims CR
 func NewConditionFromDBClaimMode(mode ModeEnum) metav1.Condition {
 	switch mode {
 	case M_UseExistingDB:
