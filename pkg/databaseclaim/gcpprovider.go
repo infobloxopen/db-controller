@@ -176,6 +176,8 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
+	labels := propagateLabels(dbClaim.Labels)
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbCluster)
@@ -188,7 +190,8 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 		logr.Info("creating_crossplane_dbcluster", "name", dbHostName)
 		dbCluster = &crossplanegcp.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: dbHostName,
+				Name:   dbHostName,
+				Labels: labels,
 			},
 			Spec: crossplanegcp.ClusterSpec{
 				ForProvider: crossplanegcp.ClusterParameters{
@@ -302,6 +305,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
+	labels := propagateLabels(dbClaim.Labels)
+
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
 	}, dbInstance)
@@ -309,7 +314,8 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 		if errors.IsNotFound(err) {
 			dbInstance = &crossplanegcp.Instance{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: dbHostName,
+					Name:   dbHostName,
+					Labels: labels,
 				},
 				Spec: crossplanegcp.InstanceSpec{
 					ForProvider: crossplanegcp.InstanceParameters{
