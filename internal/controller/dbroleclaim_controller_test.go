@@ -263,10 +263,10 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Creating the custom resource for the Kind DbRoleClaim in the new namespace")
-		dbroleclaimdiffnamespace := &persistancev1.DbRoleClaim{}
-		err = k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: newNamespace}, dbroleclaimdiffnamespace)
+		dbRoleClaimDiffNamespace := &persistancev1.DbRoleClaim{}
+		err = k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: newNamespace}, dbRoleClaimDiffNamespace)
 		if err != nil && errors.IsNotFound(err) {
-			dbroleclaimdiffnamespace = &persistancev1.DbRoleClaim{
+			dbRoleClaimDiffNamespace = &persistancev1.DbRoleClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: newNamespace,
@@ -279,7 +279,7 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 					SecretName: "copy-secret",
 				},
 			}
-			Expect(k8sClient.Create(ctx, dbroleclaimdiffnamespace)).To(Succeed())
+			Expect(k8sClient.Create(ctx, dbRoleClaimDiffNamespace)).To(Succeed())
 		} else {
 			Expect(err).NotTo(HaveOccurred())
 		}
@@ -390,10 +390,10 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Getting the DbRoleClaim resource created in the new namespace")
-		dbroleclaimdiffnamespace := &persistancev1.DbRoleClaim{}
-		err = k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: newNamespace}, dbroleclaimdiffnamespace)
-		fmt.Printf("Status of DbRoleClaim: %+v", dbroleclaimdiffnamespace.Status)
+		dbRoleClaimDiffNamespace := &persistancev1.DbRoleClaim{}
+		err = k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: newNamespace}, dbRoleClaimDiffNamespace)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(dbRoleClaimDiffNamespace.Status.Error).To(BeEmpty(), "Expected Error key to be empty, but got: %s", dbRoleClaimDiffNamespace.Status.Error)
 
 		By("Checking the secret in the new namespace")
 		secretName = types.NamespacedName{
@@ -403,14 +403,11 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 		err = k8sClient.Get(ctx, secretName, secret)
 		Expect(err).NotTo(HaveOccurred())
 
-		fmt.Printf("Secret Name: %s, Secret Data: %s", secret.Name, secret.Data)
+		Expect(secret.Data).NotTo(BeNil(), "Expected to fetch secret data, but got nil")
 		dsnString := string(secret.Data["uri_dsn.txt"])
 
 		By("Opening a connection to the database using the DSN from the secret in the new namespace")
 		db, err := sql.Open("postgres", dsnString)
-		if err == nil {
-			fmt.Println("Connection to the database successful")
-		}
 		Expect(err).NotTo(HaveOccurred())
 		defer db.Close()
 
@@ -423,11 +420,7 @@ var _ = Describe("RoleClaim Controller", Ordered, func() {
 			var tableDescription sql.NullString
 			err := rows.Scan(&tableName, &tableOwner, &tableSize, &tableDescription)
 			Expect(err).NotTo(HaveOccurred())
-			description := ""
-			if tableDescription.Valid {
-				description = tableDescription.String
-			}
-			fmt.Printf("Table: %s, Owner: %s, Size: %s, Description: %s", tableName, tableOwner, tableSize, description)
+			Expect(tableName == "users" && tableOwner == "postgres").To(BeTrue(), "Expected Table: users, Owner: postgres but got Table: %s, Owner: %s", tableName, tableOwner)
 		}
 		Expect(rows.Err()).NotTo(HaveOccurred())
 	})
