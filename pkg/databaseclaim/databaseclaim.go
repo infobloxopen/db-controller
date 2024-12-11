@@ -318,8 +318,11 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 	}
 
 	if operationMode == M_PostMigrationInProgress {
-		_, err := r.postMigrationInProgress(ctx, dbClaim)
-		return r.statusManager.SetErrorStatus(ctx, dbClaim, err)
+		result, err := r.postMigrationInProgress(ctx, dbClaim)
+		if err != nil {
+			r.statusManager.SetErrorStatus(ctx, dbClaim, err)
+		} 
+		return result, err 
 	}
 
 	//when using an existing db, this is the first status, then it moves to M_MigrateExistingToNewDB and falls into the condition below
