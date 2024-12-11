@@ -9,6 +9,7 @@ import (
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
+	"github.com/infobloxopen/db-controller/pkg/pgctl"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,16 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-)
-
-const (
-	TypeUseExistingDB           = "UseExistingDB"
-	TypeMigrationToNewDB        = "MigrationToNewDB"
-	TypeMigrationInProgress     = "MigrationInProgress"
-	TypeUseNewDB                = "UseNewDB"
-	TypeDBUpgradeInitiated      = "DBUpgradeInitiated"
-	TypeDBUpgradeInProgress     = "DBUpgradeInProgress"
-	TypePostMigrationInProgress = "PostMigrationInProgress"
 )
 
 var (
@@ -41,31 +32,20 @@ func (m *managedErr) Error() string {
 	return m.err.Error()
 }
 
-type StatusManager interface {
-	SetStatusCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition)
-	SuccessAndUpdateCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condType string) (ctrl.Result, error)
-	SetErrorStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (ctrl.Result, error)
-	UpdateStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) error
-	UpdateUserStatus(status *v1.Status, reqInfo *requestInfo, userName, userPassword string)
-	UpdateDBStatus(status *v1.Status, dbName string)
-	UpdateHostPortStatus(status *v1.Status, host, port, sslMode string)
-	UpdateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams)
-}
-
-type manager struct {
+type StatusManager struct {
 	client               client.Client
 	passwordRotationTime time.Duration
 }
 
-func NewStatusManager(c client.Client, viper *viper.Viper) StatusManager {
-	return &manager{client: c, passwordRotationTime: basefun.GetPasswordRotationPeriod(viper)}
+func NewStatusManager(c client.Client, viper *viper.Viper) *StatusManager {
+	return &StatusManager{client: c, passwordRotationTime: basefun.GetPasswordRotationPeriod(viper)}
 }
 
-func (m *manager) UpdateStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+func (m *StatusManager) UpdateStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
 	return m.client.Status().Update(ctx, dbClaim)
 }
 
-func (m *manager) SetErrorStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (reconcile.Result, error) {
+func (m *StatusManager) SetErrorStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (reconcile.Result, error) {
 	// If the error is non-critical and doesn't require a status update, skip processing
 	if errors.Is(inErr, ErrDoNotUpdateStatus) {
 		return ctrl.Result{}, nil
@@ -77,6 +57,7 @@ func (m *manager) SetErrorStatus(ctx context.Context, dbClaim *v1.DatabaseClaim,
 	}
 	logr := log.FromContext(ctx).WithValues("databaseclaim", nname)
 
+	m.SetStatusCondition(ctx, dbClaim, ReconcileErrorCondition(inErr))
 	var wrappedErr *managedErr
 	if existingErr, isManaged := inErr.(*managedErr); isManaged {
 		logr.Error(existingErr, "manageError called multiple times for the same error")
@@ -101,13 +82,13 @@ func (m *manager) SetErrorStatus(ctx context.Context, dbClaim *v1.DatabaseClaim,
 	return ctrl.Result{}, wrappedErr
 }
 
-func (m *manager) SuccessAndUpdateCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condType string) (reconcile.Result, error) {
-	dbClaim.Status.Error = ""
+func (m *StatusManager) SuccessAndUpdateCondition(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
+	logf := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
 
-	updateConditionStatus(&dbClaim.Status.Conditions, condType, metav1.ConditionTrue)
-	if err := m.client.Status().Update(ctx, dbClaim); err != nil {
-		logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
-		logr.Error(err, "manage_success_update_claim")
+	dbClaim.Status.Error = ""
+	m.SetStatusCondition(ctx, dbClaim, ReconcileSuccessCondition())
+	if err := m.UpdateStatus(ctx, dbClaim); err != nil {
+		logf.Error(err, "Error updating DatabaseClaim status")
 		return ctrl.Result{}, err
 	}
 
@@ -123,8 +104,8 @@ func (m *manager) SuccessAndUpdateCondition(ctx context.Context, dbClaim *v1.Dat
 	return ctrl.Result{RequeueAfter: m.passwordRotationTime}, nil
 }
 
-func (m *manager) SetStatusCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) {
-	logf := log.FromContext(ctx)
+func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) {
+	logf := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
 
 	condition.LastTransitionTime = metav1.Now()
 	condition.ObservedGeneration = dbClaim.Generation
@@ -145,7 +126,7 @@ func (m *manager) SetStatusCondition(ctx context.Context, dbClaim *v1.DatabaseCl
 	dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, condition)
 }
 
-func (m *manager) UpdateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams) {
+func (m *StatusManager) UpdateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams) {
 	status.DBVersion = hostParams.DBVersion
 	status.Type = v1.DatabaseType(hostParams.Type)
 	status.Shape = hostParams.Shape
@@ -155,7 +136,7 @@ func (m *manager) UpdateClusterStatus(status *v1.Status, hostParams *hostparams.
 	}
 }
 
-func (m *manager) UpdateDBStatus(status *v1.Status, dbName string) {
+func (m *StatusManager) UpdateDBStatus(status *v1.Status, dbName string) {
 	timeNow := metav1.Now()
 	if status.DbCreatedAt == nil {
 		status.DbCreatedAt = &timeNow
@@ -169,7 +150,7 @@ func (m *manager) UpdateDBStatus(status *v1.Status, dbName string) {
 	}
 }
 
-func (m *manager) UpdateHostPortStatus(status *v1.Status, host string, port string, sslMode string) {
+func (m *StatusManager) UpdateHostPortStatus(status *v1.Status, host string, port string, sslMode string) {
 	timeNow := metav1.Now()
 	if status.ConnectionInfo == nil {
 		status.ConnectionInfo = &v1.DatabaseClaimConnectionInfo{}
@@ -180,7 +161,7 @@ func (m *manager) UpdateHostPortStatus(status *v1.Status, host string, port stri
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-func (m *manager) UpdateUserStatus(status *v1.Status, reqInfo *requestInfo, userName string, userPassword string) {
+func (m *StatusManager) UpdateUserStatus(status *v1.Status, reqInfo *requestInfo, userName string, userPassword string) {
 	timeNow := metav1.Now()
 	if status.ConnectionInfo == nil {
 		status.ConnectionInfo = &v1.DatabaseClaimConnectionInfo{}
@@ -192,80 +173,11 @@ func (m *manager) UpdateUserStatus(status *v1.Status, reqInfo *requestInfo, user
 	status.ConnectionInfoUpdatedAt = &timeNow
 }
 
-// TODO: Update this to properly express the following conditions...I dont really think using mode enum makes sense here.
-// database is being provisioned
-// database is being deleted
-// database is being migrated
-// (first) user is created, also consider publishing every password rotation if that is important
-// unable to connect to database auth, network, temporary issue
-// database is synced ie. database state is exactly as specified in the current claims CR
-func NewConditionFromDBClaimMode(mode ModeEnum) metav1.Condition {
-	switch mode {
-	case M_UseExistingDB:
-		return metav1.Condition{
-			Type:    TypeUseExistingDB,
-			Status:  metav1.ConditionFalse,
-			Reason:  "UsingExistingDatabase",
-			Message: "The database claim is configured to use an existing database.",
-		}
-	case M_MigrateExistingToNewDB:
-		return metav1.Condition{
-			Type:    TypeMigrationToNewDB,
-			Status:  metav1.ConditionFalse,
-			Reason:  "MigratingDatabase",
-			Message: "The database claim is migrating from an existing database to a new one.",
-		}
-	case M_MigrationInProgress:
-		return metav1.Condition{
-			Type:    TypeMigrationInProgress,
-			Status:  metav1.ConditionFalse,
-			Reason:  "MigrationOngoing",
-			Message: "The database migration is currently in progress.",
-		}
-	case M_UseNewDB:
-		return metav1.Condition{
-			Type:    TypeUseNewDB,
-			Status:  metav1.ConditionFalse,
-			Reason:  "UsingNewDatabase",
-			Message: "The database claim is configured to use a new database.",
-		}
-	case M_InitiateDBUpgrade:
-		return metav1.Condition{
-			Type:    TypeDBUpgradeInitiated,
-			Status:  metav1.ConditionFalse,
-			Reason:  "UpgradeStarted",
-			Message: "The database upgrade has been initiated.",
-		}
-	case M_UpgradeDBInProgress:
-		return metav1.Condition{
-			Type:    TypeDBUpgradeInProgress,
-			Status:  metav1.ConditionFalse,
-			Reason:  "UpgradeOngoing",
-			Message: "The database upgrade is currently in progress.",
-		}
-	case M_PostMigrationInProgress:
-		return metav1.Condition{
-			Type:    TypePostMigrationInProgress,
-			Status:  metav1.ConditionFalse,
-			Reason:  "FinalizingMigration",
-			Message: "Finalizing post-migration tasks for the database claim.",
-		}
-	default:
-		return metav1.Condition{
-			Type:    "InvalidCondition",
-			Status:  metav1.ConditionFalse,
-			Reason:  "UnsupportedMode",
-			Message: "The operation mode is not supported.",
-		}
-	}
-}
+func (m *StatusManager) MigrationInProgressStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
+	dbClaim.Status.MigrationState = pgctl.S_MigrationInProgress.String()
 
-func updateConditionStatus(conditions *[]metav1.Condition, conditionType string, status metav1.ConditionStatus) {
-	for i := range *conditions {
-		if (*conditions)[i].Type == conditionType {
-			(*conditions)[i].Status = status
-			(*conditions)[i].LastTransitionTime = metav1.Now()
-			return
-		}
-	}
+	m.SetStatusCondition(ctx, dbClaim, MigratingCondition())
+
+	err := m.UpdateStatus(ctx, dbClaim)
+	return ctrl.Result{Requeue: true}, err
 }

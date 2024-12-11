@@ -47,7 +47,7 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := role.MockClient{}
-			m := &manager{
+			m := &StatusManager{
 				client:               &mock,
 				passwordRotationTime: time.Minute * 5,
 			}
@@ -63,8 +63,7 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 				},
 			}
 
-			condType := "Ready"
-			result, err := m.SuccessAndUpdateCondition(context.Background(), dbClaim, condType)
+			result, err := m.SuccessAndUpdateCondition(context.Background(), dbClaim)
 
 			if tt.expectError && err == nil {
 				t.Errorf("expected an error but got nil")
@@ -90,7 +89,7 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 }
 
 func TestUpdateClusterStatus(t *testing.T) {
-	m := &manager{}
+	m := &StatusManager{}
 	status := &v1.Status{}
 	hostParams := &hostparams.HostParams{
 		DBVersion:    "12.7",
@@ -120,7 +119,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 }
 
 func TestUpdateDBStatus(t *testing.T) {
-	m := &manager{}
+	m := &StatusManager{}
 	status := &v1.Status{}
 	dbName := "testdb"
 
@@ -136,7 +135,7 @@ func TestUpdateDBStatus(t *testing.T) {
 }
 
 func TestUpdateHostPortStatus(t *testing.T) {
-	m := &manager{}
+	m := &StatusManager{}
 	status := &v1.Status{}
 	host := "127.0.0.1"
 	port := "5432"
@@ -162,7 +161,7 @@ func TestUpdateHostPortStatus(t *testing.T) {
 }
 
 func TestUpdateUserStatus(t *testing.T) {
-	m := &manager{}
+	m := &StatusManager{}
 	status := &v1.Status{}
 	reqInfo := &requestInfo{}
 	userName := "user"

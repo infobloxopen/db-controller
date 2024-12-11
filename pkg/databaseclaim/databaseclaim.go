@@ -78,7 +78,7 @@ type DatabaseClaimReconciler struct {
 	client.Client
 	Config        *DatabaseClaimConfig
 	kctl          *kctlutils.Client
-	statusManager StatusManager
+	statusManager *StatusManager
 }
 
 // New returns a configured databaseclaim reconciler
@@ -172,6 +172,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
 			logr.Info("clean_up_finalizer")
+			r.statusManager.SetStatusCondition(ctx, &dbClaim, DeletingCondition())
 			// check if the claim is in the middle of rds migration, if so, wait for it to complete
 			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
 				logr.Info("migration is in progress. object cannot be deleted")
@@ -311,7 +312,6 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 		return r.statusManager.SetErrorStatus(ctx, dbClaim, fmt.Errorf("unsupported operation requested"))
 	}
 
-	r.statusManager.SetStatusCondition(ctx, dbClaim, NewConditionFromDBClaimMode(operationMode))
 	err := r.statusManager.UpdateStatus(ctx, dbClaim)
 	if err != nil {
 		return r.statusManager.SetErrorStatus(ctx, dbClaim, err)
@@ -339,7 +339,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 			return r.statusManager.SetErrorStatus(ctx, dbClaim, fmt.Errorf("invalid new db connection"))
 		}
 
-		return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim, NewConditionFromDBClaimMode(operationMode).Type)
+		return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim)
 	}
 	if operationMode == M_MigrateExistingToNewDB {
 		logr.Info("migrate to new  db reconcile started")
@@ -400,7 +400,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 		}
 		dbClaim.Status.NewDB = v1.Status{}
 
-		return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim, NewConditionFromDBClaimMode(operationMode).Type)
+		return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim)
 	}
 
 	logr.Error(fmt.Errorf("unhandled mode: %v", operationMode), "unhandled mode")
@@ -468,7 +468,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 	dbName := existingDBConnInfo.DatabaseName
 	r.statusManager.UpdateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username, operationalMode)
+	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, dbClaim, operationalMode)
 	if err != nil {
 		logr.Error(err, "unable to update users, user credents not persisted to status object")
 		return err
@@ -494,9 +494,10 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 }
 
 func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
-
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 	logr.Info("reconcileNewDB", "r.Input", reqInfo)
+
+	r.statusManager.SetStatusCondition(ctx, dbClaim, ProvisioningCondition())
 
 	cloud := basefun.GetCloud(r.Config.Viper)
 
@@ -517,9 +518,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	} else {
 		return r.statusManager.SetErrorStatus(ctx, dbClaim, fmt.Errorf("cloud not supported, check .Values.cloud"))
 	}
-	// Clear existing error
 	if dbClaim.Status.Error != "" {
-		//resetting error
 		dbClaim.Status.Error = ""
 		if err := r.statusManager.UpdateStatus(ctx, dbClaim); err != nil {
 			logr.Error(err, "update_client_status")
@@ -573,7 +572,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	}
 
 	// Updates the connection info username
-	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username, operationalMode)
+	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, dbClaim, operationalMode)
 	if err != nil {
 		logr.Error(err, "unable to update users, user credentials not persisted to status object")
 		return r.statusManager.SetErrorStatus(ctx, dbClaim, err)
@@ -632,14 +631,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, r
 
 	// Update migration state to one of these
 	// M_MigrationInProgress, M_UpgradeDBInProgress
-	//
-	// FIXME: changed the spaghetti code here
-	// return r.reconcileMigrationInProgress(ctx, reqInfo, dbClaim, operationalMode)
-	dbClaim.Status.MigrationState = pgctl.S_MigrationInProgress.String()
-
-	// Status has been updated, write it to the CR
-	err = r.Client.Status().Update(ctx, dbClaim)
-	return ctrl.Result{Requeue: true}, err
+	return r.statusManager.MigrationInProgressStatus(ctx, dbClaim)
 }
 
 func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
@@ -894,7 +886,7 @@ loop:
 	//create connection info secret
 	logr.Info("migration complete")
 
-	return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim, NewConditionFromDBClaimMode(operationalMode).Type)
+	return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim)
 }
 
 func MakeDeepCopyToOldDB(to *v1.StatusForOldDB, from *v1.Status) {
@@ -1140,11 +1132,11 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string, operationalMode ModeEnum) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) error {
 
-	if status == nil {
-		return fmt.Errorf("status is nil")
-	}
+	status := dbClaim.Status.NewDB
+	dbName := dbClaim.Spec.DatabaseName
+	baseUsername := dbClaim.Spec.Username
 
 	dbu := dbuser.NewDBUser(baseUsername)
 	rotationTime := r.getPasswordRotationTime()
@@ -1183,7 +1175,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixA, dbu.GetUserA(), baseUsername, userPassword); err != nil {
 			return err
 		}
-		r.statusManager.UpdateUserStatus(status, reqInfo, dbu.GetUserA(), userPassword)
+		r.statusManager.UpdateUserStatus(&status, reqInfo, dbu.GetUserA(), userPassword)
 		// updating user b
 		userPassword, err = r.generatePassword()
 		if err != nil {
@@ -1196,6 +1188,8 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 
 	if status.UserUpdatedAt == nil || time.Since(status.UserUpdatedAt.Time) > rotationTime {
 		logger.V(1).Info("rotating_users", "rotationTime", rotationTime)
+
+		r.statusManager.SetStatusCondition(ctx, dbClaim, PwdRotationCondition())
 
 		userPassword, err := r.generatePassword()
 		if err != nil {
@@ -1214,7 +1208,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 			return err
 		}
 
-		r.statusManager.UpdateUserStatus(status, reqInfo, nextUser, userPassword)
+		r.statusManager.UpdateUserStatus(&status, reqInfo, nextUser, userPassword)
 	}
 
 	// baseUsername = myuser
