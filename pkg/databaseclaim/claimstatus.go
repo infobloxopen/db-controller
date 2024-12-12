@@ -116,7 +116,7 @@ func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.Data
 			if condition.Status == cond.Status && !condition.LastTransitionTime.IsZero() {
 				condition.LastTransitionTime = cond.LastTransitionTime
 			} else {
-				logf.V(1).Info("Condition status changed %s -> %s", cond.Status, condition.Status)
+				logf.V(1).Info("Condition status changed %s -> %s", string(cond.Status), string(condition.Status))
 			}
 			dbClaim.Status.Conditions[idx] = condition
 			return
