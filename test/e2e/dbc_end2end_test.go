@@ -92,6 +92,7 @@ var _ = Describe("dbc-end2end", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      key.Name,
 					Namespace: key.Namespace,
+					Labels:    map[string]string{"persistance.atlas.infoblox.com/allow-deletion": "enabled"},
 				},
 				Spec: v1.DatabaseClaimSpec{
 					Class:                 &class,

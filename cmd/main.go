@@ -25,15 +25,6 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
-	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/internal/controller"
-	"github.com/infobloxopen/db-controller/internal/metrics"
-	mutating "github.com/infobloxopen/db-controller/internal/webhook"
-	"github.com/infobloxopen/db-controller/pkg/config"
-	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
-	"github.com/infobloxopen/db-controller/pkg/rdsauth"
-	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -44,6 +35,17 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/controller"
+	"github.com/infobloxopen/db-controller/internal/metrics"
+	mutating "github.com/infobloxopen/db-controller/internal/webhook"
+	"github.com/infobloxopen/db-controller/pkg/config"
+	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
+	"github.com/infobloxopen/db-controller/pkg/rdsauth"
+	"github.com/infobloxopen/db-controller/pkg/roleclaim"
+
+	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
@@ -228,6 +230,16 @@ func main() {
 		Config: dbRoleClaimConfig,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
+		os.Exit(1)
+	}
+
+	if err = webhookpersistancev1.SetupDatabaseClaimWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DatabaseClaim")
+		os.Exit(1)
+	}
+
+	if err = webhookpersistancev1.SetupDbRoleClaimWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DbRoleClaim")
 		os.Exit(1)
 	}
 

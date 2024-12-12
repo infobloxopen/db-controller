@@ -165,10 +165,20 @@ var _ = AfterSuite(func() {
 			Name:      db,
 			Namespace: namespace,
 		}
-		By("Checking Databaseclaim: " + db)
+
+		By("Checking DatabaseClaim: " + db)
 		if err := k8sClient.Get(ctx, nname, claim); err == nil {
+			if _, exists := claim.GetLabels()["persistance.atlas.infoblox.com/allow-deletion"]; !exists {
+				By("Setting allow-deletion label for DatabaseClaim: " + db)
+				claim.SetLabels(map[string]string{
+					"persistance.atlas.infoblox.com/allow-deletion": "enabled",
+				})
+				Expect(k8sClient.Update(ctx, claim)).Should(Succeed())
+			}
+
 			By("Deleting DatabaseClaim: " + db)
 			Expect(k8sClient.Delete(ctx, claim)).Should(Succeed())
+
 			Eventually(func() bool {
 				return errors.IsNotFound(k8sClient.Get(ctx, nname, claim))
 			}).Should(BeTrue())

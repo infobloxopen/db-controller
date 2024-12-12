@@ -35,6 +35,7 @@ var _ = Describe("invalid-claim", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      BDClaimName,
 				Namespace: namespace,
+				Labels:    map[string]string{"persistance.atlas.infoblox.com/allow-deletion": "enabled"},
 			},
 			Spec: persistancev1.DatabaseClaimSpec{
 				Class:                 ptr.To(namespace),
