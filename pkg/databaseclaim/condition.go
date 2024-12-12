@@ -17,7 +17,7 @@ const (
 )
 
 const (
-	ConditionSynced          ConditionType = "Synced"
+	ConditionReady           ConditionType = "Ready"
 	ConditionProvisioning    ConditionType = "Provisioning"
 	ConditionDeleting        ConditionType = "Deleting"
 	ConditionMigrating       ConditionType = "Migrating"
@@ -74,7 +74,7 @@ func PwdRotationCondition() metav1.Condition {
 
 func ReconcileErrorCondition(err error) metav1.Condition {
 	return CreateCondition(
-		ConditionSynced,
+		ConditionReady,
 		metav1.ConditionFalse,
 		ReasonUnavailable,
 		fmt.Sprintf("Reconciliation encountered an issue: %v. The database state may not match the desired configuration.", err),
@@ -83,7 +83,7 @@ func ReconcileErrorCondition(err error) metav1.Condition {
 
 func ReconcileSuccessCondition() metav1.Condition {
 	return CreateCondition(
-		ConditionSynced,
+		ConditionReady,
 		metav1.ConditionTrue,
 		ReasonAvailable,
 		"Database successfully synchronized. The current state fully matches the specified configuration and is ready for use.",
