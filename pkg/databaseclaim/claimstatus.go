@@ -45,7 +45,7 @@ func (m *StatusManager) UpdateStatus(ctx context.Context, dbClaim *v1.DatabaseCl
 	return m.client.Status().Update(ctx, dbClaim)
 }
 
-func (m *StatusManager) SetErrorStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (reconcile.Result, error) {
+func (m *StatusManager) SetError(ctx context.Context, dbClaim *v1.DatabaseClaim, inErr error) (reconcile.Result, error) {
 	// If the error is non-critical and doesn't require a status update, skip processing
 	if errors.Is(inErr, ErrDoNotUpdateStatus) {
 		return ctrl.Result{}, nil
