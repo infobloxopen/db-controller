@@ -52,9 +52,9 @@ func (m *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 
 	// Iterate over DBInstance conditions
 	for _, condition := range dbInstance.Status.Conditions {
-		// Check if "Ready" condition is present and with "True" Status
+
 		if condition.Type == ConditionReady && condition.Status == v1.ConditionTrue {
-			// Create the new condition for DatabaseClaim
+
 			newCondition := metav1.Condition{
 				Type:               ConditionReadyAtProvider,
 				Status:             metav1.ConditionStatus(v1.ConditionTrue), // Convert to the correct type
@@ -62,8 +62,6 @@ func (m *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 				Reason:             string(condition.Reason),
 				Message:            condition.Message,
 			}
-
-			// Check if the new condition already exists or if an update is needed
 			conditionExists := false
 			for _, existingCondition := range dbClaim.Status.Conditions {
 				if existingCondition.Type == newCondition.Type {
@@ -71,8 +69,6 @@ func (m *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 					break
 				}
 			}
-
-			// If the condition does not exist or is different, update it
 			if !conditionExists {
 				dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, newCondition)
 				updated = true
@@ -81,8 +77,6 @@ func (m *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 			break
 		}
 	}
-
-	// If the condition was updated, perform the update on the DatabaseClaim
 	if updated {
 		if err := m.Status().Update(ctx, dbClaim); err != nil {
 			return err
