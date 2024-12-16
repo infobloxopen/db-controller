@@ -171,7 +171,10 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
 			logr.Info("clean_up_finalizer")
-			r.statusManager.SetStatusCondition(ctx, &dbClaim, v1.DeletingCondition())
+			err_ := r.statusManager.SetConditionAndUpdateStatus(ctx, &dbClaim, v1.DeletingCondition())
+			if err_ != nil {
+				return ctrl.Result{}, err_
+			}
 			// check if the claim is in the middle of rds migration, if so, wait for it to complete
 			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
 				logr.Info("migration is in progress. object cannot be deleted")
@@ -500,7 +503,10 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 	logr.Info("reconcileNewDB", "r.Input", reqInfo)
 
-	r.statusManager.SetStatusCondition(ctx, dbClaim, v1.ProvisioningCondition())
+	err_ := r.statusManager.SetConditionAndUpdateStatus(ctx, dbClaim, v1.ProvisioningCondition())
+	if err_ != nil {
+		return ctrl.Result{}, err_
+	}
 
 	cloud := basefun.GetCloud(r.Config.Viper)
 

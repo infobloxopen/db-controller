@@ -55,7 +55,7 @@ func ProvisioningCondition() metav1.Condition {
 		ConditionSync,
 		metav1.ConditionFalse,
 		ReasonProvisioning,
-		"Database provisioning is in progress.",
+		"Database provisioning is in progress",
 	)
 }
 
@@ -64,7 +64,7 @@ func DeletingCondition() metav1.Condition {
 		ConditionSync,
 		metav1.ConditionFalse,
 		ReasonDeleting,
-		"Database deletion is in progress.",
+		"Database deletion is in progress",
 	)
 }
 
@@ -73,7 +73,7 @@ func MigratingCondition() metav1.Condition {
 		ConditionSync,
 		metav1.ConditionFalse,
 		ReasonMigrating,
-		"Database migration is underway.",
+		"Database migration is underway",
 	)
 }
 
@@ -109,6 +109,6 @@ func ReconcileSuccessCondition() metav1.Condition {
 		ConditionReady,
 		metav1.ConditionTrue,
 		ReasonAvailable,
-		"Database successfully synchronized and ready for use.",
+		"Database successfully synchronized and ready for use",
 	)
 }

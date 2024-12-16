@@ -57,7 +57,11 @@ func (m *StatusManager) SetError(ctx context.Context, dbClaim *v1.DatabaseClaim,
 	}
 	logr := log.FromContext(ctx).WithValues("databaseclaim", nname)
 
-	m.SetStatusCondition(ctx, dbClaim, v1.ReconcileErrorCondition(inErr))
+	err := m.SetConditionAndUpdateStatus(ctx, dbClaim, v1.ReconcileErrorCondition(inErr))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	var wrappedErr *managedErr
 	if existingErr, isManaged := inErr.(*managedErr); isManaged {
 		logr.Error(existingErr, "manageError called multiple times for the same error")
@@ -73,7 +77,7 @@ func (m *StatusManager) SetError(ctx context.Context, dbClaim *v1.DatabaseClaim,
 	}
 
 	refreshedClaim.Status.Error = wrappedErr.Error()
-	if err := m.UpdateStatus(ctx, dbClaim); err != nil {
+	if err := m.UpdateStatus(ctx, refreshedClaim); err != nil {
 		logr.Error(err, "Failed to update DatabaseClaim status")
 		return ctrl.Result{}, wrappedErr
 	}
@@ -133,7 +137,7 @@ func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.Data
 			if condition.Status == cond.Status && !condition.LastTransitionTime.IsZero() {
 				condition.LastTransitionTime = cond.LastTransitionTime
 			} else {
-				logf.V(1).Info("Condition status changed %s -> %s", string(cond.Status), string(condition.Status))
+				logf.V(1).Info(fmt.Sprintf("Condition status changed %s -> %s", cond.Status, condition.Status))
 			}
 			dbClaim.Status.Conditions[idx] = condition
 			return
@@ -141,6 +145,16 @@ func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.Data
 	}
 
 	dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, condition)
+}
+
+func (m *StatusManager) SetConditionAndUpdateStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) error {
+	m.SetStatusCondition(ctx, dbClaim, condition)
+
+	if err := m.UpdateStatus(ctx, dbClaim); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m *StatusManager) UpdateClusterStatus(status *v1.Status, hostParams *hostparams.HostParams) {
