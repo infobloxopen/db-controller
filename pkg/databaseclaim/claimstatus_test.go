@@ -14,19 +14,19 @@ import (
 
 func TestSuccessAndUpdateCondition(t *testing.T) {
 	tests := []struct {
-		name              string
-		deletionTimestamp *metav1.Time
-		oldDBState        v1.DbState
-		expectedRequeue   bool
+		name                 string
+		deletionTimestamp    *metav1.Time
+		oldDBState           v1.DbState
+		expectedRequeue      bool
 		expectedRequeueAfter time.Duration
-		expectError       bool
+		expectError          bool
 	}{
 		{
-			name:              "Success case, requeue after the configured password rotation time",
-			deletionTimestamp: nil,
-			expectedRequeue:   false,
+			name:                 "Success case, requeue after the configured password rotation time",
+			deletionTimestamp:    nil,
+			expectedRequeue:      false,
 			expectedRequeueAfter: time.Minute * 5,
-			expectError:       false,
+			expectError:          false,
 		},
 		{
 			name:              "Object is being deleted, then call requeue immediately",
@@ -35,12 +35,12 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 			expectError:       false,
 		},
 		{
-			name:              "PostMigrationInProgress, then requeue after one minute",
-			deletionTimestamp: nil,
-			oldDBState:        v1.PostMigrationInProgress,
-			expectedRequeue:   false,
+			name:                 "PostMigrationInProgress, then requeue after one minute",
+			deletionTimestamp:    nil,
+			oldDBState:           v1.PostMigrationInProgress,
+			expectedRequeue:      false,
 			expectedRequeueAfter: time.Minute,
-			expectError:       false,
+			expectError:          false,
 		},
 	}
 
@@ -68,19 +68,19 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 			if tt.expectError && err == nil {
 				t.Errorf("expected an error but got nil")
 			}
-			
+
 			if !tt.expectError && err != nil {
 				t.Errorf("did not expect an error but got: %v", err)
 			}
-			
+
 			if tt.expectedRequeue && !result.Requeue {
 				t.Errorf("expected Requeue to be true but got false")
 			}
-			
+
 			if !tt.expectedRequeue && result.Requeue {
 				t.Errorf("expected Requeue to be false but got true")
 			}
-			
+
 			if tt.expectedRequeueAfter != 0 && result.RequeueAfter != tt.expectedRequeueAfter {
 				t.Errorf("expected RequeueAfter to be %v but got %v", tt.expectedRequeueAfter, result.RequeueAfter)
 			}

@@ -3,7 +3,6 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -172,7 +171,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(&dbClaim, dbFinalizerName) {
 			logr.Info("clean_up_finalizer")
-			r.statusManager.SetStatusCondition(ctx, &dbClaim, DeletingCondition())
+			r.statusManager.SetStatusCondition(ctx, &dbClaim, v1.DeletingCondition())
 			// check if the claim is in the middle of rds migration, if so, wait for it to complete
 			if dbClaim.Status.MigrationState != "" && dbClaim.Status.MigrationState != pgctl.S_Completed.String() {
 				logr.Info("migration is in progress. object cannot be deleted")
@@ -292,10 +291,11 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 		dbClaim.Status.OldDB = v1.StatusForOldDB{}
 	}
 
-	dbClaim.Status.Error = ""
-	if err = r.statusManager.UpdateStatus(ctx, dbClaim); err != nil {
+	if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
+		logr.Error(err, "Error updating DatabaseClaim status")
 		return ctrl.Result{}, err
 	}
+
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -358,7 +358,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 		if (activeConn.DatabaseName != existingDbConn.DatabaseName) ||
 			(activeConn.Host != existingDbConn.Host && activeConn.Port != existingDbConn.Port) {
 
-			logr.Info("existing db was not reconciled, calling reconcileUseExistingDB before reconcileUseExistingDB")
+			logr.Info("existing db was not reconciled, calling reconcileUseExistingDB before reconcileMigrateToNewDB")
 
 			err := r.reconcileUseExistingDB(ctx, reqInfo, dbClaim, operationMode)
 			if err != nil {
@@ -500,7 +500,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
 	logr.Info("reconcileNewDB", "r.Input", reqInfo)
 
-	r.statusManager.SetStatusCondition(ctx, dbClaim, ProvisioningCondition())
+	r.statusManager.SetStatusCondition(ctx, dbClaim, v1.ProvisioningCondition())
 
 	cloud := basefun.GetCloud(r.Config.Viper)
 
@@ -521,12 +521,10 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	} else {
 		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("cloud not supported, check .Values.cloud"))
 	}
-	if dbClaim.Status.Error != "" {
-		dbClaim.Status.Error = ""
-		if err := r.statusManager.UpdateStatus(ctx, dbClaim); err != nil {
-			logr.Error(err, "update_client_status")
-			return ctrl.Result{}, err
-		}
+
+	if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
+		logr.Error(err, "Error updating DatabaseClaim status")
+		return ctrl.Result{}, err
 	}
 
 	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
@@ -986,18 +984,6 @@ func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, db
 	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: connInfo.Uri()})
 }
 
-func (r *DatabaseClaimReconciler) getDBClient(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (dbclient.Clienter, error) {
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "getDBClient")
-
-	logr.V(debugLevel).Info("GET DBCLIENT", "DSN", basefun.SanitizeDsn(r.getMasterDefaultDsn(reqInfo)))
-	r.statusManager.UpdateHostPortStatus(&dbClaim.Status.NewDB, reqInfo.MasterConnInfo.Host, reqInfo.MasterConnInfo.Port, reqInfo.MasterConnInfo.SSLMode)
-	return dbclient.New(dbclient.Config{Log: log.FromContext(ctx), DBType: "postgres", DSN: r.getMasterDefaultDsn(reqInfo)})
-}
-
-func (r *DatabaseClaimReconciler) getMasterDefaultDsn(reqInfo *requestInfo) string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", url.QueryEscape(reqInfo.MasterConnInfo.Username), url.QueryEscape(reqInfo.MasterConnInfo.Password), reqInfo.MasterConnInfo.Host, reqInfo.MasterConnInfo.Port, "postgres", reqInfo.MasterConnInfo.SSLMode)
-}
-
 func (r *DatabaseClaimReconciler) generatePassword() (string, error) {
 	var pass string
 	var err error
@@ -1191,8 +1177,6 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 
 	if status.UserUpdatedAt == nil || time.Since(status.UserUpdatedAt.Time) > rotationTime {
 		logger.V(1).Info("rotating_users", "rotationTime", rotationTime)
-
-		r.statusManager.SetStatusCondition(ctx, dbClaim, PwdRotationCondition())
 
 		userPassword, err := r.generatePassword()
 		if err != nil {

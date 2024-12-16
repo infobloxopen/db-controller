@@ -57,7 +57,7 @@ func (m *StatusManager) SetError(ctx context.Context, dbClaim *v1.DatabaseClaim,
 	}
 	logr := log.FromContext(ctx).WithValues("databaseclaim", nname)
 
-	m.SetStatusCondition(ctx, dbClaim, ReconcileErrorCondition(inErr))
+	m.SetStatusCondition(ctx, dbClaim, v1.ReconcileErrorCondition(inErr))
 	var wrappedErr *managedErr
 	if existingErr, isManaged := inErr.(*managedErr); isManaged {
 		logr.Error(existingErr, "manageError called multiple times for the same error")
@@ -84,24 +84,41 @@ func (m *StatusManager) SetError(ctx context.Context, dbClaim *v1.DatabaseClaim,
 
 func (m *StatusManager) SuccessAndUpdateCondition(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
 	logf := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Name)
+	if err := m.ClearError(ctx, dbClaim); err != nil {
+		logf.Error(err, "Error updating DatabaseClaim status")
+		return ctrl.Result{}, err
+	}
 
-	dbClaim.Status.Error = ""
-	m.SetStatusCondition(ctx, dbClaim, ReconcileSuccessCondition())
+	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+		logf.Info("DatabaseClaim is marked for deletion, requeueing.")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// At this point, the database has been successfully provisioned, and the managed credentials were verified with a successful connection.
+	m.SetStatusCondition(ctx, dbClaim, v1.ReconcileSuccessCondition())
+	m.SetStatusCondition(ctx, dbClaim, v1.DatabaseReadyCondition())
 	if err := m.UpdateStatus(ctx, dbClaim); err != nil {
 		logf.Error(err, "Error updating DatabaseClaim status")
 		return ctrl.Result{}, err
 	}
 
-	//if object is getting deleted then call requeue immediately
-	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
-		return ctrl.Result{Requeue: true}, nil
-	}
-
 	if dbClaim.Status.OldDB.DbState == v1.PostMigrationInProgress {
+		logf.Info("Post-migration is in progress, requeueing after 1 minute.")
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
 
+	logf.Info("Reconciliation successful, requeueing after password rotation interval.")
 	return ctrl.Result{RequeueAfter: m.passwordRotationTime}, nil
+}
+
+func (m *StatusManager) ClearError(ctx context.Context, dbClaim *v1.DatabaseClaim) error {
+	if dbClaim.Status.Error != "" {
+		dbClaim.Status.Error = ""
+		if err := m.UpdateStatus(ctx, dbClaim); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) {
@@ -176,7 +193,7 @@ func (m *StatusManager) UpdateUserStatus(status *v1.Status, reqInfo *requestInfo
 func (m *StatusManager) MigrationInProgressStatus(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
 	dbClaim.Status.MigrationState = pgctl.S_MigrationInProgress.String()
 
-	m.SetStatusCondition(ctx, dbClaim, MigratingCondition())
+	m.SetStatusCondition(ctx, dbClaim, v1.MigratingCondition())
 
 	err := m.UpdateStatus(ctx, dbClaim)
 	return ctrl.Result{Requeue: true}, err
