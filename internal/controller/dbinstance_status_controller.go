@@ -3,16 +3,13 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -125,70 +122,35 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 		dbClaim.Status.Conditions = []metav1.Condition{}
 	}
 
-	// Check "Ready" and "Synced" conditions
+	conditionSyncedAtProvider := metav1.Condition{
+		Type: ConditionSyncedAtProvider,
+	}
 	for _, condition := range dbInstance.Status.Conditions {
-		logger.Info("Checking condition", "Type", condition.Type, "Status", condition.Status)
-
-		if condition.Type == ConditionReady && condition.Status == corev1.ConditionTrue {
-			logger.Info("Ready condition found", "DBInstance", dbInstance.Name)
-
-			newCondition := metav1.Condition{
-				Type:    ConditionReadyAtProvider,
-				Status:  metav1.ConditionStatus(condition.Status),
-				Reason:  string(condition.Reason),
-				Message: condition.Message,
-			}
-
-			if len(dbClaim.Status.Conditions) == 0 || dbClaim.Status.Conditions[0].Type != string(newCondition.Type) {
-				dbClaim.Status.Conditions = []metav1.Condition{newCondition}
-				updated = true
-			}
-			break
-		}
-
-		if condition.Type == ConditionSynced && condition.Status == corev1.ConditionTrue {
-			logger.Info("Synced condition found", "DBInstance", dbInstance.Name)
-
-			newCondition := metav1.Condition{
-				Type:               ConditionSyncedAtProvider,
-				Status:             metav1.ConditionStatus(condition.Status),
-				LastTransitionTime: condition.LastTransitionTime,
-				Reason:             string(condition.Reason),
-				Message:            condition.Message,
-			}
-
-			if len(dbClaim.Status.Conditions) == 0 || dbClaim.Status.Conditions[0].Type != string(newCondition.Type) {
-				dbClaim.Status.Conditions = []metav1.Condition{newCondition}
-				updated = true
+		if condition.Type == ConditionSynced {
+			conditionSyncedAtProvider = metav1.Condition{
+				Status: metav1.ConditionStatus(condition.Status),
+				Reason: string(condition.Reason),
 			}
 			break
 		}
 	}
 
-	if updated {
-		if err := r.retryDatabaseClaimUpdate(ctx, dbClaim, logger); err != nil {
-			return err
-		}
-		logger.Info("DatabaseClaim status updated with new conditions", "DBInstance", dbInstance.Name)
+	conditionReadyAtProvider := metav1.Condition{
+		Type: ConditionReadyAtProvider,
 	}
+	for _, condition := range dbInstance.Status.Conditions {
+		if condition.Type == ConditionReady {
+			conditionReadyAtProvider = metav1.Condition{
+				Status: metav1.ConditionStatus(condition.Status),
+				Reason: string(condition.Reason),
+			}
+			break
+		}
+	}
+
+	// TODO: implement the code to include/update the AtProvider statuses in the DBClaim using the StatusManager.
 
 	return nil
-}
-
-// retryDatabaseClaimUpdate retries updating the DatabaseClaim status with exponential backoff
-func (r *DBInstanceStatusReconciler) retryDatabaseClaimUpdate(ctx context.Context, dbClaim *persistancev1.DatabaseClaim, logger logr.Logger) error {
-	return wait.ExponentialBackoff(wait.Backoff{
-		Steps:    5,
-		Duration: 100 * time.Millisecond,
-		Factor:   2.0,
-		Jitter:   0.1,
-	}, func() (bool, error) {
-		if err := r.Status().Update(ctx, dbClaim); err != nil {
-			logger.Error(err, "Failed to update DatabaseClaim status, retrying")
-			return false, nil
-		}
-		return true, nil
-	})
 }
 
 // SetupWithManager configures the controller with the Manager
