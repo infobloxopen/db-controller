@@ -29,6 +29,7 @@ var _ = Describe("dsnexec defaulting", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "default-db",
 				Namespace: "default",
+				Labels:    map[string]string{"persistance.atlas.infoblox.com/allow-deletion": "enabled"},
 			},
 			Spec: v1.DatabaseClaimSpec{
 				SecretName: "test",

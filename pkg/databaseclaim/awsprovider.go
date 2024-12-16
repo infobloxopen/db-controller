@@ -239,7 +239,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 		maxStorageVal = nil
 	} else {
 		maxStorageVal = &params.MaxStorageGB
+
 	}
+
+	labels := propagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -251,12 +254,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-					Namespace: serviceNS,
-					Labels: map[string]string{
-						"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
-						"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
-						"app.kubernetes.io/name":      dbClaim.Labels["app.kubernetes.io/name"],
-					},
+					Labels: labels,
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
@@ -399,13 +397,9 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 	params := &reqInfo.HostParams
 	trueVal := true
 
-	serviceNS, err := r.getServiceNamespace()
-	if err != nil {
-		logr.Error(err, "failed to get service namespace")
-		return false, err
-	}
-
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
+
+	labels := propagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -419,12 +413,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 					Namespace: serviceNS,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-
-					Labels: map[string]string{
-						"app.kubernetes.io/component": dbClaim.Labels["app.kubernetes.io/component"],
-						"app.kubernetes.io/instance":  dbClaim.Labels["app.kubernetes.io/instance"],
-						"app.kubernetes.io/name":      dbClaim.Labels["app.kubernetes.io/name"],
-					},
+					Labels: labels,
 				},
 				Spec: crossplaneaws.DBInstanceSpec{
 					ForProvider: crossplaneaws.DBInstanceParameters{
@@ -481,8 +470,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 
 	_, err = r.updateDBInstance(ctx, reqInfo, dbClaim, dbInstance)
 	if err != nil {
-		logr.Error(err, "failed to update crossplane DBInstance", "DBInstance", dbInstance.Name)
-		return false, err
+		return false, fmt.Errorf("error updating DBInstance %s: %w", dbHostName, err)
 	}
 
 	return r.isResourceReady("aurora.instance", dbHostName, dbInstance.Status.ResourceStatus)
