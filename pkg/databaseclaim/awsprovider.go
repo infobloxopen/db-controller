@@ -409,8 +409,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 			logr.Info("aurora db instance not found. creating now")
 			dbInstance = &crossplaneaws.DBInstance{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      dbHostName,
-					Namespace: serviceNS,
+					Name: dbHostName,
 					// TODO - Figure out the proper labels for resource
 					// Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
 					Labels: labels,
