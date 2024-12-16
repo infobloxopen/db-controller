@@ -9,6 +9,7 @@ import (
 	_ "github.com/lib/pq"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -56,10 +57,17 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI, replicaDbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
-
 	logr := log.FromContext(ctx)
 	secretName := dbClaim.Spec.SecretName
-	truePtr := true
+
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
+		existingSecret := &corev1.Secret{}
+		err := r.Client.Get(ctx, client.ObjectKey{Namespace: dbClaim.Namespace, Name: secretName}, existingSecret)
+		if err == nil {
+			return fmt.Errorf("secret %s already exists in namespace %s, but no active database connection info is available", secretName, dbClaim.Namespace)
+		}
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
@@ -71,8 +79,8 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 					Kind:               "DatabaseClaim",
 					Name:               dbClaim.Name,
 					UID:                dbClaim.UID,
-					Controller:         &truePtr,
-					BlockOwnerDeletion: &truePtr,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(false),
 				},
 			},
 		},
