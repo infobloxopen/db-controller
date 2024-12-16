@@ -41,25 +41,25 @@ func (r *DBInstanceStatusReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	logger := log.FromContext(ctx)
 	logger.Info("Starting reconciliation", "DBInstance", req.NamespacedName)
 
-	// Step 1: Retrieve the DBInstance
+	// Fetch the DBInstance.
 	dbInstance, err := r.fetchDBInstance(ctx, req)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Step 2: Validate labels on the DBInstance
-	dbClaimName, err := r.validateDBInstanceLabels(dbInstance, logger)
-	if err != nil {
-		return ctrl.Result{}, nil // No requeue for missing labels
-	}
-
-	// Step 3: Retrieve the associated DatabaseClaim
-	dbClaim, err := r.fetchDatabaseClaim(ctx, req.Namespace, dbClaimName, logger)
+	// Retrieve the DBInstance labels for the associated DatabaseClaim.
+	dbClaimInstance, dbClaimComponent, err := r.validateDBInstanceLabels(dbInstance, logger)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Step 4: Update DatabaseClaim based on DBInstance status
+	// Retrieve the associated DatabaseClaim.
+	dbClaim, err := r.fetchDatabaseClaim(ctx, dbClaimInstance, dbClaimComponent, logger)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Update DatabaseClaim based on DBInstance status.
 	if err := r.updateDatabaseClaimStatus(ctx, dbInstance, dbClaim, logger); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -68,7 +68,7 @@ func (r *DBInstanceStatusReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-// fetchDBInstance retrieves the DBInstance from the cluster
+// fetchDBInstance retrieves the DBInstance resource.
 func (r *DBInstanceStatusReconciler) fetchDBInstance(ctx context.Context, req ctrl.Request) (*crossplaneaws.DBInstance, error) {
 	var dbInstance crossplaneaws.DBInstance
 	if err := r.Get(ctx, req.NamespacedName, &dbInstance); err != nil {
@@ -81,32 +81,39 @@ func (r *DBInstanceStatusReconciler) fetchDBInstance(ctx context.Context, req ct
 }
 
 // validateDBInstanceLabels checks if the DBInstance has the required labels
-func (r *DBInstanceStatusReconciler) validateDBInstanceLabels(dbInstance *crossplaneaws.DBInstance, logger logr.Logger) (string, error) {
+func (r *DBInstanceStatusReconciler) validateDBInstanceLabels(dbInstance *crossplaneaws.DBInstance, logger logr.Logger) (string, string, error) {
 	labels := dbInstance.GetLabels()
 	if labels == nil {
 		logger.Error(fmt.Errorf("missing labels"), "DBInstance has no labels", "DBInstance", dbInstance.Name)
-		return "", fmt.Errorf("DBInstance %s has no labels", dbInstance.Name)
+		return "", "", fmt.Errorf("DBInstance %s has no labels", dbInstance.Name)
 	}
-	dbClaimName, exists := labels["app.kubernetes.io/instance"]
+
+	instanceLabel, exists := labels["app.kubernetes.io/instance"]
 	if !exists {
-		logger.Info("DBInstance missing required label", "DBInstance", dbInstance.Name)
-		return "", fmt.Errorf("missing required label")
+		logger.Info("DBInstance missing app.kubernetes.io/instance required label", "DBInstance", dbInstance.Name)
+		return "", "", fmt.Errorf("missing app.kubernetes.io/instance required label")
 	}
-	return dbClaimName, nil
+
+	componentLabel, exists := labels["app.kubernetes.io/component"]
+	if !exists {
+		logger.Info("DBInstance missing app.kubernetes.io/component required label", "DBInstance", dbInstance.Name)
+		return "", "", fmt.Errorf("missing app.kubernetes.io/component required label")
+	}
+
+	return instanceLabel, componentLabel, nil
 }
 
-// fetchDatabaseClaim retrieves the associated DatabaseClaim
-func (r *DBInstanceStatusReconciler) fetchDatabaseClaim(ctx context.Context, namespace, dbClaimName string, logger logr.Logger) (*persistancev1.DatabaseClaim, error) {
+// fetchDatabaseClaim retrieves the DatabaseClaim resource.
+func (r *DBInstanceStatusReconciler) fetchDatabaseClaim(ctx context.Context, dbClaimInstance, dbClaimComponent string, logger logr.Logger) (*persistancev1.DatabaseClaim, error) {
 	var dbClaim persistancev1.DatabaseClaim
 	if err := r.Get(ctx, types.NamespacedName{
-		Name:      dbClaimName,
-		Namespace: namespace,
+		Name:      fmt.Sprintf("%s-%s", dbClaimInstance, dbClaimComponent),
+		Namespace: dbClaimInstance,
 	}, &dbClaim); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to get DatabaseClaim", "DatabaseClaim", dbClaimName)
-		}
-		return nil, client.IgnoreNotFound(err)
+		logger.Error(err, "Failed to get DatabaseClaim", "DatabaseClaim", fmt.Sprintf("%s/%s-%s", dbClaimInstance, dbClaimInstance, dbClaimComponent))
+		return nil, err
 	}
+
 	return &dbClaim, nil
 }
 
