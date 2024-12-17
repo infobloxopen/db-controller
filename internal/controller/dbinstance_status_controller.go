@@ -143,7 +143,6 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 	}
 
 	// TODO: implement the code to include/update the AtProvider statuses in the DBClaim using the StatusManager.
-
 	// Update in the DatabaseClaim only the Synced condition.
 
 	// If Ready and Synced from the DBInstance are true, then set the Synced condition in the DatabaseClaim will be true,
@@ -154,7 +153,24 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 	// Example of a message: "ReconcileError: cannot determine creation result - remove the crossplane.io/external-create-pending annotation if it is safe to proceed";
 	// The reason can be "ReasonUnavailable".
 
+	if conditionReadyAtProvider.Status == metav1.ConditionTrue && conditionSyncedAtProvider.Status == metav1.ConditionTrue {
+		dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, conditionSyncedAtProvider)
+	} else {
+		conditionSyncedAtProvider.Status = metav1.ConditionFalse
+		conditionSyncedAtProvider.Reason = "ReasonUnavailable"
+		conditionSyncedAtProvider.Message = "ReconcileError: cannot determine creation result - remove the crossplane.io/external-create-pending annotation if it is safe to proceed"
+
+		dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, conditionSyncedAtProvider)
+	}
+
+	if err := r.Status().Update(ctx, dbClaim); err != nil {
+		logger.Error(err, "Failed to update DatabaseClaim status")
+		return err
+	}
+
+	logger.Info("DatabaseClaim status updated successfully", "DatabaseClaim", dbClaim.Name)
 	return nil
+
 }
 
 // SetupWithManager configures the controller with the Manager
