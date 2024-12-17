@@ -9,7 +9,6 @@ import (
 	_ "github.com/lib/pq"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -73,16 +72,6 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 			Namespace: dbClaim.Namespace,
 			Name:      secretName,
 			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "persistance.atlas.infoblox.com/v1",
-					Kind:               "DatabaseClaim",
-					Name:               dbClaim.Name,
-					UID:                dbClaim.UID,
-					Controller:         ptr.To(true),
-					BlockOwnerDeletion: ptr.To(false),
-				},
-			},
 		},
 		Data: map[string][]byte{
 			v1.DSNKey:           []byte(dsn),
