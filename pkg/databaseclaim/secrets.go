@@ -52,7 +52,7 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 			secretName, dbClaim.Namespace,
 		)
 	}
-	
+
 	if err != nil && errors.IsNotFound(err) {
 		if err := r.createSecret(ctx, dbClaim, dsn, dsnURI, replicaDsnURI, connInfo); err != nil {
 			return err
