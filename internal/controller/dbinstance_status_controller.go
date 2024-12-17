@@ -116,12 +116,6 @@ func (r *DBInstanceStatusReconciler) fetchDatabaseClaim(ctx context.Context, dbC
 
 // updateDatabaseClaimStatus updates the status of the DatabaseClaim
 func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *persistancev1.DatabaseClaim, logger logr.Logger) error {
-	updated := false
-
-	if dbClaim.Status.Conditions == nil {
-		dbClaim.Status.Conditions = []metav1.Condition{}
-	}
-
 	conditionSyncedAtProvider := metav1.Condition{
 		Type: ConditionSyncedAtProvider,
 	}
@@ -149,6 +143,16 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 	}
 
 	// TODO: implement the code to include/update the AtProvider statuses in the DBClaim using the StatusManager.
+
+	// Update in the DatabaseClaim only the Synced condition.
+
+	// If Ready and Synced from the DBInstance are true, then set the Synced condition in the DatabaseClaim will be true,
+	// otherwise it will be false.
+
+	// If Synced is false in the DatabaseClaim, then get the reason and message from the DBInstance and set it in
+	// the DatabaseClaim.
+	// Example of a message: "ReconcileError: cannot determine creation result - remove the crossplane.io/external-create-pending annotation if it is safe to proceed";
+	// The reason can be "ReasonUnavailable".
 
 	return nil
 }
