@@ -45,8 +45,8 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Name:      secretName,
 	}, gs)
 
-	if dbClaim.Status.ActiveDB.ConnectionInfo == nil && err == nil {
-		return fmt.Errorf("secret %s already exists in namespace %s, but no active database connection info is available", secretName, dbClaim.Namespace)	
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil && err == nil && dbClaim.Spec.UseExistingSource == nil && !*dbClaim.Spec.UseExistingSource {
+		return fmt.Errorf("secret %s already exists in namespace %s, but no active database connection info is available", secretName, dbClaim.Namespace)
 	}
 
 	if err != nil && errors.IsNotFound(err) {
