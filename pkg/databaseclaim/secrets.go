@@ -45,6 +45,10 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Name:      secretName,
 	}, gs)
 
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil && err == nil {
+		return fmt.Errorf("secret %s already exists in namespace %s, but no active database connection info is available", secretName, dbClaim.Namespace)	
+	}
+
 	if err != nil && errors.IsNotFound(err) {
 		if err := r.createSecret(ctx, dbClaim, dsn, dsnURI, replicaDsnURI, connInfo); err != nil {
 			return err
@@ -58,14 +62,6 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI, replicaDbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
 	logr := log.FromContext(ctx)
 	secretName := dbClaim.Spec.SecretName
-
-	if dbClaim.Status.ActiveDB.ConnectionInfo == nil {
-		existingSecret := &corev1.Secret{}
-		err := r.Client.Get(ctx, client.ObjectKey{Namespace: dbClaim.Namespace, Name: secretName}, existingSecret)
-		if err == nil {
-			return fmt.Errorf("secret %s already exists in namespace %s, but no active database connection info is available", secretName, dbClaim.Namespace)
-		}
-	}
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
