@@ -91,12 +91,12 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 	}
 
 	log := logf.FromContext(ctx).WithName("defaulter").WithValues("pod", nn)
-	log.Info("processing")
 
 	if pod.Labels == nil || len(pod.Labels[LabelClaim]) == 0 {
 		log.Info("Skipping Pod")
 		return nil
 	}
+	log.Info("processing")
 
 	claimName := pod.Labels[LabelClaim]
 
