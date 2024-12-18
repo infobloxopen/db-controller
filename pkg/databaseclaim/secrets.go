@@ -45,6 +45,14 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Name:      secretName,
 	}, gs)
 
+	useExistingSource := dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil && err == nil && !useExistingSource {
+		return fmt.Errorf(
+			"secret %s already exists in namespace %s, but no active database connection info is available",
+			secretName, dbClaim.Namespace,
+		)
+	}
+
 	if err != nil && errors.IsNotFound(err) {
 		if err := r.createSecret(ctx, dbClaim, dsn, dsnURI, replicaDsnURI, connInfo); err != nil {
 			return err
@@ -56,25 +64,14 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI, replicaDbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
-
 	logr := log.FromContext(ctx)
 	secretName := dbClaim.Spec.SecretName
-	truePtr := true
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
 			Name:      secretName,
 			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "persistance.atlas.infoblox.com/v1",
-					Kind:               "DatabaseClaim",
-					Name:               dbClaim.Name,
-					UID:                dbClaim.UID,
-					Controller:         &truePtr,
-					BlockOwnerDeletion: &truePtr,
-				},
-			},
 		},
 		Data: map[string][]byte{
 			v1.DSNKey:           []byte(dsn),

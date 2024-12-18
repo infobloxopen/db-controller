@@ -170,8 +170,9 @@ func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.O
 
 func (m *MockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	_ = ctx
-	if (obj.GetNamespace() == "testNamespace" || obj.GetNamespace() == "schema-user-test") &&
-		(obj.GetName() == "create-master-secret" || obj.GetName() == "sample-master-secret") {
+	if obj.GetName() == "new-secret" ||
+		(obj.GetNamespace() == "testNamespace" || obj.GetNamespace() == "schema-user-test") &&
+			(obj.GetName() == "create-master-secret" || obj.GetName() == "sample-master-secret") {
 		sec, ok := obj.(*corev1.Secret)
 		m.CreatedObject = sec
 		if !ok {
