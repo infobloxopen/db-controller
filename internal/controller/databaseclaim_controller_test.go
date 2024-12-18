@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 )
 
@@ -67,6 +69,25 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			password, ok := parsedDSN.User.Password()
 			Expect(ok).To(BeTrue())
 
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).To(HaveOccurred())
+			Expect(client.IgnoreNotFound(err)).To(Succeed())
+
+			By(fmt.Sprintf("creating master credentials: %s", secretName))
+			secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+				},
+				StringData: map[string]string{
+					"password": password,
+				},
+				Type: "Opaque",
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			By("creating master databaseclaims")
 			Expect(client.IgnoreNotFound(err)).To(Succeed())
 			resource := &persistancev1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
@@ -78,6 +99,8 @@ var _ = Describe("DatabaseClaim Controller", func() {
 					Namespace: "default",
 				},
 				Spec: persistancev1.DatabaseClaimSpec{
+					// TODO: remove customization of DSNName
+					DSNName:               "fixme.txt",
 					Class:                 ptr.To(""),
 					DatabaseName:          "sample_app",
 					SecretName:            secretName,
@@ -90,22 +113,14 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
-			secret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
-			Expect(err).To(HaveOccurred())
-			Expect(client.IgnoreNotFound(err)).To(Succeed())
+			By("Mocking master credentials")
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
+			Expect(err).ToNot(HaveOccurred())
 
-			secret = &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: "default",
-				},
-				StringData: map[string]string{
-					"password": password,
-				},
-				Type: "Opaque",
-			}
-			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+
+			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
+			DeferCleanup(cleanup)
 
 		})
 
@@ -144,6 +159,42 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(claim.Status.Error).To(Equal(""))
+		})
+
+		It("Should have DSN and URIDSN keys populated", func() {
+			By("Reconciling the created resource")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			var claim persistancev1.DatabaseClaim
+			err = k8sClient.Get(ctx, typeNamespacedName, &claim)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(claim.Status.Error).To(Equal(""))
+
+			By("Checking the user credentials secret")
+
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, key := range []string{v1.DSNKey, v1.DSNURIKey, "fixme.txt", "uri_fixme.txt"} {
+				Expect(secret.Data[key]).NotTo(BeNil())
+			}
+			oldKey := secret.Data[v1.DSNKey]
+			Expect(secret.Data[v1.DSNKey]).To(Equal(secret.Data["fixme.txt"]))
+			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
+			// Slow down the test so creds are rotated, 60ns rotation time
+			By("Rotate passwords and verify credentials are updated")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Data[v1.DSNKey]).NotTo(Equal(oldKey))
+			Expect(secret.Data[v1.DSNKey]).To(Equal(secret.Data["fixme.txt"]))
+			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
+
 		})
 
 		It("Should succeed with no error status to reconcile CR with DBVersion", func() {

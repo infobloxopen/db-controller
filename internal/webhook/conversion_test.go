@@ -97,15 +97,16 @@ var _ = Describe("annotation conversions", func() {
 
 	It("should convert deprecated pod", func() {
 
-		By("Check dbproxy pod is mutated")
+		By("Check deprecated dbproxy annotations are converted to labels")
 		name := "deprecated-dbproxy"
 		pod := makeConvertedPod(name, class, dbcSecretName, "")
 		Expect(pod.Annotations).To(HaveKey(DeprecatedAnnotationMessages))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelClaim, dbcName))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelCheckProxy, "enabled"))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelClass, class))
+		Expect(pod.Labels).ToNot(HaveKey(LabelConfigExec))
 
-		By("Check dsnexec pod is converted")
+		By("Check dsnexec annotations are converted to labels")
 		name = "deprecated-dsnexec"
 		pod = makeConvertedPod(name, class, dbcSecretName, configSecretName)
 		Expect(pod.Annotations).To(HaveKey(DeprecatedAnnotationMessages))
@@ -113,14 +114,16 @@ var _ = Describe("annotation conversions", func() {
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelConfigExec, configSecretName))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelCheckExec, "enabled"))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelClass, class))
+		Expect(pod.Labels).ToNot(HaveKey(LabelCheckProxy))
 
-		By("Check dbproxy dsnexec combo pod is converted")
+		By("Check dbproxy dsnexec combo annotations are converted to labels")
 		name = "deprecated-both"
 		pod = makeConvertedPod(name, class, dbcSecretName, configSecretName)
 		Expect(pod.Annotations).To(HaveKey(DeprecatedAnnotationMessages))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelClaim, dbcName))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelConfigExec, configSecretName))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelCheckProxy, "enabled"))
+		Expect(pod.Labels).To(HaveKeyWithValue(LabelCheckExec, "enabled"))
 		Expect(pod.Labels).To(HaveKeyWithValue(LabelClass, class))
 
 	})
@@ -174,31 +177,28 @@ func makeDeprecatedPod(name, secretName, configSecret string) *corev1.Pod {
 			},
 		},
 	}
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{}
+	}
+	if pod.Labels == nil {
+		pod.Labels = map[string]string{}
+	}
 	Expect(secretName).NotTo(BeEmpty())
-
 	switch name {
 	case "deprecated-dbproxy":
-		pod.Annotations = map[string]string{
-			DeprecatedAnnotationDBSecretPath: secretName + "/" + "dsn.txt",
-		}
+		pod.Annotations[DeprecatedAnnotationDBSecretPath] = secretName + "/" + "dsn.txt"
+
 	case "deprecated-both":
-		pod.Annotations = map[string]string{
-			DeprecatedAnnotationDBSecretPath: secretName + "/" + "dsn.txt",
-		}
+		pod.Annotations[DeprecatedAnnotationDBSecretPath] = secretName + "/" + "dsn.txt"
 		fallthrough
 	case "deprecated-dsnexec":
 		Expect(configSecret).NotTo(BeEmpty())
-		pod.Annotations = map[string]string{
-			DeprecatedAnnotationRemoteDBDSN:   secretName,
-			DeprecatedAnnotationDSNExecConfig: configSecret,
-		}
+
+		pod.Annotations[DeprecatedAnnotationRemoteDBDSN] = secretName
+		pod.Annotations[DeprecatedAnnotationDSNExecConfig] = configSecret
 	case "deprecated-converted":
-		pod.Annotations = map[string]string{
-			DeprecatedAnnotationDBSecretPath: secretName + "/" + "dsn.txt",
-		}
-		pod.Labels = map[string]string{
-			LabelConfigExec: "default-db",
-		}
+		pod.Annotations[DeprecatedAnnotationDBSecretPath] = secretName + "/" + "dsn.txt"
+		pod.Labels[LabelConfigExec] = "default-db"
 	case "deprecated-none":
 	}
 
