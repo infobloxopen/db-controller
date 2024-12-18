@@ -39,7 +39,10 @@ defaultMajorVersion: 15
 passwordConfig:
   passwordComplexity: enabled
   minPasswordLength: 15
-  passwordRotationPeriod: 60
+  # 60s is a common error requeue in the codebase. Set this
+  # to something other than 60s to distinguish between
+  # success requeue and those error requeues.
+  passwordRotationPeriod: 65s
 
 systemFunctions:
   ib_realm: "ib_realm"

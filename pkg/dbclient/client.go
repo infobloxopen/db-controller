@@ -395,7 +395,7 @@ func (pc *client) CreateSchema(schemaName string) (bool, error) {
 	createSchema := strings.Replace(`
 			CREATE SCHEMA IF NOT EXISTS "%schema%";
 			REVOKE ALL ON SCHEMA "%schema%" FROM PUBLIC;
-			GRANT USAGE ON SCHEMA "%schema%" TO PUBLIC;			
+			GRANT USAGE ON SCHEMA "%schema%" TO PUBLIC;
 			REVOKE ALL ON ALL TABLES IN SCHEMA "%schema%" FROM PUBLIC ;
 			GRANT SELECT ON ALL TABLES IN SCHEMA "%schema%" TO PUBLIC;
 		`, "%schema%", schemaName, -1)

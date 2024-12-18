@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -130,7 +131,8 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	now := time.Now()
-	testdb, testDSN, cleanupTestDB = dockerdb.Run(dockerdb.Config{
+	logger.Info("start postgres setup")
+	testdb, testDSN, cleanupTestDB = dockerdb.Run(logger, dockerdb.Config{
 		Database:  "postgres",
 		Username:  "postgres",
 		Password:  "postgres",
@@ -138,14 +140,7 @@ var _ = BeforeSuite(func() {
 	})
 	logger.Info("postgres_setup_took", "duration", time.Since(now))
 
-	// Mock table for testing migrations
-	_, err = testdb.Exec(`CREATE TABLE IF NOT EXISTS users (
-		id SERIAL PRIMARY KEY,
-		name TEXT NOT NULL,
-		email TEXT NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	)`)
-	Expect(err).NotTo(HaveOccurred())
+	dockerdb.MustSQL(context.TODO(), testdb, "testdata/mock.sql")
 
 	// Setup controller
 	By("setting up the database controller")

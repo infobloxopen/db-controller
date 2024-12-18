@@ -20,7 +20,9 @@ func NewTestLogger(t *testing.T) logr.Logger {
 
 func TestPostgresClientOperations(t *testing.T) {
 
-	db, dsn, close := dockerdb.Run(dockerdb.Config{
+	testLogger := NewTestLogger(t)
+
+	db, dsn, close := dockerdb.Run(testLogger, dockerdb.Config{
 		Username: "test",
 		Password: "pa@ss$){[d~&!@#$%^*()_+`-={}|[]:<>?,./",
 		Database: "postgres",
@@ -75,7 +77,7 @@ func TestPostgresClientOperations(t *testing.T) {
 				dbURL:   dsn,
 				DB:      db,
 				adminDB: db,
-				log:     NewTestLogger(t),
+				log:     testLogger,
 			}
 
 			got, err := pc.CreateDatabase(tt.args.dbName)
