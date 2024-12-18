@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"net/url"
-	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 
@@ -23,7 +22,16 @@ func MockRDS(t GinkgoTInterface, ctx context.Context, cli client.Client, secretN
 		DockerTag: "15",
 	})
 
-	fakeDSN = strings.Replace(fakeDSN, "localhost", "127.0.0.1", 1)
+	cleanSecret := MockRDSCredentials(t, ctx, cli, fakeDSN, secretName)
+
+	return dbCli, fakeDSN, func() {
+		cleanSecret()
+		clean()
+	}
+
+}
+
+func MockRDSCredentials(t GinkgoTInterface, ctx context.Context, cli client.Client, fakeDSN, secretName string) func() {
 
 	u, err := url.Parse(fakeDSN)
 	if err != nil {
@@ -47,10 +55,9 @@ func MockRDS(t GinkgoTInterface, ctx context.Context, cli client.Client, secretN
 		t.Fatalf("failed to create secret: %v", err)
 	}
 
-	return dbCli, fakeDSN, func() {
+	return func() {
 		if err := cli.Delete(ctx, secret); err != nil {
 			t.Logf("failed to delete secret: %v", err)
 		}
-		clean()
 	}
 }

@@ -17,10 +17,13 @@ import (
 )
 
 var (
+	// DSNExec annotations
 	DeprecatedAnnotationDSNExecConfig = "infoblox.com/dsnexec-config-secret"
 	DeprecatedAnnotationRemoteDBDSN   = "infoblox.com/remote-db-dsn-secret"
-	DeprecatedAnnotationDBSecretPath  = "infoblox.com/db-secret-path"
-	DeprecatedAnnotationMessages      = "persistance.atlas.infoblox.com/deprecation-messages"
+	// DBProxy annotations
+	DeprecatedAnnotationDBSecretPath = "infoblox.com/db-secret-path"
+
+	DeprecatedAnnotationMessages = "persistance.atlas.infoblox.com/deprecation-messages"
 )
 
 // +kubebuilder:webhook:path=/convert-deprecated-pod,mutating=true,failurePolicy=fail,groups="",resources=pods,verbs=create;update,versions=v1,name=podconversion.persistance.atlas.infoblox.com,sideEffects=None,timeoutSeconds=10,admissionReviewVersions=v1
@@ -94,9 +97,17 @@ func (p *podConverter) Handle(ctx context.Context, req admission.Request) admiss
 	}
 
 	// Check if any of the deprecated annotations are present
+	// dsnexec
 	dsnExecConfigSecret := pod.Annotations[DeprecatedAnnotationDSNExecConfig]
 	remoteDBDSNSecret := pod.Annotations[DeprecatedAnnotationRemoteDBDSN]
+	// dbproxy
 	dbSecretPath := pod.Annotations[DeprecatedAnnotationDBSecretPath]
+
+	if pod.Labels[LabelCheckExec] == "enabled" || pod.Labels[LabelCheckProxy] == "enabled" {
+		// This would log on every pod creation in the cluster
+		// log.V(1).Info("Skipped conversion, already converted", "uid", req.UID)
+		return admission.Allowed("Skipped conversion, already converted")
+	}
 
 	if dsnExecConfigSecret == "" && remoteDBDSNSecret == "" && dbSecretPath == "" {
 		// This would log on every pod creation in the cluster
@@ -112,7 +123,7 @@ func (p *podConverter) Handle(ctx context.Context, req admission.Request) admiss
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-	log.Info("converted_pod")
+	log.Info("deprecated_pod_annotations_found")
 	return admission.PatchResponseFromRaw(req.Object.Raw, bs)
 }
 
@@ -139,7 +150,9 @@ func convertPod(ctx context.Context, reader client.Reader, class string, pod *co
 		secretName = dbSecretPath
 	}
 
-	log = log.WithValues("secret", secretName)
+	log = log.WithValues("secret", secretName).WithValues("annotations", pod.Annotations).WithValues("labels", pod.Labels)
+
+	log.Info("converting_pod")
 
 	// db-secret-path has a key in it, so remove the key
 	parts := strings.Split(secretName, "/")
@@ -147,33 +160,35 @@ func convertPod(ctx context.Context, reader client.Reader, class string, pod *co
 		secretName = parts[0]
 	}
 
-	labelConfigExec := pod.Labels[LabelConfigExec]
-	if labelConfigExec == "" && dsnExecConfigSecret != "" {
-		pod.Labels[LabelConfigExec] = pod.Annotations[DeprecatedAnnotationDSNExecConfig]
-		pod.Labels[LabelCheckExec] = "enabled"
-		deprecationMsgs = append(deprecationMsgs, fmt.Sprintf(`Label "%s" replaces annotation "%s"`, LabelConfigExec, DeprecatedAnnotationDSNExecConfig))
+	var claimName string
+	var err error
+	if claimName, err = getClaimName(ctx, reader, pod.GetNamespace(), secretName); err != nil {
+		log.Error(err, "unable to find claim")
+		return err
 	}
 
-	// Process claims label
-	if pod.Labels[LabelClaim] == "" {
+	// dsnexec
+	if dsnExecConfigSecret != "" && remoteDBDSNSecret != "" {
+		pod.Labels[LabelClaim] = claimName
+		pod.Labels[LabelClass] = class
+		pod.Labels[LabelConfigExec] = dsnExecConfigSecret
+		pod.Labels[LabelCheckExec] = "enabled"
+
+		deprecationMsgs = append(deprecationMsgs, fmt.Sprintf(`Use label "%s", annotation "%s" is deprecated`, LabelConfigExec, DeprecatedAnnotationDSNExecConfig))
 
 		if pod.Annotations[DeprecatedAnnotationRemoteDBDSN] != "" {
-			deprecationMsgs = append(deprecationMsgs, fmt.Sprintf(`Label "%s" replaces annotation "%s"`, LabelClaim, DeprecatedAnnotationRemoteDBDSN))
+			deprecationMsgs = append(deprecationMsgs, fmt.Sprintf(`Use label "%s", annotation "%s" is deprecated`, LabelClaim, DeprecatedAnnotationRemoteDBDSN))
 		}
-		if pod.Annotations[DeprecatedAnnotationDBSecretPath] != "" {
-			deprecationMsgs = append(deprecationMsgs, fmt.Sprintf(`Label "%s" replaces annotation "%s"`, LabelClaim, DeprecatedAnnotationDBSecretPath))
-		}
+	}
 
-		var claimName string
-		var err error
-		if claimName, err = getClaimName(ctx, reader, pod.GetNamespace(), secretName); err != nil {
-			log.Error(err, "unable to find claim")
-			return err
-		}
-
+	// dbproxy
+	if dbSecretPath != "" {
 		pod.Labels[LabelClaim] = claimName
 		pod.Labels[LabelClass] = class
 		pod.Labels[LabelCheckProxy] = "enabled"
+
+		deprecationMsgs = append(deprecationMsgs, fmt.Sprintf(`Label "%s" replaces annotation "%s"`, LabelClaim, DeprecatedAnnotationDBSecretPath))
+
 	}
 
 	// Remove deprecated annotations

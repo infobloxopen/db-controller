@@ -282,6 +282,8 @@ CREATE ROLE alloydbsuperuser WITH INHERIT LOGIN`)
 		logger.Info(string(out))
 		os.Exit(1)
 	}
+
+	dsn = strings.Replace(dsn, "localhost", "127.0.0.1", 1)
 	// TODO: change this to debug logging, just timing jenkins for now
 	logger.Info("db_connected", "dsn", dsn, "duration", time.Since(now))
 
