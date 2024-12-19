@@ -1,8 +1,12 @@
-package controller_test
+package controller
 
 import (
 	"context"
 	"fmt"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/aws/smithy-go/ptr"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -10,44 +14,39 @@ import (
 	"github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	v1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/internal/controller"
-	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("DBInstanceStatusReconciler", func() {
 	var (
-		dbInstance           *v1alpha1.DBInstance
-		dbClaim              *persistancev1.DatabaseClaim
-		controllerReconciler *controller.DBInstanceStatusReconciler
-		k8sClient            client.Client
+		dbInstance *v1alpha1.DBInstance
+		dbClaim    *persistancev1.DatabaseClaim
 	)
 
 	BeforeEach(func() {
-		controllerReconciler = &controller.DBInstanceStatusReconciler{
-			Client:        k8sClient,
-			Scheme:        scheme.Scheme,
-			StatusManager: databaseclaim.NewStatusManager(k8sClient, nil),
-		}
-
 		// Ensure DBInstance is clean before creating
 		existingInstance := &v1alpha1.DBInstance{}
-		err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-dbinstance"}, existingInstance)
+		err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "default-dbinstance"}, existingInstance)
 		if err == nil {
 			Expect(k8sClient.Delete(context.Background(), existingInstance)).To(Succeed())
 		}
 
 		dbInstance = &v1alpha1.DBInstance{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-dbinstance",
+				Namespace: "default",
+				Name:      "default-dbinstance",
 				Labels: map[string]string{
-					"app.kubernetes.io/instance":  "test-dbclaim",
-					"app.kubernetes.io/component": "database",
+					"app.kubernetes.io/instance":  "default",
+					"app.kubernetes.io/component": "dbclaim",
+				},
+			},
+			Spec: v1alpha1.DBInstanceSpec{
+				ForProvider: v1alpha1.DBInstanceParameters{
+					DBInstanceClass: ptr.String("db.t2.micro"),
+					Engine:          ptr.String("postgres"),
 				},
 			},
 			Status: v1alpha1.DBInstanceStatus{
@@ -75,18 +74,19 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 
 		// Ensure DatabaseClaim is clean before creating
 		existingClaim := &persistancev1.DatabaseClaim{}
-		err = k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-dbclaim"}, existingClaim)
+		err = k8sClient.Get(context.Background(), types.NamespacedName{Name: "default-dbclaim"}, existingClaim)
 		if err == nil {
 			Expect(k8sClient.Delete(context.Background(), existingClaim)).To(Succeed())
 		}
 
 		dbClaim = &persistancev1.DatabaseClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-dbclaim",
+				Namespace: "default",
+				Name:      "default-dbclaim",
 			},
 			Spec: persistancev1.DatabaseClaimSpec{
 				DatabaseName: "sample-app",
-				SecretName:   "test-secret",
+				SecretName:   "default-secret",
 			},
 		}
 		Expect(k8sClient.Create(context.Background(), dbClaim)).To(Succeed())
@@ -102,13 +102,15 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 	})
 
 	It("Should reconcile and update the DatabaseClaim status", func() {
-		_, err := controllerReconciler.Reconcile(context.Background(), reconcile.Request{
-			NamespacedName: types.NamespacedName{Name: "test-dbinstance"},
+		_, err := statusControllerReconciler.Reconcile(context.Background(), reconcile.Request{
+			NamespacedName: types.NamespacedName{Namespace: "default", Name: "default-dbinstance"},
 		})
 		Expect(err).NotTo(HaveOccurred())
 
 		updatedClaim := &persistancev1.DatabaseClaim{}
-		Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-dbclaim"}, updatedClaim)).To(Succeed())
+		Expect(k8sClient.Get(context.Background(), types.NamespacedName{Namespace: "default", Name: "default-dbclaim"}, updatedClaim)).To(Succeed())
+
+		fmt.Printf("updatedClaim: %v\n", updatedClaim.Status.Conditions)
 
 		condition := FindCondition(updatedClaim.Status.Conditions, "Synced")
 		Expect(condition).NotTo(BeNil())

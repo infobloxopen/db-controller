@@ -55,6 +55,7 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 var controllerReconciler *DatabaseClaimReconciler
+var statusControllerReconciler *DBInstanceStatusReconciler
 var namespace string
 var logger logr.Logger
 var env = "testenv"
@@ -174,6 +175,11 @@ var _ = BeforeSuite(func() {
 	controllerReconciler.Config.Viper.Set("defaultMasterusername", "postgres")
 	controllerReconciler.Config.Viper.Set("defaultSslMode", "disable")
 
+	statusControllerReconciler = &DBInstanceStatusReconciler{
+		Client:        k8sClient,
+		Scheme:        k8sClient.Scheme(),
+		StatusManager: databaseclaim.NewStatusManager(k8sClient, viperCfg),
+	}
 })
 
 var _ = AfterSuite(func() {

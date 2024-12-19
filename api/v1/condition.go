@@ -104,6 +104,15 @@ func ReconcileErrorCondition(err error) metav1.Condition {
 	)
 }
 
+func SyncErrorCondition(err error) metav1.Condition {
+	return CreateCondition(
+		ConditionSync,
+		metav1.ConditionFalse,
+		ReasonUnavailable,
+		fmt.Sprintf("Reconciliation encountered an issue: %v", err),
+	)
+}
+
 func ReconcileSuccessCondition() metav1.Condition {
 	return CreateCondition(
 		ConditionReady,
