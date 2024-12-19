@@ -321,6 +321,7 @@ type DatabaseClaimConnectionInfo struct {
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.activeDB.dbversion"
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status"
+// +kubebuilder:printcolumn:name="Synced",type="string",JSONPath=".status.conditions[?(@.type==\"Synced\")].status"
 // +kubebuilder:printcolumn:name="Status",type="string",priority=1,JSONPath=".status.conditions[?(@.type==\"Ready\")].message"
 // +kubebuilder:printcolumn:name="Age",type="date",priority=1,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:printcolumn:name="MigrationState",type="string",priority=1,JSONPath=".status.migrationState"
