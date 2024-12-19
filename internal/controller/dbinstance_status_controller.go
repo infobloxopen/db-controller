@@ -7,6 +7,7 @@ import (
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	statusmanager "github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,7 +26,8 @@ const (
 // DBInstanceStatusReconciler reconciles the status of DBInstance resources with DatabaseClaims
 type DBInstanceStatusReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	StatusManager *statusmanager.StatusManager
 }
 
 // RBAC markers
@@ -116,29 +118,37 @@ func (r *DBInstanceStatusReconciler) fetchDatabaseClaim(ctx context.Context, dbC
 
 // updateDatabaseClaimStatus updates the status of the DatabaseClaim
 func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *persistancev1.DatabaseClaim, logger logr.Logger) error {
-	conditionSyncedAtProvider := metav1.Condition{
-		Type: ConditionSyncedAtProvider,
-	}
-	for _, condition := range dbInstance.Status.Conditions {
-		if condition.Type == ConditionSynced {
-			conditionSyncedAtProvider = metav1.Condition{
-				Status: metav1.ConditionStatus(condition.Status),
-				Reason: string(condition.Reason),
-			}
-			break
-		}
-	}
+	conditionSyncedAtProvider := persistancev1.CreateCondition(
+		persistancev1.ConditionSync,
+		metav1.ConditionUnknown,
+		"Unknown",
+		"Condition not set",
+	)
 
-	conditionReadyAtProvider := metav1.Condition{
-		Type: ConditionReadyAtProvider,
-	}
+	conditionReadyAtProvider := persistancev1.CreateCondition(
+		persistancev1.ConditionReady,
+		metav1.ConditionUnknown,
+		"Unknown",
+		"Condition not set",
+	)
+
+	// Process conditions from DBInstance
 	for _, condition := range dbInstance.Status.Conditions {
-		if condition.Type == ConditionReady {
-			conditionReadyAtProvider = metav1.Condition{
-				Status: metav1.ConditionStatus(condition.Status),
-				Reason: string(condition.Reason),
-			}
-			break
+		switch condition.Type {
+		case ConditionSynced:
+			conditionSyncedAtProvider = persistancev1.CreateCondition(
+				persistancev1.ConditionSync,
+				metav1.ConditionStatus(condition.Status),
+				string(condition.Reason),
+				condition.Message,
+			)
+		case ConditionReady:
+			conditionReadyAtProvider = persistancev1.CreateCondition(
+				persistancev1.ConditionReady,
+				metav1.ConditionStatus(condition.Status),
+				string(condition.Reason),
+				condition.Message,
+			)
 		}
 	}
 
@@ -152,23 +162,39 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 	// the DatabaseClaim.
 	// Example of a message: "ReconcileError: cannot determine creation result - remove the crossplane.io/external-create-pending annotation if it is safe to proceed";
 	// The reason can be "ReasonUnavailable".
+	// Utilize the functions from condition.go to set the status conditions
 
 	if conditionReadyAtProvider.Status == metav1.ConditionTrue && conditionSyncedAtProvider.Status == metav1.ConditionTrue {
-		dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, conditionSyncedAtProvider)
+		// Set Synced condition to true
+		if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, persistancev1.DatabaseReadyCondition()); err != nil {
+			logger.Error(err, "Failed to set success condition in DatabaseClaim")
+			return err
+		}
+		logger.Info("DatabaseClaim Synced condition set to true")
 	} else {
-		conditionSyncedAtProvider.Status = metav1.ConditionFalse
-		conditionSyncedAtProvider.Reason = "ReasonUnavailable"
-		conditionSyncedAtProvider.Message = "ReconcileError: cannot determine creation result - remove the crossplane.io/external-create-pending annotation if it is safe to proceed"
+		// Set Synced condition to false
+		reason := conditionSyncedAtProvider.Reason
+		if reason == "" {
+			reason = persistancev1.ReasonUnavailable
+		}
 
-		dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, conditionSyncedAtProvider)
+		message := conditionSyncedAtProvider.Message
+		if message == "" {
+			message = "ReconcileError: cannot determine creation result - remove the crossplane.io/external-create-pending annotation if it is safe to proceed"
+		}
+
+		if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, persistancev1.CreateCondition(
+			persistancev1.ConditionSync,
+			metav1.ConditionFalse,
+			reason,
+			message,
+		)); err != nil {
+			logger.Error(err, "Failed to set error condition in DatabaseClaim")
+			return err
+		}
+		logger.Info("DatabaseClaim Synced condition set to false with message", "Message", message)
 	}
 
-	if err := r.Status().Update(ctx, dbClaim); err != nil {
-		logger.Error(err, "Failed to update DatabaseClaim status")
-		return err
-	}
-
-	logger.Info("DatabaseClaim status updated successfully", "DatabaseClaim", dbClaim.Name)
 	return nil
 
 }

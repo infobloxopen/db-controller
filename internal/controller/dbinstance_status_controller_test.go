@@ -1,167 +1,129 @@
 package controller_test
 
-//import (
-//	"context"
-//	"testing"
-//
-//	"github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-//	"github.com/go-logr/logr"
-//	persistencev1 "github.com/infobloxopen/db-controller/api/v1"
-//	"github.com/stretchr/testify/assert"
-//	"github.com/stretchr/testify/mock"
-//	"github.com/stretchr/testify/suite"
-//	v1 "k8s.io/api/core/v1"
-//	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-//	"k8s.io/apimachinery/pkg/runtime"
-//	"sigs.k8s.io/controller-runtime/pkg/client"
-//	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-//)
-//
-//const (
-//	ConditionReady            = "Ready"
-//	ConditionSynced           = "Synced"
-//	ConditionReadyAtProvider  = "ReadyAtProvider"
-//	ConditionSyncedAtProvider = "SyncedAtProvider"
-//)
-//
-//// MockClient for simulating the client
-//type MockClient struct {
-//	mock.Mock
-//	client.Client
-//}
-//
-//func (m *MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-//	args := m.Called(ctx, key, obj, opts)
-//	return args.Error(0)
-//}
-//
-//func (m *MockClient) Status() client.StatusWriter {
-//	args := m.Called()
-//	return args.Get(0).(client.StatusWriter)
-//}
-//
-//// Simulated reconciler
-//type DBInstanceStatusReconciler struct {
-//	client.Client
-//	Scheme *runtime.Scheme
-//}
-//
-//// updateDatabaseClaimStatus updates the status of the DatabaseClaim based on the DBInstance conditions
-//func (m *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *v1alpha1.DBInstance, dbClaim *persistencev1.DatabaseClaim, logger logr.Logger) error {
-//	updated := false
-//
-//	// Iterate over DBInstance conditions
-//	for _, condition := range dbInstance.Status.Conditions {
-//
-//		if condition.Type == ConditionReady && condition.Status == v1.ConditionTrue {
-//
-//			newCondition := metav1.Condition{
-//				Type:               ConditionReadyAtProvider,
-//				Status:             metav1.ConditionStatus(v1.ConditionTrue), // Convert to the correct type
-//				LastTransitionTime: condition.LastTransitionTime,
-//				Reason:             string(condition.Reason),
-//				Message:            condition.Message,
-//			}
-//			conditionExists := false
-//			for _, existingCondition := range dbClaim.Status.Conditions {
-//				if existingCondition.Type == newCondition.Type {
-//					conditionExists = true
-//					break
-//				}
-//			}
-//			if !conditionExists {
-//				dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, newCondition)
-//				updated = true
-//			}
-//
-//			break
-//		}
-//	}
-//	if updated {
-//		if err := m.Status().Update(ctx, dbClaim); err != nil {
-//			return err
-//		}
-//	}
-//
-//	return nil
-//}
-//
-//type DBInstanceStatusReconcilerTestSuite struct {
-//	suite.Suite
-//	mockClient *MockClient
-//}
-//
-//func (suite *DBInstanceStatusReconcilerTestSuite) SetupTest() {
-//	// Initializing MockClient before each test
-//	suite.mockClient = new(MockClient)
-//}
-//
-//func (suite *DBInstanceStatusReconcilerTestSuite) TearDownTest() {
-//	// Verify if all mocks were used correctly after the test
-//	suite.mockClient.AssertExpectations(suite.T())
-//}
-//
-//func (suite *DBInstanceStatusReconcilerTestSuite) TestReconcile() {
-//	// Setup
-//	mockClient := new(MockClient)
-//	reconciler := &DBInstanceStatusReconciler{
-//		Client: mockClient,
-//		Scheme: nil,
-//	}
-//
-//	req := reconcile.Request{
-//		NamespacedName: client.ObjectKey{
-//			Name:      "test-db-instance",
-//			Namespace: "default",
-//		},
-//	}
-//
-//	dbInstance := &v1alpha1.DBInstance{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      "test-db-instance",
-//			Namespace: "default",
-//			Labels: map[string]string{
-//				"app.kubernetes.io/instance": "test-db-claim",
-//			},
-//		},
-//		Status: v1alpha1.DBInstanceStatus{
-//			Conditions: []metav1.Condition{
-//				{
-//					Type:   ConditionReady,
-//					Status: v1.ConditionTrue,
-//				},
-//			},
-//		},
-//	}
-//
-//	dbClaim := &persistencev1.DatabaseClaim{
-//		ObjectMeta: metav1.ObjectMeta{
-//			Name:      "test-db-claim",
-//			Namespace: "default",
-//		},
-//		Status: persistencev1.DatabaseClaimStatus{
-//			Conditions: []metav1.Condition{}, // Starting with no conditions
-//		},
-//	}
-//
-//	// Define the mock client behavior
-//	mockClient.On("Get", mock.Anything, req.NamespacedName, dbInstance, mock.Anything).Return(nil)
-//	mockClient.On("Get", mock.Anything, client.ObjectKey{Name: "test-db-claim", Namespace: "default"}, dbClaim, mock.Anything).Return(nil)
-//	mockClient.On("Status").Return(mockClient)
-//
-//	// Run the Reconcile function
-//	_, err := reconciler.Reconcile(context.Background(), req)
-//
-//	// Check that there was no error
-//	assert.NoError(suite.T(), err)
-//	mockClient.AssertExpectations(suite.T())
-//
-//	// Verify that the DatabaseClaim status was updated
-//	assert.Len(suite.T(), dbClaim.Status.Conditions, 1)
-//	assert.Equal(suite.T(), ConditionReadyAtProvider, dbClaim.Status.Conditions[0].Type)
-//}
-//
-//// Setup test suite
-//func TestDBInstanceStatusReconciler(t *testing.T) {
-//	suite.Run(t, new(DBInstanceStatusReconcilerTestSuite))
-//}
+import (
+	"context"
+	"fmt"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	v1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/controller"
+	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+var _ = Describe("DBInstanceStatusReconciler", func() {
+	var (
+		dbInstance           *v1alpha1.DBInstance
+		dbClaim              *persistancev1.DatabaseClaim
+		controllerReconciler *controller.DBInstanceStatusReconciler
+		k8sClient            client.Client
+	)
+
+	BeforeEach(func() {
+		controllerReconciler = &controller.DBInstanceStatusReconciler{
+			Client:        k8sClient,
+			Scheme:        scheme.Scheme,
+			StatusManager: databaseclaim.NewStatusManager(k8sClient, nil),
+		}
+
+		// Ensure DBInstance is clean before creating
+		existingInstance := &v1alpha1.DBInstance{}
+		err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-dbinstance"}, existingInstance)
+		if err == nil {
+			Expect(k8sClient.Delete(context.Background(), existingInstance)).To(Succeed())
+		}
+
+		dbInstance = &v1alpha1.DBInstance{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-dbinstance",
+				Labels: map[string]string{
+					"app.kubernetes.io/instance":  "test-dbclaim",
+					"app.kubernetes.io/component": "database",
+				},
+			},
+			Status: v1alpha1.DBInstanceStatus{
+				ResourceStatus: v1.ResourceStatus{
+					ConditionedStatus: v1.ConditionedStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:    "Ready",
+								Status:  corev1.ConditionTrue,
+								Reason:  "Available",
+								Message: "DBInstance is ready",
+							},
+							{
+								Type:    "Synced",
+								Status:  corev1.ConditionTrue,
+								Reason:  "Available",
+								Message: "DBInstance is synced",
+							},
+						},
+					},
+				},
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), dbInstance)).To(Succeed())
+
+		// Ensure DatabaseClaim is clean before creating
+		existingClaim := &persistancev1.DatabaseClaim{}
+		err = k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-dbclaim"}, existingClaim)
+		if err == nil {
+			Expect(k8sClient.Delete(context.Background(), existingClaim)).To(Succeed())
+		}
+
+		dbClaim = &persistancev1.DatabaseClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-dbclaim",
+			},
+			Spec: persistancev1.DatabaseClaimSpec{
+				DatabaseName: "sample-app",
+				SecretName:   "test-secret",
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), dbClaim)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		if dbInstance != nil {
+			Expect(k8sClient.Delete(context.Background(), dbInstance)).To(Succeed())
+		}
+		if dbClaim != nil {
+			Expect(k8sClient.Delete(context.Background(), dbClaim)).To(Succeed())
+		}
+	})
+
+	It("Should reconcile and update the DatabaseClaim status", func() {
+		_, err := controllerReconciler.Reconcile(context.Background(), reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: "test-dbinstance"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		updatedClaim := &persistancev1.DatabaseClaim{}
+		Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: "test-dbclaim"}, updatedClaim)).To(Succeed())
+
+		condition := FindCondition(updatedClaim.Status.Conditions, "Synced")
+		Expect(condition).NotTo(BeNil())
+		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		Expect(condition.Reason).To(Equal("Available"))
+		Expect(condition.Message).To(Equal("DBInstance is synced"))
+	})
+})
+
+func FindCondition(conditions []metav1.Condition, condType string) *metav1.Condition {
+	for _, cond := range conditions {
+		if cond.Type == condType {
+			return &cond
+		}
+	}
+	Fail(fmt.Sprintf("Condition %s not found", condType))
+	return nil
+}
