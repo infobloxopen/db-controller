@@ -26,14 +26,10 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 		dbClaim    *persistancev1.DatabaseClaim
 	)
 
+	// Prepare resources for each test case
 	BeforeEach(func() {
-		// Ensure DBInstance is clean before creating
-		existingInstance := &v1alpha1.DBInstance{}
-		err := k8sClient.Get(context.Background(), types.NamespacedName{Name: "default-dbinstance"}, existingInstance)
-		if err == nil {
-			Expect(k8sClient.Delete(context.Background(), existingInstance)).To(Succeed())
-		}
 
+		// Create a DBInstance resource with required labels
 		dbInstance = &v1alpha1.DBInstance{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
@@ -49,36 +45,10 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 					Engine:          ptr.String("postgres"),
 				},
 			},
-			Status: v1alpha1.DBInstanceStatus{
-				ResourceStatus: v1.ResourceStatus{
-					ConditionedStatus: v1.ConditionedStatus{
-						Conditions: []v1.Condition{
-							{
-								Type:    "Ready",
-								Status:  corev1.ConditionTrue,
-								Reason:  "Available",
-								Message: "DBInstance is ready",
-							},
-							{
-								Type:    "Synced",
-								Status:  corev1.ConditionTrue,
-								Reason:  "Available",
-								Message: "DBInstance is synced",
-							},
-						},
-					},
-				},
-			},
 		}
 		Expect(k8sClient.Create(context.Background(), dbInstance)).To(Succeed())
 
-		// Ensure DatabaseClaim is clean before creating
-		existingClaim := &persistancev1.DatabaseClaim{}
-		err = k8sClient.Get(context.Background(), types.NamespacedName{Name: "default-dbclaim"}, existingClaim)
-		if err == nil {
-			Expect(k8sClient.Delete(context.Background(), existingClaim)).To(Succeed())
-		}
-
+		// Create a corresponding DatabaseClaim resource
 		dbClaim = &persistancev1.DatabaseClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
@@ -92,40 +62,108 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 		Expect(k8sClient.Create(context.Background(), dbClaim)).To(Succeed())
 	})
 
+	// Clean up resources after each test case
 	AfterEach(func() {
-		if dbInstance != nil {
-			Expect(k8sClient.Delete(context.Background(), dbInstance)).To(Succeed())
-		}
-		if dbClaim != nil {
-			Expect(k8sClient.Delete(context.Background(), dbClaim)).To(Succeed())
-		}
+
+		// Delete the DBInstance resource
+		Expect(k8sClient.Delete(context.Background(), dbInstance)).To(Succeed())
+		// Delete the DatabaseClaim resource
+		Expect(k8sClient.Delete(context.Background(), dbClaim)).To(Succeed())
 	})
 
-	It("Should reconcile and update the DatabaseClaim status", func() {
+	// Test case: Reconcile should update DatabaseClaim status to Synced=True
+	It("Should reconcile and update the DatabaseClaim status to Synced=True", func() {
+
+		// Retrieve the created DBInstance and update its status
+		updatedInstance := &v1alpha1.DBInstance{}
+		Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+			Namespace: "default", Name: "default-dbinstance"}, updatedInstance)).To(Succeed())
+
+		// Set the DBInstance conditions to indicate it is synced and ready
+		updatedInstance.Status.Conditions = []v1.Condition{
+			{
+				Type:               "Synced",
+				Status:             corev1.ConditionTrue,
+				Reason:             "Available",
+				Message:            "DBInstance is synced",
+				LastTransitionTime: metav1.Now(),
+			},
+			{
+				Type:               "Ready",
+				Status:             corev1.ConditionTrue,
+				Reason:             "Available",
+				Message:            "DBInstance is ready",
+				LastTransitionTime: metav1.Now(),
+			},
+		}
+		Expect(k8sClient.Status().Update(context.Background(), updatedInstance)).To(Succeed())
+
+		// Trigger the reconcile loop
 		_, err := statusControllerReconciler.Reconcile(context.Background(), reconcile.Request{
 			NamespacedName: types.NamespacedName{Namespace: "default", Name: "default-dbinstance"},
 		})
 		Expect(err).NotTo(HaveOccurred())
 
+		// Retrieve the updated DatabaseClaim and check its status
 		updatedClaim := &persistancev1.DatabaseClaim{}
-		Expect(k8sClient.Get(context.Background(), types.NamespacedName{Namespace: "default", Name: "default-dbclaim"}, updatedClaim)).To(Succeed())
+		Expect(k8sClient.Get(context.Background(), types.NamespacedName{
+			Namespace: "default", Name: "default-dbclaim"}, updatedClaim)).To(Succeed())
 
+		// Print the updated DatabaseClaim conditions for debugging
 		fmt.Printf("updatedClaim: %v\n", updatedClaim.Status.Conditions)
 
+		// Verify that the Synced condition is set to True
 		condition := FindCondition(updatedClaim.Status.Conditions, "Synced")
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(condition.Reason).To(Equal("Available"))
-		Expect(condition.Message).To(Equal("DBInstance is synced"))
+		Expect(condition.Message).To(Equal("Database is provisioned."))
+	})
+
+	// Test case: Reconcile should update DatabaseClaim status to Synced=False
+	It("Should update DatabaseClaim status to Synced=False", func() {
+
+		// Retrieve the created DBInstance and simulate a failed sync condition
+		updatedInstance := &v1alpha1.DBInstance{}
+		Expect(k8sClient.Get(context.Background(), types.NamespacedName{Namespace: "default", Name: "default-dbinstance"}, updatedInstance)).To(Succeed())
+		updatedInstance.Status.Conditions = []v1.Condition{
+			{
+				Type:               "Synced",
+				Status:             corev1.ConditionFalse,
+				Reason:             "SyncFailed",
+				Message:            "DBInstance synchronization failed",
+				LastTransitionTime: metav1.Now(),
+			},
+		}
+		Expect(k8sClient.Status().Update(context.Background(), updatedInstance)).To(Succeed())
+
+		// Trigger the reconcile loop
+		_, err := statusControllerReconciler.Reconcile(context.Background(), reconcile.Request{
+			NamespacedName: types.NamespacedName{Namespace: "default", Name: "default-dbinstance"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Retrieve the updated DatabaseClaim and check its status
+		updatedClaim := &persistancev1.DatabaseClaim{}
+		Expect(k8sClient.Get(context.Background(), types.NamespacedName{Namespace: "default", Name: "default-dbclaim"}, updatedClaim)).To(Succeed())
+
+		// Verify that the Synced condition is set to False
+		condition := FindCondition(updatedClaim.Status.Conditions, "Synced")
+		Expect(condition).NotTo(BeNil())
+		Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+		Expect(condition.Reason).To(Equal("Unavailable"))
+		Expect(condition.Message).To(Equal("Reconciliation encountered an issue: SyncFailed: DBInstance synchronization failed"))
 	})
 })
 
+// Helper function to find a condition by type in a list of conditions
 func FindCondition(conditions []metav1.Condition, condType string) *metav1.Condition {
 	for _, cond := range conditions {
 		if cond.Type == condType {
 			return &cond
 		}
 	}
+	// Fail the test if the condition is not found
 	Fail(fmt.Sprintf("Condition %s not found", condType))
 	return nil
 }
