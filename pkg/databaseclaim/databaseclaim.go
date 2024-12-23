@@ -1128,7 +1128,7 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 
 func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) error {
 
-	status := dbClaim.Status.NewDB
+	status := &dbClaim.Status.NewDB
 	dbName := dbClaim.Spec.DatabaseName
 	baseUsername := dbClaim.Spec.Username
 
@@ -1169,7 +1169,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixA, dbu.GetUserA(), baseUsername, userPassword); err != nil {
 			return err
 		}
-		r.statusManager.UpdateUserStatus(&status, reqInfo, dbu.GetUserA(), userPassword)
+		r.statusManager.UpdateUserStatus(status, reqInfo, dbu.GetUserA(), userPassword)
 		// updating user b
 		userPassword, err = r.generatePassword()
 		if err != nil {
@@ -1200,7 +1200,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 			return err
 		}
 
-		r.statusManager.UpdateUserStatus(&status, reqInfo, nextUser, userPassword)
+		r.statusManager.UpdateUserStatus(status, reqInfo, nextUser, userPassword)
 	}
 
 	// baseUsername = myuser
