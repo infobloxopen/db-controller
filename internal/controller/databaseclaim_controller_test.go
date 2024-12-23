@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -32,87 +33,77 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 )
 
 var _ = Describe("DatabaseClaim Controller", func() {
 
-	// Define utility constants for object names and testing timeouts/durations and intervals.
-
 	Context("When updating DB Claim Status", func() {
+		const (
+			resourceName = "test-dbclaim"
+			secretName   = "postgres-postgresql"
+			namespace    = "default"
+			databaseName = "test-db"
+			databaseType = "postgres"
+		)
+		var (
+			ctx                      = context.Background()
+			typeNamespacedName       = types.NamespacedName{Name: resourceName, Namespace: namespace}
+			typeNamespacedSecretName = types.NamespacedName{Name: secretName, Namespace: namespace}
+			claim                    = &v1.DatabaseClaim{}
+		)
 
-		const resourceName = "test-dbclaim"
-		const secretName = "postgres-postgresql"
-
-		ctx := context.Background()
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		typeNamespacedSecretName := types.NamespacedName{
-			Name:      secretName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		claim := &persistancev1.DatabaseClaim{}
-
-		BeforeEach(func() {
-
-			By("ensuring the resource does not exist")
-			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(HaveOccurred())
-
-			By(fmt.Sprintf("Creating dbc: %s", resourceName))
+		createDatabaseClaim := func() {
 			parsedDSN, err := url.Parse(testDSN)
 			Expect(err).NotTo(HaveOccurred())
-			password, ok := parsedDSN.User.Password()
-			Expect(ok).To(BeTrue())
-
-			Expect(client.IgnoreNotFound(err)).To(Succeed())
-			resource := &persistancev1.DatabaseClaim{
+			resource := &v1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
 					Kind:       "DatabaseClaim",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: namespace,
 				},
-				Spec: persistancev1.DatabaseClaimSpec{
+				Spec: v1.DatabaseClaimSpec{
+					DSNName:               "fixme.txt",
 					Class:                 ptr.To(""),
-					DatabaseName:          "sample_app",
+					DatabaseName:          databaseName,
 					SecretName:            secretName,
 					Username:              parsedDSN.User.Username(),
 					EnableSuperUser:       ptr.To(false),
 					EnableReplicationRole: ptr.To(false),
 					UseExistingSource:     ptr.To(false),
-					Type:                  "postgres",
+					Type:                  databaseType,
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		}
 
-			secret := &corev1.Secret{}
-			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
-			Expect(err).To(HaveOccurred())
-			Expect(client.IgnoreNotFound(err)).To(Succeed())
+		BeforeEach(func() {
+			By("Verify environment")
+			viper := controllerReconciler.Config.Viper
+			Expect(viper.Get("env")).To(Equal(env))
 
-			secret = &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: "default",
-				},
-				StringData: map[string]string{
-					"password": password,
-				},
-				Type: "Opaque",
-			}
-			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			By("Ensuring the resource does not exist")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(HaveOccurred())
 
+			By(fmt.Sprintf("Creating DatabaseClaim: %s", resourceName))
+			createDatabaseClaim()
+
+			By("Mocking master credentials")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(Succeed())
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, claim)
+			Expect(err).NotTo(HaveOccurred())
+			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
+			DeferCleanup(cleanup)
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			By("Cleanup the specific resource instance DatabaseClaim")
-			resource := &persistancev1.DatabaseClaim{}
+			resource := &v1.DatabaseClaim{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -126,75 +117,140 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(client.IgnoreNotFound(err)).To(Succeed())
 
+			By("Cleanup DbClaim associated secret")
 			secret := &corev1.Secret{}
 			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
-			Expect(err).NotTo(HaveOccurred())
-			By("Cleanup the database secret")
+			// this secret is created without resource owner, so it does not get deleted after dbclain is deleted
 			Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
-
 		})
 
 		It("Should succeed to reconcile DB Claim missing dbVersion", func() {
-			By("Verify environment")
-			viper := controllerReconciler.Config.Viper
-			Expect(viper.Get("env")).To(Equal(env))
+			By("Verify that the DB Claim has not active DB yet and spec.DbVersion is empty")
+			resource := &v1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(resource.Status.ActiveDB.DbCreatedAt).To(BeNil())
+			Expect(resource.Spec.DBVersion).To(BeEmpty())
 
 			By("Reconciling the created resource")
-
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verify that the DB Claim has active DB with default Version")
+			reconciledClaim := &v1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, reconciledClaim)).To(Succeed())
+			Expect(reconciledClaim.Status.Error).To(Equal(""))
+			// default major version (spec version, no active DB)
+
+			activeDb := reconciledClaim.Status.ActiveDB
+			Expect(activeDb.DBVersion).To(Equal("15"))
+			Expect(activeDb.DbState).To(Equal(v1.Ready))
+			Expect(activeDb.SourceDataFrom).To(BeNil())
+
+			By("Validating timestamps in ActiveDB")
+			Expect(activeDb.DbCreatedAt).NotTo(BeNil())
+			Expect(activeDb.ConnectionInfoUpdatedAt).NotTo(BeNil())
+			Expect(activeDb.UserUpdatedAt).NotTo(BeNil())
+
+			By("Validating ConnectionInfo")
+			connectionInfo := activeDb.ConnectionInfo
+			Expect(connectionInfo).NotTo(BeNil())
+		})
+
+		It("Should have DSN and URIDSN keys populated", func() {
+			By("Reconciling the created resource")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Get(ctx, typeNamespacedName, claim)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(claim.Status.Error).To(Equal(""))
+
+			By("Checking the user credentials secret")
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, key := range []string{v1.DSNKey, v1.DSNURIKey, "fixme.txt", "uri_fixme.txt"} {
+				Expect(secret.Data[key]).NotTo(BeNil())
+			}
+			oldKey := secret.Data[v1.DSNKey]
+			Expect(secret.Data[v1.DSNKey]).To(Equal(secret.Data["fixme.txt"]))
+			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
+			// Slow down the test so creds are rotated, 60ns rotation time
+			By("Rotate passwords and verify credentials are updated")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Data[v1.DSNKey]).NotTo(Equal(oldKey))
+			Expect(secret.Data[v1.DSNKey]).To(Equal(secret.Data["fixme.txt"]))
+			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
 		})
 
 		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
-			By("Updating CR with a DB Version")
-
-			resource := &persistancev1.DatabaseClaim{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			By("Updating the DatabaseClaim resource with a DB Version 13.3")
+			resource := &v1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(resource.Status.ActiveDB.DbCreatedAt).To(BeNil())
 			resource.Spec.DBVersion = "13.3"
-			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
 
-			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
-			Expect(resource.Spec.DBVersion).To(Equal("13.3"))
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resource.Status.Error).To(Equal(""))
-
-			var instance crossplaneaws.DBInstance
-			viper := controllerReconciler.Config.Viper
-			hostParams, err := hostparams.New(viper, resource)
+			By("Mocking RDS master credentials")
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
 			Expect(err).ToNot(HaveOccurred())
 
-			instanceName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+			// given db version changed, we need to mock master creds again as the hash changed
+			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
+			DeferCleanup(cleanup)
 
-			By(fmt.Sprintf("Check dbinstance is created: %s", instanceName))
+			By("Reconciling the updated resource")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resource.Status.Error).To(BeEmpty())
+
+			By(fmt.Sprintf("Verifying that the DBInstance is created: %s", credSecretName))
+			var instance crossplaneaws.DBInstance
 			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: instanceName}, &instance)
+				return k8sClient.Get(ctx, types.NamespacedName{Name: credSecretName}, &instance)
 			}).Should(Succeed())
-		})
 
-		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
-			By("Updating CR with a DB Version")
+			By("Verifying that the DBInstance is updated")
+			var reconciledClaim v1.DatabaseClaim
+			Expect(k8sClient.Get(ctx, typeNamespacedName, &reconciledClaim)).NotTo(HaveOccurred())
+			Expect(reconciledClaim.Status.Error).To(Equal(""))
 
-			resource := &persistancev1.DatabaseClaim{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
-			resource.Spec.DBVersion = "13.3"
-			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
+			By("Validating the fields in ActiveDB")
+			activeDB := reconciledClaim.Status.ActiveDB
+			Expect(activeDB.Shape).To(Equal(hostParams.Shape))
+			Expect(string(activeDB.Type)).To(Equal(hostParams.Type))
+			Expect(activeDB.MinStorageGB).To(Equal(hostParams.MinStorageGB))
+			Expect(activeDB.MaxStorageGB).To(Equal(hostParams.MaxStorageGB))
 
-			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
-			Expect(resource.Spec.DBVersion).To(Equal("13.3"))
+			Expect(activeDB.DBVersion).To(Equal(resource.Spec.DBVersion))
+			Expect(activeDB.Shape).To(Equal(*instance.Spec.ForProvider.DBInstanceClass))
+			Expect(string(activeDB.Type)).To(Equal(*instance.Spec.ForProvider.Engine))
+			Expect(int64(activeDB.MinStorageGB)).To(Equal(*instance.Spec.ForProvider.AllocatedStorage))
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resource.Status.Error).To(Equal(""))
+			Expect(activeDB.DbState).To(Equal(v1.Ready))
+			Expect(activeDB.SourceDataFrom).To(BeNil())
 
+			By("Validating timestamps in ActiveDB")
+			Expect(activeDB.DbCreatedAt).NotTo(BeNil())
+			Expect(activeDB.ConnectionInfoUpdatedAt).NotTo(BeNil())
+			Expect(activeDB.UserUpdatedAt).NotTo(BeNil())
+
+			By("Validating ConnectionInfo")
+			connectionInfo := activeDB.ConnectionInfo
+			Expect(connectionInfo).NotTo(BeNil())
 		})
 
 		It("Should propagate labels from DatabaseClaim to DBInstance", func() {
 			By("Updating CR with labels")
 
-			resource := &persistancev1.DatabaseClaim{}
+			resource := &v1.DatabaseClaim{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
 
 			resource.Labels = map[string]string{
@@ -220,6 +276,19 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 			Expect(instance.ObjectMeta.Labels).To(Equal(resource.Labels))
 
+		})
+
+		It("Should fail to reconcile a newDB if secret is present", func() {
+			By(fmt.Sprintf("creating secret: %s", secretName))
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })

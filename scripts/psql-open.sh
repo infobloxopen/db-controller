@@ -19,8 +19,14 @@ open_psql() {
     secret_name=$(kubectl get databaseclaim "$claim_name" -n "$namespace" -o jsonpath='{.spec.secretName}')
 
     if [[ -z "$secret_name" ]]; then
-        echo "Error: Unable to find secret name for $claim_name in namespace $namespace"
-        return 1
+
+        secret_name=$(kubectl get dbroleclaim "$claim_name" -n "$namespace" -o jsonpath='{.spec.secretName}')
+        if [[ -z "$secret_name" ]]; then
+            echo "Error: Unable to find secret name for dbc: $claim_name in namespace $namespace"
+            echo "Error: Unable to find secret name for dbroleclaim: $claim_name in namespace $namespace"
+            return 1
+        fi
+
     fi
 
     # Get the DSN from the secret
@@ -31,7 +37,7 @@ open_psql() {
         return 1
     fi
 
-    printf "DatabaseClaim: %s/%s\n" "$namespace" "$claim_name"
+    printf "Claim: %s/%s\n" "$namespace" "$claim_name"
     # If a psql command is provided, execute it; otherwise, open a psql prompt
     if [[ -n "$psql_command" ]]; then
         kubectl exec deploy/db-controller -c manager -n db-controller -- psql "$dsn" -c "$psql_command"
