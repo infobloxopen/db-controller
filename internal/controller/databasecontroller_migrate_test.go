@@ -70,7 +70,7 @@ var _ = Describe("claim migrate", func() {
 		// secret to store the dsn for claims
 		const claimSecretName = "migrate-dbclaim-creds"
 		// master creds to source db
-		const sourceSecretName = "postgres-source"
+		const sourceSecretName = "postgres-source-migrate"
 		// master creds to target db
 		// const targetSecretName = "postgres-target"
 
