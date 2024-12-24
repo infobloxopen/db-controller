@@ -13,7 +13,7 @@ var (
 	ContainerNameProxy = "dbproxy"
 )
 
-func mutatePodProxy(ctx context.Context, pod *corev1.Pod, secretName string, dbProxyImg string) error {
+func mutatePodProxy(ctx context.Context, pod *corev1.Pod, secretName string, dbProxyImg string, enableReady, enableLiveness bool) error {
 
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
@@ -52,20 +52,9 @@ func mutatePodProxy(ctx context.Context, pod *corev1.Pod, secretName string, dbP
 		return nil
 	}
 
-	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
-		Name:            ContainerNameProxy,
-		Image:           dbProxyImg,
-		ImagePullPolicy: corev1.PullIfNotPresent,
-
-		Env: []corev1.EnvVar{
-			{
-				Name:  "DBPROXY_CREDENTIAL",
-				Value: fmt.Sprintf("/dbproxy/%s", SecretKey),
-			},
-		},
-		// Test pgbouncer
-		ReadinessProbe: &corev1.Probe{
-
+	var readinessProbe *corev1.Probe
+	if enableReady {
+		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -78,11 +67,13 @@ func mutatePodProxy(ctx context.Context, pod *corev1.Pod, secretName string, dbP
 			InitialDelaySeconds: 5,
 			PeriodSeconds:       15,
 			TimeoutSeconds:      5,
-		},
-		// FIXME: turn these back on when timeouts can be tuned. It was restarting
-		// the pod too often.
-		// Test connection to upstream database
-		LivenessProbe: &corev1.Probe{
+		}
+	}
+
+	var livenessProbe *corev1.Probe
+
+	if enableLiveness {
+		livenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -95,7 +86,24 @@ func mutatePodProxy(ctx context.Context, pod *corev1.Pod, secretName string, dbP
 			InitialDelaySeconds: 30,
 			PeriodSeconds:       15,
 			TimeoutSeconds:      5,
+		}
+	}
+
+	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+		Name:            ContainerNameProxy,
+		Image:           dbProxyImg,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+
+		Env: []corev1.EnvVar{
+			{
+				Name:  "DBPROXY_CREDENTIAL",
+				Value: fmt.Sprintf("/dbproxy/%s", SecretKey),
+			},
 		},
+		// Test connection to upstream database
+		LivenessProbe: livenessProbe,
+		// Test pgbouncer
+		ReadinessProbe: readinessProbe,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      VolumeNameProxy,
