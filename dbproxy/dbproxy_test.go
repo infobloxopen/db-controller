@@ -6,21 +6,31 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestE2E(t *testing.T) {
 
-	// Context tracks how long we'll wait to find credential files
+	// Create dummy logger for testing.
+	opts := zap.Options{
+		Development: true,
+	}
+	logger := zap.New(zap.UseFlagOptions(&opts))
+
+	// Context tracks how long we'll wait to find credential files.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mgr, err := New(ctx, Config{
+
+	dbpConfig := Config{
 		DBCredentialPath: testDSNURIPath,
 		PGCredentialPath: filepath.Join(tempDir, "pgbouncer.ini"),
 		PGBStartScript:   "scripts/mock-start-pgbouncer.sh",
 		PGBReloadScript:  "scripts/mock-start-pgbouncer.sh",
 		LocalAddr:        "0.0.0.0:5432",
-	})
+	}
 
+	mgr, err := New(ctx, logger, dbpConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
