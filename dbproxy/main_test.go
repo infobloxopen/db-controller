@@ -13,6 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	"github.com/lib/pq"
 )
 
@@ -25,6 +29,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	opts := zap.Options{
+		Development: true,
+	}
+	logger := zap.New(zap.UseFlagOptions(&opts))
+
 	var err error
 	tempDir, err = os.MkdirTemp("", "dbproxy")
 	if err != nil {
@@ -32,7 +41,7 @@ func TestMain(m *testing.M) {
 	}
 
 	var cleanupTestDB func()
-	testdb, testDSN, cleanupTestDB = Run(RunConfig{
+	testdb, testDSN, cleanupTestDB = Run(logger, RunConfig{
 		Database:  "postgres",
 		Username:  "postgres",
 		Password:  "postgres",
@@ -106,7 +115,7 @@ type RunConfig struct {
 
 // Run a PostgreSQL database in a Docker container and return a connection to it.
 // The caller is responsible for calling the func() to prevent leaking containers.
-func Run(cfg RunConfig) (*sql.DB, string, func()) {
+func Run(logger logr.Logger, cfg RunConfig) (*sql.DB, string, func()) {
 	port := getEphemeralPort()
 
 	// Required parameters

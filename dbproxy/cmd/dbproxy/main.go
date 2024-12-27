@@ -48,8 +48,8 @@ func main() {
 	flag.Parse()
 
 	logger = zap.New(zap.UseFlagOptions(&opts))
-	dbproxy.SetLogger(logger)
-	mgr, err := dbproxy.New(context.TODO(), dbproxy.Config{
+
+	mgr, err := dbproxy.New(context.TODO(), logger, dbproxy.Config{
 		DBCredentialPath: dbCredentialPath,
 		PGCredentialPath: pbCredentialPath,
 		PGBStartScript:   pgbStartScriptPath,
@@ -94,9 +94,11 @@ func catch(cancel func()) {
 			logger.Error(err, "failed to convert pid to int")
 			os.Exit(1)
 		}
-		logger.Info("terminating pgbouncer pid", "pid", pid)
+
 		// Terminate pgbouncer
+		logger.Info("terminating pgbouncer pid", "pid", pid)
 		cmd := exec.Command("sh", "-c", fmt.Sprintf("kill -s 9 %d", pid))
+
 		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			logger.Error(err, "failed to kill pgbouncer")
@@ -104,7 +106,9 @@ func catch(cancel func()) {
 		logger.Info("pgbouncer stop executed", "output", stdoutStderr)
 
 		// Capture log pgbouncer.log and write to stdout
+		logger.Info("capturing pgbouncer.log")
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("cat %s", "pgbouncer.log"))
+
 		stdoutStderr, err = cmd.CombinedOutput()
 		if err != nil {
 			logger.Error(err, "failed to cat log", "output", string(stdoutStderr))
