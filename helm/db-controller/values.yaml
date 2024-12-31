@@ -184,3 +184,11 @@ controllerConfig:
     ib_env: "{{ .Values.env }}"
     ib_lifecycle: "{{ .Values.lifecycle }}"
 
+probes:
+  liveness:
+    enabled: false
+  readiness:
+    enabled: true
+
+dashboard:
+  enabled: false

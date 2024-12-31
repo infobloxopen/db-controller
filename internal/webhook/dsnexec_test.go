@@ -125,6 +125,8 @@ var _ = Describe("dsnexec defaulting", func() {
 		Expect(sidecar.VolumeMounts[0].Name).To(Equal(VolumeNameExec))
 		Expect(sidecar.VolumeMounts[0].MountPath).To(Equal(MountPathExec))
 		Expect(sidecar.VolumeMounts[0].ReadOnly).To(BeTrue())
+		Expect(sidecar.ReadinessProbe).ToNot(BeNil())
+		Expect(sidecar.LivenessProbe).ToNot(BeNil())
 	})
 
 	It("pre-mutated pods are not re-mutated", func() {
@@ -144,7 +146,7 @@ var _ = Describe("dsnexec defaulting", func() {
 
 func makeMutatedPodExec(name, claimName, secretName string) *corev1.Pod {
 	pod := makePodExec(name, claimName)
-	Expect(mutatePodExec(context.TODO(), pod, secretName, sidecarImageExec)).To(Succeed())
+	Expect(mutatePodExec(context.TODO(), pod, secretName, sidecarImageExec, true, true)).To(Succeed())
 	return pod
 
 }

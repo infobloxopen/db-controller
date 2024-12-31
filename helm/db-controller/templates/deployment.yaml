@@ -56,6 +56,8 @@ spec:
             - -zap-encoder={{ .Values.zapLogger.encoding }}
             - -zap-log-level={{ .Values.zapLogger.level }}
             - -zap-time-encoding={{ .Values.zapLogger.timeEncoding }}
+            - --enable-sidecar-liveness-probe={{ .Values.probes.liveness.enabled }}
+            - --enable-sidecar-readiness-probe={{ .Values.probes.readiness.enabled }}
           command:
             - /manager
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
