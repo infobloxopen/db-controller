@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -97,20 +98,25 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-	// read kubectl context from the k8sClient
-	env, err = utils.GetKubeContext()
-	Expect(env).NotTo(BeEmpty())
-	Expect(err).NotTo(HaveOccurred())
+	cmd := exec.Command("cat", ".env")
+	bsEnv, err := utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+	env := string(bytes.TrimSpace(bsEnv))
 
 	// Check if current context is box-3, kind or gcp-ddi-dev-use1
-	Expect(env).To(BeElementOf("box-3", "kind", "gcp-ddi-dev-use1"), "This test can only run in box-3, kind or gcp-ddi-dev-use1")
+	options := []string{"box-3", "kind", "gcp-ddi-dev-use1", "devops-admin-gcp-dev-usce1"}
+	Expect(env).NotTo(BeEmpty(), "Environment not set")
+	Expect(env).To(BeElementOf(options), fmt.Sprintf("This test can only run in: %q", options))
 
-	switch {
-	case env == "box-3":
+	switch env {
+	case "box-3":
 		fallthrough
-	case env == "kind":
+	case "kind":
 		cloud = "aws"
-	case env == "gcp-ddi-dev-use1":
+	case "devops-admin-gcp-dev-usce1":
+		fallthrough
+	case "gcp-ddi-dev-use1":
 		cloud = "gcp"
 	default:
 		cloud = "invalid"
@@ -122,7 +128,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	By("Building image")
-	cmd := exec.Command("make", "build-images")
+	cmd = exec.Command("make", "build-images")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
