@@ -106,10 +106,12 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = SetupWebhookWithManager(mgr, SetupConfig{
-		DBProxyImg: sidecarImageProxy,
-		DSNExecImg: sidecarImageExec,
-		Namespace:  "default",
-		Class:      "default",
+		DBProxyImg:     sidecarImageProxy,
+		DSNExecImg:     sidecarImageExec,
+		Namespace:      "default",
+		Class:          "default",
+		EnableReady:    true,
+		EnableLiveness: true,
 	})
 	Expect(err).NotTo(HaveOccurred())
 

@@ -95,6 +95,8 @@ func main() {
 	var metricsConfigYamlPath string
 	var enableDBProxyWebhook bool
 	var enableDeprecatedConversionWebhook bool
+	var enableSidecarLivenessProbe bool
+	var enableSidecarReadinessProbe bool
 
 	flag.StringVar(&class, "class", "default", "The class of claims this db-controller instance needs to address.")
 
@@ -104,6 +106,9 @@ func main() {
 	flag.StringVar(&metricsConfigYamlPath, "metrics-config-yaml", "/config/postgres-exporter/config.yaml", "path to the metrics config yaml")
 	flag.BoolVar(&enableDBProxyWebhook, "enable-db-proxy", false, "Enable DB Proxy webhook. See docs for usage: https://infobloxopen.github.io/db-controller/#quick-start")
 	flag.BoolVar(&enableDeprecatedConversionWebhook, "enable-deprecation-conversion-webhook", false, "Enable conversion of deprecated pods using dbproxy and/or dsnexec annotations")
+
+	flag.BoolVar(&enableSidecarLivenessProbe, "enable-sidecar-liveness-probe", false, "Enable liveness probe for dbproxy and dsnexec sidecars")
+	flag.BoolVar(&enableSidecarReadinessProbe, "enable-sidecar-readiness-probe", false, "Enable readiness probe for dbproxy and dsnexec sidecars")
 
 	opts := zap.Options{
 		Development: true,
@@ -257,10 +262,12 @@ func main() {
 	if enableDBProxyWebhook {
 
 		if err := mutating.SetupWebhookWithManager(mgr, mutating.SetupConfig{
-			Namespace:  namespace,
-			Class:      class,
-			DBProxyImg: os.Getenv("DBPROXY_IMAGE"),
-			DSNExecImg: os.Getenv("DSNEXEC_IMAGE"),
+			Namespace:      namespace,
+			Class:          class,
+			DBProxyImg:     os.Getenv("DBPROXY_IMAGE"),
+			DSNExecImg:     os.Getenv("DSNEXEC_IMAGE"),
+			EnableReady:    enableSidecarReadinessProbe,
+			EnableLiveness: enableSidecarLivenessProbe,
 		}); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
