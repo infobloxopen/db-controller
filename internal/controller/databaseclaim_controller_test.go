@@ -328,5 +328,4 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
-
 })
