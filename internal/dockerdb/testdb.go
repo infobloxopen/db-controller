@@ -266,9 +266,9 @@ func Run(cfg Config) (*sql.DB, string, func()) {
 	_, err = conn.Exec(`
 CREATE ROLE rds_superuser WITH INHERIT LOGIN;
 CREATE ROLE alloydbsuperuser WITH INHERIT LOGIN`)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	if err != nil {
+		panic(err)
+	}
 
 	if err != nil {
 		logger.Error(err, "failed to connect to database")
