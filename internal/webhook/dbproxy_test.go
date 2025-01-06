@@ -128,6 +128,9 @@ var _ = Describe("dbproxy defaulting", func() {
 		Expect(sidecar.VolumeMounts[0].Name).To(Equal(VolumeNameProxy))
 		Expect(sidecar.VolumeMounts[0].MountPath).To(Equal(MountPathProxy))
 		Expect(sidecar.VolumeMounts[0].ReadOnly).To(BeTrue())
+		Expect(sidecar.ReadinessProbe).ToNot(BeNil())
+		Expect(sidecar.LivenessProbe).ToNot(BeNil())
+
 	})
 
 	It("pre-mutated pods are not re-mutated", func() {
@@ -147,7 +150,7 @@ var _ = Describe("dbproxy defaulting", func() {
 
 func makeMutatedPodProxy(name, claimName, secretName string) *corev1.Pod {
 	pod := makePodProxy(name, claimName)
-	Expect(mutatePodProxy(context.TODO(), pod, secretName, sidecarImageProxy)).To(Succeed())
+	Expect(mutatePodProxy(context.TODO(), pod, secretName, sidecarImageProxy, true, true)).To(Succeed())
 	return pod
 }
 

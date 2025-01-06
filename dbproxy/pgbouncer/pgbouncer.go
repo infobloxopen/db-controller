@@ -3,8 +3,8 @@ package pgbouncer
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
-	"log"
 	"os/exec"
 
 	"github.com/go-logr/logr"
@@ -29,14 +29,14 @@ func SetLogger(l logr.Logger) {
 
 // Reload tells pgbouncer to reload its configuration
 func Reload(ctx context.Context, scriptPath string) error {
-	log.Println("Reloading PG Bouncer config")
+	logger.Info("Reloading PG Bouncer config", "scriptPath", scriptPath)
 	err := run(ctx, scriptPath, logger)
 	return err
 }
 
 // Start executes a script to initialize pgbouncer
 func Start(ctx context.Context, scriptPath string) error {
-	log.Println("Starting PG Bouncer:", scriptPath)
+	logger.Info("Starting PG Bouncer", "scriptPath", scriptPath)
 	err := run(ctx, scriptPath, logger)
 	return err
 }
@@ -47,16 +47,16 @@ func run(ctx context.Context, scriptPath string, logger logr.Logger) error {
 	// Create pipes for stdout and stderr
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating stdout pipe: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating stderr pipe: %w", err)
 	}
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("error starting command: %w", err)
 	}
 
 	// Function to stream and log output
@@ -80,6 +80,9 @@ func run(ctx context.Context, scriptPath string, logger logr.Logger) error {
 
 	// Wait for the command to finish
 	err = cmd.Wait()
+	if err != nil {
+		return fmt.Errorf("error waiting for command: %w", err)
+	}
 
-	return err
+	return nil
 }

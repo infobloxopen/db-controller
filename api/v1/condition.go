@@ -2,8 +2,6 @@ package v1
 
 import (
 	"fmt"
-	"time"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,13 +38,11 @@ const (
 )
 
 func CreateCondition(condType ConditionType, status metav1.ConditionStatus, reason, message string) metav1.Condition {
-	now := metav1.NewTime(time.Now())
 	return metav1.Condition{
-		Type:               string(condType),
-		Status:             status,
-		Reason:             reason,
-		Message:            message,
-		LastTransitionTime: now,
+		Type:    string(condType),
+		Status:  status,
+		Reason:  reason,
+		Message: message,
 	}
 }
 

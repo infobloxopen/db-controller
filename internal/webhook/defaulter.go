@@ -33,18 +33,22 @@ var (
 
 // podAnnotator annotates Pods
 type podAnnotator struct {
-	class      string
-	namespace  string
-	dbProxyImg string
-	dsnExecImg string
-	k8sClient  client.Reader
+	class          string
+	namespace      string
+	dbProxyImg     string
+	dsnExecImg     string
+	k8sClient      client.Reader
+	enableReady    bool
+	enableLiveness bool
 }
 
 type SetupConfig struct {
-	Namespace  string
-	Class      string
-	DBProxyImg string
-	DSNExecImg string
+	Namespace      string
+	Class          string
+	DBProxyImg     string
+	DSNExecImg     string
+	EnableReady    bool
+	EnableLiveness bool
 }
 
 func SetupWebhookWithManager(mgr ctrl.Manager, cfg SetupConfig) error {
@@ -68,11 +72,13 @@ func SetupWebhookWithManager(mgr ctrl.Manager, cfg SetupConfig) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&corev1.Pod{}).
 		WithDefaulter(&podAnnotator{
-			namespace:  cfg.Namespace,
-			class:      cfg.Class,
-			dbProxyImg: cfg.DBProxyImg,
-			dsnExecImg: cfg.DSNExecImg,
-			k8sClient:  mgr.GetClient(),
+			namespace:      cfg.Namespace,
+			class:          cfg.Class,
+			dbProxyImg:     cfg.DBProxyImg,
+			dsnExecImg:     cfg.DSNExecImg,
+			k8sClient:      mgr.GetClient(),
+			enableReady:    cfg.EnableReady,
+			enableLiveness: cfg.EnableLiveness,
 		}).
 		Complete()
 }
@@ -91,12 +97,12 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 	}
 
 	log := logf.FromContext(ctx).WithName("defaulter").WithValues("pod", nn)
-	log.Info("processing")
 
 	if pod.Labels == nil || len(pod.Labels[LabelClaim]) == 0 {
 		log.Info("Skipping Pod")
 		return nil
 	}
+	log.Info("processing")
 
 	claimName := pod.Labels[LabelClaim]
 
@@ -133,13 +139,13 @@ func (p *podAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 
 	if pod.Labels[LabelCheckProxy] == "enabled" &&
 		pod.Annotations[AnnotationInjectedProxy] != "true" {
-		err = mutatePodProxy(ctx, pod, secretName, p.dbProxyImg)
+		err = mutatePodProxy(ctx, pod, secretName, p.dbProxyImg, p.enableReady, p.enableLiveness)
 		if err == nil {
 			log.Info("mutated_pod_dbproxy")
 		}
 	} else if pod.Labels[LabelCheckExec] == "enabled" &&
 		pod.Annotations[AnnotationInjectedExec] != "true" {
-		err = mutatePodExec(ctx, pod, secretName, p.dsnExecImg)
+		err = mutatePodExec(ctx, pod, secretName, p.dsnExecImg, p.enableReady, p.enableLiveness)
 		if err == nil {
 			log.Info("mutated_pod_dsnexec")
 		}

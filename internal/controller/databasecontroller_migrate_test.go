@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	"github.com/infobloxopen/db-controller/pkg/pgctl"
@@ -69,7 +70,7 @@ var _ = Describe("claim migrate", func() {
 		// secret to store the dsn for claims
 		const claimSecretName = "migrate-dbclaim-creds"
 		// master creds to source db
-		const sourceSecretName = "postgres-source"
+		const sourceSecretName = "postgres-source-migrate"
 		// master creds to target db
 		// const targetSecretName = "postgres-target"
 
@@ -152,7 +153,7 @@ var _ = Describe("claim migrate", func() {
 					Namespace: "default",
 				},
 				StringData: map[string]string{
-					"uri_dsn.txt": testDSN,
+					v1.DSNURIKey: testDSN,
 				},
 				Type: "Opaque",
 			}

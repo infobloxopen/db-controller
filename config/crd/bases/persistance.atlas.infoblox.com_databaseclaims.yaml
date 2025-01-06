@@ -26,6 +26,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Synced")].status
+      name: Synced
+      type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].message
       name: Status
       priority: 1

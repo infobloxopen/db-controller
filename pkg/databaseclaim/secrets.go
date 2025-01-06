@@ -45,6 +45,14 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		Name:      secretName,
 	}, gs)
 
+	useExistingSource := dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource
+	if dbClaim.Status.ActiveDB.ConnectionInfo == nil && err == nil && !useExistingSource {
+		return fmt.Errorf(
+			"secret %s already exists in namespace %s, but no active database connection info is available",
+			secretName, dbClaim.Namespace,
+		)
+	}
+
 	if err != nil && errors.IsNotFound(err) {
 		if err := r.createSecret(ctx, dbClaim, dsn, dsnURI, replicaDsnURI, connInfo); err != nil {
 			return err
@@ -52,29 +60,18 @@ func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbCl
 		return nil
 	}
 
-	return r.updateSecret(ctx, dsn, dsnURI, replicaDsnURI, connInfo, gs)
+	return r.updateSecret(ctx, dbClaim, dsn, dsnURI, replicaDsnURI, connInfo, gs)
 }
 
 func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI, replicaDbURI string, connInfo *v1.DatabaseClaimConnectionInfo) error {
-
 	logr := log.FromContext(ctx)
 	secretName := dbClaim.Spec.SecretName
-	truePtr := true
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: dbClaim.Namespace,
 			Name:      secretName,
 			Labels:    map[string]string{"app.kubernetes.io/managed-by": "db-controller"},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "persistance.atlas.infoblox.com/v1",
-					Kind:               "DatabaseClaim",
-					Name:               dbClaim.Name,
-					UID:                dbClaim.UID,
-					Controller:         &truePtr,
-					BlockOwnerDeletion: &truePtr,
-				},
-			},
 		},
 		Data: map[string][]byte{
 			v1.DSNKey:           []byte(dsn),
@@ -88,12 +85,17 @@ func (r *DatabaseClaimReconciler) createSecret(ctx context.Context, dbClaim *v1.
 			"sslmode":           []byte(connInfo.SSLMode),
 		},
 	}
+	if dbClaim.Spec.DSNName != "" && dbClaim.Spec.DSNName != v1.DSNKey {
+		secret.Data[dbClaim.Spec.DSNName] = []byte(dsn)
+		secret.Data["uri_"+dbClaim.Spec.DSNName] = []byte(dbURI)
+	}
+
 	logr.Info("creating connection info SECRET: "+secret.Name, "secret", secret.Name, "namespace", secret.Namespace)
 
 	return r.Client.Create(ctx, secret)
 }
 
-func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsn, dbURI, replicaDsnURI string, connInfo *v1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
+func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, dsn, dbURI, replicaDsnURI string, connInfo *v1.DatabaseClaimConnectionInfo, exSecret *corev1.Secret) error {
 
 	logr := log.FromContext(ctx)
 
@@ -107,6 +109,11 @@ func (r *DatabaseClaimReconciler) updateSecret(ctx context.Context, dsn, dbURI, 
 	exSecret.Data["password"] = []byte(connInfo.Password)
 	exSecret.Data["sslmode"] = []byte(connInfo.SSLMode)
 	logr.Info("updating connection info SECRET: "+exSecret.Name, "secret", exSecret.Name, "namespace", exSecret.Namespace)
+
+	if dbClaim.Spec.DSNName != "" && dbClaim.Spec.DSNName != v1.DSNKey {
+		exSecret.Data[dbClaim.Spec.DSNName] = []byte(dsn)
+		exSecret.Data["uri_"+dbClaim.Spec.DSNName] = []byte(dbURI)
+	}
 
 	return r.Client.Update(ctx, exSecret)
 }

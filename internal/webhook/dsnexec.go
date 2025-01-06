@@ -16,7 +16,7 @@ var (
 	VolumeNameExecConfig = "dsnexec-config"
 )
 
-func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnExecImg string) error {
+func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnExecImg string, enableReady, enableLiveness bool) error {
 
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
@@ -75,6 +75,44 @@ func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnE
 		return nil
 	}
 
+	var readinessProbe *corev1.Probe
+	if enableReady {
+		readinessProbe = &corev1.Probe{
+
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						"psql -h localhost -c \"SELECT 1\"",
+					},
+				},
+			},
+			InitialDelaySeconds: 5,
+			PeriodSeconds:       15,
+			TimeoutSeconds:      5,
+		}
+	}
+
+	var livenessProbe *corev1.Probe
+
+	if enableLiveness {
+		livenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						fmt.Sprintf("psql \"$(cat /dbproxy/%s)\" -c \"SELECT 1\"", SecretKey),
+					},
+				},
+			},
+			InitialDelaySeconds: 30,
+			PeriodSeconds:       15,
+			TimeoutSeconds:      5,
+		}
+	}
+
 	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
 		Name:            ContainerNameExec,
 		Image:           dsnExecImg,
@@ -91,20 +129,9 @@ func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnE
 			},
 		},
 		// Test connection to upstream database
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/bin/sh",
-						"-c",
-						fmt.Sprintf("psql \"$(cat %s/%s)\" -c \"SELECT 1\"", MountPathExec, SecretKey),
-					},
-				},
-			},
-			InitialDelaySeconds: 30,
-			PeriodSeconds:       15,
-			TimeoutSeconds:      5,
-		},
+		LivenessProbe: livenessProbe,
+		// Test connection to pgbouncer
+		ReadinessProbe: readinessProbe,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      VolumeNameExec,
