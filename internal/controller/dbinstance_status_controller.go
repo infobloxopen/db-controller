@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
-	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	statusmanager "github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,11 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-)
-
-const (
-	ConditionReady  = "Ready"
-	ConditionSynced = "Synced"
 )
 
 // DBInstanceStatusReconciler reconciles the status of DBInstance resources with DatabaseClaims.
@@ -103,8 +98,8 @@ func (r *DBInstanceStatusReconciler) getDBClaimRefFromDBInstance(dbInstance *cro
 }
 
 // fetchDatabaseClaim retrieves the DatabaseClaim resource.
-func (r *DBInstanceStatusReconciler) getDatabaseClaim(ctx context.Context, dbClaimRef *types.NamespacedName) (*persistancev1.DatabaseClaim, error) {
-	var dbClaim persistancev1.DatabaseClaim
+func (r *DBInstanceStatusReconciler) getDatabaseClaim(ctx context.Context, dbClaimRef *types.NamespacedName) (*v1.DatabaseClaim, error) {
+	var dbClaim v1.DatabaseClaim
 	if err := r.Get(ctx, *dbClaimRef, &dbClaim); err != nil {
 		return nil, fmt.Errorf("failed to get DatabaseClaim: %w", err)
 	}
@@ -113,7 +108,7 @@ func (r *DBInstanceStatusReconciler) getDatabaseClaim(ctx context.Context, dbCla
 }
 
 // updateDatabaseClaimStatus updates the status of the DatabaseClaim based on the DBInstance status.
-func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *persistancev1.DatabaseClaim, logger logr.Logger) error {
+func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *v1.DatabaseClaim, logger logr.Logger) error {
 	if dbInstance.Status.Conditions == nil || len(dbInstance.Status.Conditions) == 0 {
 		logger.Info("DBInstance has no conditions", "DBInstance", dbInstance.Name)
 		return nil
@@ -124,17 +119,17 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 	// Retrieve the conditions from the DBInstance status.
 	for _, condition := range dbInstance.Status.Conditions {
 		switch condition.Type {
-		case ConditionSynced:
-			conditionSyncedAtProvider = persistancev1.CreateCondition(
-				persistancev1.ConditionSync,
+		case xpv1.TypeSynced:
+			conditionSyncedAtProvider = v1.CreateCondition(
+				v1.ConditionSync,
 				metav1.ConditionStatus(condition.Status),
 				string(condition.Reason),
 				condition.Message,
 			)
 			conditionSyncedAtProvider.LastTransitionTime = condition.LastTransitionTime
-		case ConditionReady:
-			conditionReadyAtProvider = persistancev1.CreateCondition(
-				persistancev1.ConditionReady,
+		case xpv1.TypeReady:
+			conditionReadyAtProvider = v1.CreateCondition(
+				v1.ConditionReady,
 				metav1.ConditionStatus(condition.Status),
 				string(condition.Reason),
 				condition.Message,
@@ -144,7 +139,7 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 	}
 
 	if conditionReadyAtProvider.Status == metav1.ConditionTrue && conditionSyncedAtProvider.Status == metav1.ConditionTrue {
-		if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, persistancev1.DatabaseReadyCondition()); err != nil {
+		if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, v1.DatabaseReadyCondition()); err != nil {
 			logger.Error(err, "failed to set success condition in DatabaseClaim", "DatabaseClaim", dbClaim.Name)
 			return err
 		}
