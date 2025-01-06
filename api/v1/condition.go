@@ -104,7 +104,7 @@ func ReconcileErrorCondition(err error) metav1.Condition {
 	)
 }
 
-func SyncErrorCondition(err error) metav1.Condition {
+func ReconcileSyncErrorCondition(err error) metav1.Condition {
 	return CreateCondition(
 		ConditionSync,
 		metav1.ConditionFalse,

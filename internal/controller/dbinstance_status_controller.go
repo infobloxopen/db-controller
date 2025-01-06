@@ -2,13 +2,13 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
-
-	v1 "github.com/infobloxopen/db-controller/api/v1"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/go-logr/logr"
 	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
+	v1 "github.com/infobloxopen/db-controller/api/v1"
 	statusmanager "github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,10 +19,8 @@ import (
 )
 
 const (
-	ConditionReady            = "Ready"
-	ConditionSynced           = "Synced"
-	ConditionReadyAtProvider  = "ReadyAtProvider"
-	ConditionSyncedAtProvider = "SyncedAtProvider"
+	ConditionReady  = "Ready"
+	ConditionSynced = "Synced"
 )
 
 // DBInstanceStatusReconciler reconciles the status of DBInstance resources with DatabaseClaims
@@ -37,30 +35,26 @@ type DBInstanceStatusReconciler struct {
 // +kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims,verbs=get;list;watch
 // +kubebuilder:rbac:groups=persistance.atlas.infoblox.com,resources=databaseclaims/status,verbs=get;update;patch
 
-// Reconcile reconciles DBInstance with its corresponding DatabaseClaim
+// Reconcile reconciles DBInstance with its corresponding DatabaseClaim.
 func (r *DBInstanceStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Starting reconciliation", "DBInstance", req.NamespacedName)
+	logger.Info("Starting DBInstance Status reconciliation", "DBInstance", req.NamespacedName)
 
-	// Fetch the DBInstance.
-	dbInstance, err := r.fetchDBInstance(ctx, req)
+	dbInstance, err := r.getDBInstance(ctx, req)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Retrieve the DBInstance labels for the associated DatabaseClaim.
-	dbClaimInstance, dbClaimComponent, err := r.validateDBInstanceLabels(dbInstance, logger)
+	dbClaimRef, err := r.getDBClaimRefFromDBInstance(dbInstance, logger)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Retrieve the associated DatabaseClaim.
-	dbClaim, err := r.fetchDatabaseClaim(ctx, dbClaimInstance, dbClaimComponent, logger)
+	dbClaim, err := r.getDatabaseClaim(ctx, dbClaimRef)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Update DatabaseClaim based on DBInstance status.
 	if err := r.updateDatabaseClaimStatus(ctx, dbInstance, dbClaim, logger); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -69,50 +63,50 @@ func (r *DBInstanceStatusReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-// fetchDBInstance retrieves the DBInstance resource.
-func (r *DBInstanceStatusReconciler) fetchDBInstance(ctx context.Context, req ctrl.Request) (*crossplaneaws.DBInstance, error) {
+// getDBInstance retrieves the DBInstance resource.
+func (r *DBInstanceStatusReconciler) getDBInstance(ctx context.Context, req ctrl.Request) (*crossplaneaws.DBInstance, error) {
 	var dbInstance crossplaneaws.DBInstance
 	if err := r.Get(ctx, req.NamespacedName, &dbInstance); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			log.FromContext(ctx).Error(err, "Failed to get DBInstance")
-		}
-		return nil, client.IgnoreNotFound(err)
+		return nil, fmt.Errorf("failed to get DBInstance: %w", err)
 	}
 	return &dbInstance, nil
 }
 
-// validateDBInstanceLabels checks if the DBInstance has the required labels
-func (r *DBInstanceStatusReconciler) validateDBInstanceLabels(dbInstance *crossplaneaws.DBInstance, logger logr.Logger) (string, string, error) {
+// getDBClaimRefLabelsFromDBInstance extracts the DBClaim labels from the DBInstance.
+func (r *DBInstanceStatusReconciler) getDBClaimRefFromDBInstance(dbInstance *crossplaneaws.DBInstance, logger logr.Logger) (*types.NamespacedName, error) {
 	labels := dbInstance.GetLabels()
 	if labels == nil {
-		logger.Error(fmt.Errorf("missing labels"), "DBInstance has no labels", "DBInstance", dbInstance.Name)
-		return "", "", fmt.Errorf("DBInstance %s has no labels", dbInstance.Name)
+		logger.Error(errors.New("missing labels"), "DBInstance has no labels", "DBInstance", dbInstance.Name)
+		return nil, fmt.Errorf("DBInstance %s has no labels", dbInstance.Name)
 	}
 
 	instanceLabel, exists := labels["app.kubernetes.io/instance"]
 	if !exists {
-		logger.Info("DBInstance missing app.kubernetes.io/instance required label", "DBInstance", dbInstance.Name)
-		return "", "", fmt.Errorf("missing app.kubernetes.io/instance required label")
+		err := errors.New("DBInstance is missing app.kubernetes.io/instance required label")
+		logger.Error(err, err.Error(), "DBInstance", dbInstance.Name)
+		return nil, err
 	}
 
 	componentLabel, exists := labels["app.kubernetes.io/component"]
 	if !exists {
-		logger.Info("DBInstance missing app.kubernetes.io/component required label", "DBInstance", dbInstance.Name)
-		return "", "", fmt.Errorf("missing app.kubernetes.io/component required label")
+		err := errors.New("DBInstance is missing app.kubernetes.io/component required label")
+		logger.Error(err, err.Error(), "DBInstance", dbInstance.Name)
+		return nil, err
 	}
 
-	return instanceLabel, componentLabel, nil
+	dbClaimNSName := types.NamespacedName{
+		Name:      fmt.Sprintf("%s-%s", instanceLabel, componentLabel),
+		Namespace: instanceLabel,
+	}
+
+	return &dbClaimNSName, nil
 }
 
 // fetchDatabaseClaim retrieves the DatabaseClaim resource.
-func (r *DBInstanceStatusReconciler) fetchDatabaseClaim(ctx context.Context, dbClaimInstance, dbClaimComponent string, logger logr.Logger) (*persistancev1.DatabaseClaim, error) {
+func (r *DBInstanceStatusReconciler) getDatabaseClaim(ctx context.Context, dbClaimRef *types.NamespacedName) (*persistancev1.DatabaseClaim, error) {
 	var dbClaim persistancev1.DatabaseClaim
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      fmt.Sprintf("%s-%s", dbClaimInstance, dbClaimComponent),
-		Namespace: dbClaimInstance,
-	}, &dbClaim); err != nil {
-		logger.Error(err, "Failed to get DatabaseClaim", "DatabaseClaim", fmt.Sprintf("%s/%s-%s", dbClaimInstance, dbClaimInstance, dbClaimComponent))
-		return nil, err
+	if err := r.Get(ctx, *dbClaimRef, &dbClaim); err != nil {
+		return nil, fmt.Errorf("failed to get DatabaseClaim: %w", err)
 	}
 
 	return &dbClaim, nil
@@ -120,6 +114,11 @@ func (r *DBInstanceStatusReconciler) fetchDatabaseClaim(ctx context.Context, dbC
 
 // updateDatabaseClaimStatus updates the status of the DatabaseClaim based on the DBInstance status.
 func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *persistancev1.DatabaseClaim, logger logr.Logger) error {
+	if dbInstance.Status.Conditions == nil || len(dbInstance.Status.Conditions) == 0 {
+		logger.Info("DBInstance has no conditions", "DBInstance", dbInstance.Name)
+		return nil
+	}
+
 	var conditionSyncedAtProvider, conditionReadyAtProvider metav1.Condition
 
 	// Retrieve the conditions from the DBInstance status.
@@ -144,23 +143,21 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 
 	if conditionReadyAtProvider.Status == metav1.ConditionTrue && conditionSyncedAtProvider.Status == metav1.ConditionTrue {
 		if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, persistancev1.DatabaseReadyCondition()); err != nil {
-			logger.Error(err, "Failed to set success condition in DatabaseClaim", "DatabaseClaim", dbClaim.Name)
+			logger.Error(err, "failed to set success condition in DatabaseClaim", "DatabaseClaim", dbClaim.Name)
 			return err
 		}
 		return nil
 	}
 
-	reconcileError := v1.SyncErrorCondition(fmt.Errorf("%s: %s", conditionSyncedAtProvider.Reason, conditionSyncedAtProvider.Message))
-	if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, reconcileError); err != nil {
-		logger.Error(err, "Failed to set error condition in DatabaseClaim")
+	errorCondition := v1.ReconcileSyncErrorCondition(fmt.Errorf("%s: %s", conditionSyncedAtProvider.Reason, conditionSyncedAtProvider.Message))
+	if err := r.StatusManager.SetConditionAndUpdateStatus(ctx, dbClaim, errorCondition); err != nil {
+		logger.Error(err, "failed to set error condition in DatabaseClaim", "DatabaseClaim", dbClaim.Name)
 		return err
 	}
-
 	return nil
-
 }
 
-// SetupWithManager configures the controller with the Manager
+// SetupWithManager configures the controller with the Manager.
 func (r *DBInstanceStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&crossplaneaws.DBInstance{}).
