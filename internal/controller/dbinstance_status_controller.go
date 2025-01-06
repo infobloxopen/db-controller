@@ -23,7 +23,7 @@ const (
 	ConditionSynced = "Synced"
 )
 
-// DBInstanceStatusReconciler reconciles the status of DBInstance resources with DatabaseClaims
+// DBInstanceStatusReconciler reconciles the status of DBInstance resources with DatabaseClaims.
 type DBInstanceStatusReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
@@ -131,6 +131,7 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 				string(condition.Reason),
 				condition.Message,
 			)
+			conditionSyncedAtProvider.LastTransitionTime = condition.LastTransitionTime
 		case ConditionReady:
 			conditionReadyAtProvider = persistancev1.CreateCondition(
 				persistancev1.ConditionReady,
@@ -138,6 +139,7 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 				string(condition.Reason),
 				condition.Message,
 			)
+			conditionReadyAtProvider.LastTransitionTime = condition.LastTransitionTime
 		}
 	}
 
