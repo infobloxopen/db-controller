@@ -35,10 +35,11 @@ jobs:
         run: |
           curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-      - name: Set kubectl context to current cluster
+      - name: Set kubectl context to local
         run: |
-          current_context=$(kubectl config current-context)
-          kubectl config use-context $current_context
+          kubectl config set-cluster local-cluster --server=http://localhost:8080
+          kubectl config set-context local --cluster=local-cluster
+          kubectl config use-context local
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
