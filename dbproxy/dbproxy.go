@@ -76,7 +76,8 @@ func (dbp *DBProxy) Start(ctx context.Context) error {
 	}
 
 	if err := pgbouncer.Start(context.TODO(), cfg.PGBStartScript); err != nil {
-		return fmt.Errorf("pgbouncer.Start failed: %w", err)
+		log.Fatalf("FATAL: Unable to start pgbouncer: %v", err)
+		panic(fmt.Sprintf("Unable to start pgbouncer: %v", err))
 	}
 
 	// Watch for ongoing changes and regenerate pgbouncer config
