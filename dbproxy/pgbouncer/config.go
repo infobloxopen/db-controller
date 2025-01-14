@@ -96,6 +96,7 @@ func parseURI(c *PGBouncerConfig, dsn string) error {
 		return fmt.Errorf("invalid_scheme: %s", u.Scheme)
 	}
 
+	// Ensure this maps to dbuser.SuffixA dbuser.SuffixB
 	c.RoleName = strings.TrimSuffix(strings.TrimSuffix(u.User.Username(), "_a"), "_b")
 	c.RemoteHost = u.Hostname()
 	c.UserName = u.User.Username()
