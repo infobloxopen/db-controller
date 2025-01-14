@@ -56,7 +56,6 @@ func main() {
 		PGBReloadScript:  pgbReloadScript,
 		LocalAddr:        addr,
 	})
-
 	if err != nil {
 		log.Fatal(err)
 	}

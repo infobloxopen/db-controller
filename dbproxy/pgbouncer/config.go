@@ -96,9 +96,7 @@ func parseURI(c *PGBouncerConfig, dsn string) error {
 		return fmt.Errorf("invalid_scheme: %s", u.Scheme)
 	}
 
-	// Remove the _<a|b> suffix from the username.
-	c.RoleName = strings.Split(u.User.Username(), "_")[0]
-
+	c.RoleName = strings.TrimSuffix(strings.TrimSuffix(u.User.Username(), "_a"), "_b")
 	c.RemoteHost = u.Hostname()
 	c.UserName = u.User.Username()
 	remotePort, err := strconv.Atoi(u.Port())
