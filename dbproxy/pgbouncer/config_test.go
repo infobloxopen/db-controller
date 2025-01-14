@@ -65,6 +65,7 @@ client_tls_sslmode = prefer
 client_tls_key_file=dbproxy-client.key
 client_tls_cert_file=dbproxy-client.crt
 server_tls_sslmode = disable
+server_reset_query = SET ROLE myuser
 #server_tls_key_file=dbproxy-server.key
 #server_tls_cert_file=dbproxy-server.crt
 `
@@ -103,6 +104,7 @@ client_tls_sslmode = prefer
 client_tls_key_file=dbproxy-client.key
 client_tls_cert_file=dbproxy-client.crt
 server_tls_sslmode = disable
+server_reset_query = SET ROLE myuser
 #server_tls_key_file=dbproxy-server.key
 #server_tls_cert_file=dbproxy-server.crt
 `
