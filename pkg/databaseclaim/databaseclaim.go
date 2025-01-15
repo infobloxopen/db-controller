@@ -1221,7 +1221,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 	}
 
 	if statusNewDB.UserUpdatedAt == nil || time.Since(statusActiveDB.UserUpdatedAt.Time) >= rotationTime {
-		logger.V(1).Info("rotating user password",
+		logger.V(1).Info("rotating_user_password",
 			"currentUser", currentUser,
 			"dbu", dbu,
 			"statusNewDB", statusNewDB,
