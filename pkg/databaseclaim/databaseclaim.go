@@ -491,7 +491,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 	dbName := existingDBConnInfo.DatabaseName
 	updateDBStatus(&dbClaim.Status.NewDB, dbName)
 
-	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbName, dbClaim.Spec.Username, operationalMode)
+	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, &dbClaim.Status.ActiveDB, dbName, dbClaim.Spec.Username, operationalMode)
 	if err != nil {
 		logr.Error(err, "unable to update users, user credents not persisted to status object")
 		return err
@@ -596,7 +596,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	}
 
 	// Updates the connection info username
-	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username, operationalMode)
+	err = r.manageUserAndExtensions(ctx, reqInfo, logr, dbClient, &dbClaim.Status.NewDB, &dbClaim.Status.ActiveDB, dbClaim.Spec.DatabaseName, dbClaim.Spec.Username, operationalMode)
 	if err != nil {
 		logr.Error(err, "unable to update users, user credentials not persisted to status object")
 		return r.manageError(ctx, dbClaim, err)
@@ -1162,10 +1162,22 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, status *v1.Status, dbName string, baseUsername string, operationalMode ModeEnum) error {
+func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, reqInfo *requestInfo, logger logr.Logger, dbClient dbclient.Clienter, statusNewDB *v1.Status, statusActiveDB *v1.Status, dbName string, baseUsername string, operationalMode ModeEnum) error {
 
-	if status == nil {
-		return fmt.Errorf("status is nil")
+	if statusNewDB == nil {
+		return fmt.Errorf("status newDB is nil")
+	}
+
+	if statusNewDB.ConnectionInfo == nil {
+		return fmt.Errorf("newDB connection info is nil")
+	}
+
+	if statusActiveDB == nil {
+		return fmt.Errorf("status activeDB is nil")
+	}
+
+	if statusActiveDB.ConnectionInfo == nil {
+		return fmt.Errorf("activeDB connection info is nil")
 	}
 
 	dbu := dbuser.NewDBUser(baseUsername)
@@ -1186,14 +1198,14 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		}
 	}
 
-	if status.ConnectionInfo == nil {
-		return fmt.Errorf("connection info is nil")
+	currentUser := statusNewDB.ConnectionInfo.Username
+	if currentUser == "" && statusActiveDB.ConnectionInfo.Uri() != "" && operationalMode == M_UseNewDB {
+		logger.Info("using active db user", "active_db", statusActiveDB)
+		currentUser = statusActiveDB.ConnectionInfo.Username
 	}
 
-	userName := status.ConnectionInfo.Username
-
-	if dbu.IsUserChanged(userName) {
-		oldUsername := dbuser.TrimUserSuffix(userName)
+	if dbu.IsUserChanged(currentUser) {
+		oldUsername := dbuser.TrimUserSuffix(currentUser)
 		if err := dbClient.RenameUser(oldUsername, baseUsername); err != nil {
 			return err
 		}
@@ -1205,7 +1217,7 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		if err := dbClient.UpdateUser(oldUsername+dbuser.SuffixA, dbu.GetUserA(), baseUsername, userPassword); err != nil {
 			return err
 		}
-		updateUserStatus(status, reqInfo, dbu.GetUserA(), userPassword)
+		updateUserStatus(statusNewDB, reqInfo, dbu.GetUserA(), userPassword)
 		// updating user b
 		userPassword, err = r.generatePassword()
 		if err != nil {
@@ -1216,27 +1228,32 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		}
 	}
 
-	if status.UserUpdatedAt == nil || time.Since(status.UserUpdatedAt.Time) > rotationTime {
-		logger.V(1).Info("rotating_users", "rotationTime", rotationTime)
+	if statusNewDB.UserUpdatedAt == nil || time.Since(statusActiveDB.UserUpdatedAt.Time) >= rotationTime {
+		logger.V(1).Info("rotating user password",
+			"currentUser", currentUser,
+			"dbu", dbu,
+			"statusNewDB", statusNewDB,
+			"statusActiveDB", statusActiveDB)
 
 		userPassword, err := r.generatePassword()
 		if err != nil {
 			return err
 		}
 
-		nextUser := dbu.NextUser(status.ConnectionInfo.Username)
-		created, err := dbClient.CreateUser(nextUser, baseUsername, userPassword)
+		nextUser := dbu.NextUser(currentUser)
+		logger.V(1).Info("setting next user", "nextUser", nextUser)
+
+		_, err = dbClient.CreateUser(nextUser, baseUsername, userPassword)
 		if err != nil {
 			metrics.PasswordRotatedErrors.WithLabelValues("create error").Inc()
 			return err
 		}
-		_ = created
 
 		if err := dbClient.UpdatePassword(nextUser, userPassword); err != nil {
 			return err
 		}
 
-		updateUserStatus(status, reqInfo, nextUser, userPassword)
+		updateUserStatus(statusNewDB, reqInfo, nextUser, userPassword)
 	}
 
 	// baseUsername = myuser
@@ -1253,17 +1270,17 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		return fmt.Errorf("managecreaterole on role %s: %w", baseUsername, err)
 	}
 	// TODO: change this to modify the the role ie. baseUsername
-	err = dbClient.ManageReplicationRole(status.ConnectionInfo.Username, reqInfo.EnableReplicationRole)
+	err = dbClient.ManageReplicationRole(currentUser, reqInfo.EnableReplicationRole)
 	// Ignore errors when revoking replication role from a userrole. This may
 	// fail on non-cloud databases
 	if err != nil && reqInfo.EnableReplicationRole {
-		return fmt.Errorf("managereplicationrole on role %s: %w", status.ConnectionInfo.Username, err)
+		return fmt.Errorf("managereplicationrole on role %s: %w", currentUser, err)
 	}
-	err = dbClient.ManageReplicationRole(dbu.NextUser(status.ConnectionInfo.Username), reqInfo.EnableReplicationRole)
+	err = dbClient.ManageReplicationRole(dbu.NextUser(currentUser), reqInfo.EnableReplicationRole)
 	// Ignore errors when revoking replication role from a userrole. This may
 	// fail on non-cloud databases
 	if err != nil && reqInfo.EnableReplicationRole {
-		return fmt.Errorf("managereplicationrole on role %s: %w", dbu.NextUser(status.ConnectionInfo.Username), err)
+		return fmt.Errorf("managereplicationrole on role %s: %w", dbu.NextUser(currentUser), err)
 	}
 
 	return nil
