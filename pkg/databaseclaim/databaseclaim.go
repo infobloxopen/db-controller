@@ -1172,12 +1172,15 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		return fmt.Errorf("newDB connection info is nil")
 	}
 
-	if statusActiveDB == nil {
-		return fmt.Errorf("status activeDB is nil")
-	}
+	// The statusActiveDB is relevant only in the UseNewDB mode for now.
+	if operationalMode == M_UseNewDB {
+		if statusActiveDB == nil {
+			return fmt.Errorf("status activeDB is nil")
+		}
 
-	if statusActiveDB.ConnectionInfo == nil {
-		return fmt.Errorf("activeDB connection info is nil")
+		if statusActiveDB.ConnectionInfo == nil {
+			return fmt.Errorf("activeDB connection info is nil")
+		}
 	}
 
 	dbu := dbuser.NewDBUser(baseUsername)
