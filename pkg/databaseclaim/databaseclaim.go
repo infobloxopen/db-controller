@@ -500,7 +500,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 
 func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name, "func", "reconcileNewDB")
-	logr.Info("reconcileNewDB", "r.Input", reqInfo)
+	logr.Info("reconcileNewDB", "r.Input", reqInfo, "dbClaim", dbClaim)
 
 	err_ := r.statusManager.SetConditionAndUpdateStatus(ctx, dbClaim, v1.ProvisioningCondition())
 	if err_ != nil {
