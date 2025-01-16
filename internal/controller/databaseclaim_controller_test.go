@@ -116,9 +116,9 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			By("Mocking master credentials")
 			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
 			Expect(err).ToNot(HaveOccurred())
-
+			// postgres-db.t4g.medium-15
 			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
-
+			Expect(credSecretName).To(Equal("testenv-test-dbclaim-416e183c"))
 			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
 			DeferCleanup(cleanup)
 
@@ -205,21 +205,26 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			resource.Spec.DBVersion = "13.3"
 			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
 
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
+			Expect(err).ToNot(HaveOccurred())
+
+			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+			// testenv-test-dbclaim-416e183c
+			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
+			DeferCleanup(cleanup)
+			Expect(credSecretName).To(Equal("testenv-test-dbclaim-15387708"))
+
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
 			Expect(resource.Spec.DBVersion).To(Equal("13.3"))
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resource.Status.Error).To(Equal(""))
-
-			var instance crossplaneaws.DBInstance
-			viper := controllerReconciler.Config.Viper
-			hostParams, err := hostparams.New(viper, resource)
-			Expect(err).ToNot(HaveOccurred())
 
 			instanceName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
 
 			By(fmt.Sprintf("Check dbinstance is created: %s", instanceName))
+			var instance crossplaneaws.DBInstance
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{Name: instanceName}, &instance)
 			}).Should(Succeed())
@@ -230,15 +235,45 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 			resource := &persistancev1.DatabaseClaim{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
-			resource.Spec.DBVersion = "13.3"
 			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
 
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
-			Expect(resource.Spec.DBVersion).To(Equal("13.3"))
+			Expect(resource.Spec.DBVersion).To(Equal(""))
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
 			Expect(resource.Status.Error).To(Equal(""))
+
+		})
+
+		It("Reconcile rotates the username", func() {
+			By("Updating CR with a DB Version")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal(""))
+
+			By("Rotating to UserSuffixA")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
+			By("Rotating to UserSuffixB")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_b"))
+
+			By("Rotating to UserSuffixA")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
 
 		})
 
