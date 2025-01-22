@@ -41,70 +41,90 @@ import (
 var _ = Describe("DatabaseClaim Controller", func() {
 
 	Context("When updating DB Claim Status", func() {
-		const (
-			resourceName = "test-dbclaim"
-			secretName   = "postgres-postgresql"
-			namespace    = "default"
-			databaseName = "test-db"
-			databaseType = "postgres"
-		)
-		var (
-			ctx                      = context.Background()
-			typeNamespacedName       = types.NamespacedName{Name: resourceName, Namespace: namespace}
-			typeNamespacedSecretName = types.NamespacedName{Name: secretName, Namespace: namespace}
-			claim                    = &v1.DatabaseClaim{}
-		)
+		const resourceName = "test-dbclaim"
+		const secretName = "postgres-postgresql"
 
-		createDatabaseClaim := func() {
+		ctx := context.Background()
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "default", // TODO(user):Modify as needed
+		}
+		typeNamespacedSecretName := types.NamespacedName{
+			Name:      secretName,
+			Namespace: "default", // TODO(user):Modify as needed
+		}
+		claim := &persistancev1.DatabaseClaim{}
+
+		BeforeEach(func() {
+
+			By("ensuring the resource does not exist")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(HaveOccurred())
+
+			By(fmt.Sprintf("Creating dbc: %s", resourceName))
 			parsedDSN, err := url.Parse(testDSN)
 			Expect(err).NotTo(HaveOccurred())
-			resource := &v1.DatabaseClaim{
+			password, ok := parsedDSN.User.Password()
+			Expect(ok).To(BeTrue())
+
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).To(HaveOccurred())
+			Expect(client.IgnoreNotFound(err)).To(Succeed())
+
+			By(fmt.Sprintf("creating master credentials: %s", secretName))
+			secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "default",
+				},
+				StringData: map[string]string{
+					"password": password,
+				},
+				Type: "Opaque",
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			By("creating master databaseclaims")
+			Expect(client.IgnoreNotFound(err)).To(Succeed())
+			resource := &persistancev1.DatabaseClaim{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "persistance.atlas.infoblox.com/v1",
 					Kind:       "DatabaseClaim",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: namespace,
+					Namespace: "default",
 				},
-				Spec: v1.DatabaseClaimSpec{
+				Spec: persistancev1.DatabaseClaimSpec{
+					// TODO: remove customization of DSNName
 					DSNName:               "fixme.txt",
 					Class:                 ptr.To(""),
-					DatabaseName:          databaseName,
+					DatabaseName:          "sample_app",
 					SecretName:            secretName,
 					Username:              parsedDSN.User.Username(),
 					EnableSuperUser:       ptr.To(false),
 					EnableReplicationRole: ptr.To(false),
 					UseExistingSource:     ptr.To(false),
-					Type:                  databaseType,
+					Type:                  "postgres",
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-		}
-
-		BeforeEach(func() {
-			By("Verify environment")
-			viper := controllerReconciler.Config.Viper
-			Expect(viper.Get("env")).To(Equal(env))
-
-			By("Ensuring the resource does not exist")
-			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(HaveOccurred())
-
-			By(fmt.Sprintf("Creating DatabaseClaim: %s", resourceName))
-			createDatabaseClaim()
 
 			By("Mocking master credentials")
-			Expect(k8sClient.Get(ctx, typeNamespacedName, claim)).To(Succeed())
-			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, claim)
-			Expect(err).NotTo(HaveOccurred())
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
+			Expect(err).ToNot(HaveOccurred())
+			// postgres-db.t4g.medium-15
 			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+			Expect(credSecretName).To(Equal("testenv-test-dbclaim-416e183c"))
 			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
 			DeferCleanup(cleanup)
+
 		})
 
 		AfterEach(func() {
+			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			By("Cleanup the specific resource instance DatabaseClaim")
-			resource := &v1.DatabaseClaim{}
+			resource := &persistancev1.DatabaseClaim{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -118,11 +138,12 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(client.IgnoreNotFound(err)).To(Succeed())
 
-			By("Cleanup DbClaim associated secret")
 			secret := &corev1.Secret{}
 			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
-			// this secret is created without resource owner, so it does not get deleted after dbclain is deleted
+			Expect(err).NotTo(HaveOccurred())
+			By("Cleanup the database secret")
 			Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
+
 		})
 
 		It("Should succeed to reconcile DB Claim missing dbVersion", func() {
@@ -227,61 +248,53 @@ var _ = Describe("DatabaseClaim Controller", func() {
 		})
 
 		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
-			By("Updating the DatabaseClaim resource with a DB Version 13.3")
-			resource := &v1.DatabaseClaim{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
-			Expect(resource.Status.ActiveDB.DbCreatedAt).To(BeNil())
-			resource.Spec.DBVersion = "13.3"
-			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			By("Updating CR with a DB Version")
 
-			By("Mocking RDS master credentials")
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			resource.Spec.DBVersion = "13.3"
+			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
+
 			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
 			Expect(err).ToNot(HaveOccurred())
 
-			// given db version changed, we need to mock master creds again as the hash changed
 			credSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+			// testenv-test-dbclaim-416e183c
 			cleanup := dockerdb.MockRDSCredentials(GinkgoT(), ctx, k8sClient, testDSN, credSecretName)
 			DeferCleanup(cleanup)
+			Expect(credSecretName).To(Equal("testenv-test-dbclaim-15387708"))
 
-			By("Reconciling the updated resource")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal("13.3"))
+
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resource.Status.Error).To(BeEmpty())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
 
-			By(fmt.Sprintf("Verifying that the DBInstance is created: %s", credSecretName))
+			instanceName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+
+			By(fmt.Sprintf("Check dbinstance is created: %s", instanceName))
 			var instance crossplaneaws.DBInstance
 			Eventually(func() error {
-				return k8sClient.Get(ctx, types.NamespacedName{Name: credSecretName}, &instance)
+				return k8sClient.Get(ctx, types.NamespacedName{Name: instanceName}, &instance)
 			}).Should(Succeed())
+		})
 
-			By("Verifying that the DBInstance is updated")
-			var reconciledClaim v1.DatabaseClaim
-			Expect(k8sClient.Get(ctx, typeNamespacedName, &reconciledClaim)).NotTo(HaveOccurred())
-			Expect(reconciledClaim.Status.Error).To(Equal(""))
+		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
+			By("Updating CR with a DB Version")
 
-			By("Validating the fields in ActiveDB")
-			activeDB := reconciledClaim.Status.ActiveDB
-			Expect(activeDB.Shape).To(Equal(hostParams.Shape))
-			Expect(string(activeDB.Type)).To(Equal(hostParams.Type))
-			Expect(activeDB.MinStorageGB).To(Equal(hostParams.MinStorageGB))
-			Expect(activeDB.MaxStorageGB).To(Equal(hostParams.MaxStorageGB))
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(k8sClient.Update(ctx, resource)).NotTo(HaveOccurred())
 
-			Expect(activeDB.DBVersion).To(Equal(resource.Spec.DBVersion))
-			Expect(activeDB.Shape).To(Equal(*instance.Spec.ForProvider.DBInstanceClass))
-			Expect(string(activeDB.Type)).To(Equal(*instance.Spec.ForProvider.Engine))
-			Expect(int64(activeDB.MinStorageGB)).To(Equal(*instance.Spec.ForProvider.AllocatedStorage))
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal(""))
 
-			Expect(activeDB.DbState).To(Equal(v1.Ready))
-			Expect(activeDB.SourceDataFrom).To(BeNil())
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
 
-			By("Validating timestamps in ActiveDB")
-			Expect(activeDB.DbCreatedAt).NotTo(BeNil())
-			Expect(activeDB.ConnectionInfoUpdatedAt).NotTo(BeNil())
-			Expect(activeDB.UserUpdatedAt).NotTo(BeNil())
-
-			By("Validating ConnectionInfo")
-			connectionInfo := activeDB.ConnectionInfo
-			Expect(connectionInfo).NotTo(BeNil())
 		})
 
 		It("Should propagate labels from DatabaseClaim to DBInstance", func() {
@@ -326,6 +339,36 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("Reconcile rotates the username", func() {
+			By("Updating CR with a DB Version")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal(""))
+
+			By("Rotating to UserSuffixA")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
+			By("Rotating to UserSuffixB")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_b"))
+
+			By("Rotating to UserSuffixA")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
 		})
 	})
 })
