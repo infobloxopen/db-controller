@@ -9,12 +9,14 @@ const (
 	SuffixB = "_b"
 )
 
+// DBUser is a struct that holds the usernames for a given role.
 type DBUser struct {
 	rolename string
 	userA    string
 	userB    string
 }
 
+// NewDBUser returns a new DBUser instance.
 func NewDBUser(baseName string) DBUser {
 	return DBUser{
 		rolename: baseName,
@@ -23,6 +25,8 @@ func NewDBUser(baseName string) DBUser {
 	}
 }
 
+// IsUserChanged checks if the given currentUserName has changed compared to the
+// rolename of the DBUser instance.
 func (dbu DBUser) IsUserChanged(currentUserName string) bool {
 
 	if currentUserName == "" {
@@ -32,14 +36,17 @@ func (dbu DBUser) IsUserChanged(currentUserName string) bool {
 	return TrimUserSuffix(currentUserName) != dbu.rolename
 }
 
+// TrimUserSuffix removes the suffixes from the given string.
 func TrimUserSuffix(in string) string {
 	return strings.TrimSuffix(strings.TrimSuffix(in, SuffixA), SuffixB)
 }
 
+// GetUserA returns the username for UserA.
 func (dbu DBUser) GetUserA() string {
 	return dbu.userA
 }
 
+// GetUserB returns the username for UserB.
 func (dbu DBUser) GetUserB() string {
 	return dbu.userB
 }
