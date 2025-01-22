@@ -5,6 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "db-controller.labels" . | nindent 4 }}
+    persistance.atlas.infoblox.com/allow-deletion: enabled
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-weight": "-4"

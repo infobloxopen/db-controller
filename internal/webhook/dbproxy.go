@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	// TODO: align this with the path used in dsnexec.go
 	MountPathProxy     = "/dbproxy"
 	VolumeNameProxy    = "dbproxydsn"
 	ContainerNameProxy = "dbproxy"

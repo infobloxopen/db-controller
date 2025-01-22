@@ -70,6 +70,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "db-proxy-test.labels" . | nindent 4 }}
+    persistance.atlas.infoblox.com/allow-deletion: enabled
   annotations:
     # ensure this runs on the new db-controller, not the existing one
     "helm.sh/hook": "test"
