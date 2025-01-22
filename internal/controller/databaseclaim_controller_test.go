@@ -327,5 +327,35 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).To(HaveOccurred())
 		})
+
+		It("Reconcile rotates the username", func() {
+			By("Updating CR with a DB Version")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal(""))
+
+			By("Rotating to UserSuffixA")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
+			By("Rotating to UserSuffixB")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_b"))
+
+			By("Rotating to UserSuffixA")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
+		})
 	})
 })
