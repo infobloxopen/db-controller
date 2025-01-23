@@ -1,6 +1,6 @@
 package databaseclaim
 
-func propagateLabels(dbClaimLabels map[string]string) map[string]string {
+func PropagateLabels(dbClaimLabels map[string]string) map[string]string {
 	keysToPropagate := []string{
 		"app.kubernetes.io/component",
 		"app.kubernetes.io/instance",
