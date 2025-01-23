@@ -33,7 +33,7 @@ func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.
 
 	for _, dbInstance := range dbInstances.Items {
 		instanceLogger := logger.WithValues("DBInstanceName", dbInstance.Name)
-		instanceLogger.Info("Processing DBInstance")
+		instanceLogger.Info("processing DBInstance")
 
 		// Remove the prefix from the DBInstance name to derive the DatabaseClaim name.
 		nameWithoutPrefix := strings.TrimPrefix(dbInstance.Name, prefix+"-")
@@ -54,7 +54,9 @@ func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.
 		// Attempt to fetch the associated DatabaseClaim by field selector on name.
 		dbClaimsTest := v1.DatabaseClaimList{}
 		fieldSelectorOptions := []client.ListOption{
-			client.MatchingFields{"name": dbClaimName},
+			client.MatchingFields{
+				"metadata.name": dbClaimName,
+			},
 		}
 		if err := kubeClient.List(ctx, &dbClaimsTest, fieldSelectorOptions...); err != nil {
 			instanceLogger.Error(err, "failed to fetch DatabaseClaim", "DatabaseClaimName", dbClaimName)
