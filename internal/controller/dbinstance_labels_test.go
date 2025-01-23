@@ -60,45 +60,43 @@ var _ = Describe("DBInstance Labels Management with envtest", func() {
 	})
 
 	AfterEach(func() {
-		// Clean up after each test
 		cancel()
 		Expect(testEnv.Stop()).To(Succeed())
 	})
 
-	It("Should replicate labels from DatabaseClaim to DBInstance", func() {
-		// Create a DatabaseClaim with labels
+	It("Job should replicate labels from DatabaseClaim to DBInstance", func() {
 		dbClaim := &persistencev1.DatabaseClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "redirect-dbapi", // Expected derived name
+				Name:      "redirect-dbapi",
 				Namespace: "default",
 				Labels: map[string]string{
-					"app": "test-app",
-					"env": "test",
+					"app.kubernetes.io/component": "database",
+					"app.kubernetes.io/instance":  "redirect",
+					"app.kubernetes.io/name":      "redirect",
 				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, dbClaim)).To(Succeed())
 
-		// Create a DBInstance with the full name and required fields
 		dbInstance := &v1alpha1.DBInstance{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "box-3-redirect-dbapi-2f2d3cd1", // Name with prefix and suffix
+				Name: "box-3-redirect-dbapi-2f2d3cd1",
 				Labels: map[string]string{
-					"existing.label": "unchanged",
+					"existing-label": "unchanged",
 				},
 			},
 			Spec: v1alpha1.DBInstanceSpec{
 				ForProvider: v1alpha1.DBInstanceParameters{
-					DBInstanceClass: strPtr("db.t3.micro"), // Mandatory value
-					Engine:          strPtr("postgres"),    // Mandatory value
+					DBInstanceClass: strPtr("db.t3.micro"),
+					Engine:          strPtr("postgres"),
 				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, dbInstance)).To(Succeed())
 
-		// Execute the SyncDBInstances function
+		// Execute the SyncDBInstances function.
 		viperInstance := viper.New()
-		viperInstance.Set("env", "box-3-")
+		viperInstance.Set("env", "box-3")
 		err := SyncDBInstances(ctx, viperInstance, k8sClient, testLogger)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -107,11 +105,15 @@ var _ = Describe("DBInstance Labels Management with envtest", func() {
 		Eventually(func() map[string]string {
 			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
 			return updatedDBInstance.Labels
-		}, "10s", "1s").Should(HaveKeyWithValue("app", "test-app"))
+		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/component", "database"))
 		Eventually(func() map[string]string {
 			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
 			return updatedDBInstance.Labels
-		}, "10s", "1s").Should(HaveKeyWithValue("env", "test"))
+		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/instance", "redirect"))
+		Eventually(func() map[string]string {
+			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
+			return updatedDBInstance.Labels
+		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/name", "redirect"))
 		Eventually(func() map[string]string {
 			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
 			return updatedDBInstance.Labels

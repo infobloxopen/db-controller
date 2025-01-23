@@ -36,7 +36,7 @@ func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.
 		instanceLogger.Info("Processing DBInstance")
 
 		// Remove the prefix from the DBInstance name to derive the DatabaseClaim name.
-		nameWithoutPrefix := strings.TrimPrefix(dbInstance.Name, prefix)
+		nameWithoutPrefix := strings.TrimPrefix(dbInstance.Name, prefix+"-")
 		nameWithoutSuffix := nameWithoutPrefix
 
 		if len(nameWithoutSuffix) > 9 {
