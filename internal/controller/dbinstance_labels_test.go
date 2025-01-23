@@ -82,7 +82,7 @@ var _ = Describe("DBInstance Labels Management with envtest", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "box-3-redirect-dbapi-2f2d3cd1",
 				Labels: map[string]string{
-					"existing-label": "unchanged",
+					"existing.label": "unchanged",
 				},
 			},
 			Spec: v1alpha1.DBInstanceSpec{
