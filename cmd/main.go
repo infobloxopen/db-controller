@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -44,6 +45,7 @@ import (
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
+	"github.com/spf13/viper"
 
 	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
@@ -76,6 +78,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var enableLabelPropagation bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -88,6 +91,8 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enableLabelPropagation, "enable-label-propagation", false,
+		"Enable the propagation of DatabaseClaim labels to DBInstance objects")
 
 	var class string
 	var configFile string
@@ -119,6 +124,21 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	ctlConfig := config.NewConfig(configFile)
+
+	viperInstance := viper.New()
+	viperInstance.SetConfigFile(configFile)
+	if err := viperInstance.ReadInConfig(); err != nil {
+		setupLog.Error(err, "Failed to read configuration file")
+		os.Exit(1)
+	}
+
+	prefix := viperInstance.GetString("env")
+	if prefix == "" {
+		setupLog.Error(fmt.Errorf("missing configuration"), "Environment prefix is required in configuration")
+		os.Exit(1)
+	}
+
+	setupLog.Info("Loaded configuration", "prefix", prefix)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -303,4 +323,23 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+
+	// Start the manager
+	setupLog.Info("Starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+	// Start label propagation logic if enabled
+	if enableLabelPropagation {
+		setupLog.Info("Starting label propagation for DBInstances")
+		go func() {
+			if err := controller.SyncDBInstances(context.Background(), viperInstance, mgr.GetClient(), setupLog); err != nil {
+				setupLog.Error(err, "Failed to propagate labels for DBInstances")
+			} else {
+				setupLog.Info("Label propagation completed successfully")
+			}
+		}()
+	}
+
 }
