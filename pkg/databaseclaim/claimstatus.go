@@ -212,3 +212,18 @@ func (m *StatusManager) MigrationInProgressStatus(ctx context.Context, dbClaim *
 	err := m.UpdateStatus(ctx, dbClaim)
 	return ctrl.Result{Requeue: true}, err
 }
+
+func (m *StatusManager) ActiveDBSuccessReconcile(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
+	result, err := m.SuccessAndUpdateCondition(ctx, dbClaim)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if dbClaim.Status.ActiveDB.DbState == v1.Ready && dbClaim.Spec.DBVersion == "" {
+		if err := m.SetConditionAndUpdateStatus(ctx, dbClaim, v1.NoDbVersionStatus()); err != nil {
+			return result, err
+		}
+	}
+
+	return result, err
+}
