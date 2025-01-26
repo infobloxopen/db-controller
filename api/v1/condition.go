@@ -78,7 +78,7 @@ func DatabaseReadyCondition() metav1.Condition {
 		ConditionSync,
 		metav1.ConditionTrue,
 		ReasonAvailable,
-		"Database is provisioned.",
+		"Database is provisioned",
 	)
 }
 

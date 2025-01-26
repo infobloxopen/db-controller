@@ -185,3 +185,72 @@ func TestUpdateUserStatus(t *testing.T) {
 		t.Errorf("expected ConnectionInfoUpdatedAt to be set, got nil")
 	}
 }
+
+func TestActiveDBSuccessReconcile(t *testing.T) {
+	ctx := context.TODO()
+	manager := &StatusManager{
+		client: &role.MockClient{},
+	}
+
+	t.Run("Set NoDbVersionStatus when DBVersion is empty", func(t *testing.T) {
+		dbClaim := &v1.DatabaseClaim{
+			Spec: v1.DatabaseClaimSpec{
+				DBVersion: "",
+			},
+			Status: v1.DatabaseClaimStatus{
+				ActiveDB: v1.Status{
+					DbState: v1.Ready,
+				},
+				Conditions: []metav1.Condition{},
+			},
+		}
+
+		_, err := manager.ActiveDBSuccessReconcile(ctx, dbClaim)
+		if err != nil {
+			t.Errorf("expected error to be nil but got %v", err)
+		}
+
+		found := false
+		for _, cond := range dbClaim.Status.Conditions {
+			if cond.Type == v1.NoDbVersionStatus().Type {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected to find no db version status condition")
+		}
+	})
+
+	t.Run("NoDbVersionStatus is not present when dbVersion is specified", func(t *testing.T) {
+		dbClaim := &v1.DatabaseClaim{
+			Spec: v1.DatabaseClaimSpec{
+				DBVersion: "12.1",
+			},
+			Status: v1.DatabaseClaimStatus{
+				ActiveDB: v1.Status{
+					DbState: v1.Ready,
+				},
+				Conditions: []metav1.Condition{
+					v1.NoDbVersionStatus(),
+				},
+			},
+		}
+
+		_, err := manager.ActiveDBSuccessReconcile(ctx, dbClaim)
+		if err != nil {
+			t.Errorf("expected error to be nil but got %v", err)
+		}
+
+		found := false
+		for _, cond := range dbClaim.Status.Conditions {
+			if cond.Type == v1.NoDbVersionStatus().Type {
+				found = true
+				break
+			}
+		}
+		if found {
+			t.Errorf("status conditions should not have been present")
+		}
+	})
+}

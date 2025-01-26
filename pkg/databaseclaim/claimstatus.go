@@ -147,6 +147,16 @@ func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.Data
 	dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, condition)
 }
 
+func (m *StatusManager) RemoveConditionByType(dbClaim *v1.DatabaseClaim, conditionType string) {
+	var newConditions []metav1.Condition
+	for _, cond := range dbClaim.Status.Conditions {
+		if cond.Type != conditionType {
+			newConditions = append(newConditions, cond)
+		}
+	}
+	dbClaim.Status.Conditions = newConditions
+}
+
 func (m *StatusManager) SetConditionAndUpdateStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) error {
 	m.SetStatusCondition(ctx, dbClaim, condition)
 
@@ -223,6 +233,8 @@ func (m *StatusManager) ActiveDBSuccessReconcile(ctx context.Context, dbClaim *v
 		if err := m.SetConditionAndUpdateStatus(ctx, dbClaim, v1.NoDbVersionStatus()); err != nil {
 			return result, err
 		}
+	} else {
+		m.RemoveConditionByType(dbClaim, v1.NoDbVersionStatus().Type)
 	}
 
 	return result, err
