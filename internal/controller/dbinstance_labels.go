@@ -15,9 +15,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-// SyncDBInstances synchronizes the labels of DBInstances with their associated DatabaseClaims.
+// SyncDBInstances propagates labels from DatabaseClaims to their associated DBInstances
+// in a Kubernetes cluster, ensuring consistency between the resources.
 func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.Client, logger logr.Logger) error {
-	logger.Info("starting synchronization of dbinstance labels")
+	logger.Info("starting synchronization of DBInstance labels")
 
 	// Dynamically retrieve the prefix from the environment configuration.
 	prefix := viper.GetString("env")
@@ -29,13 +30,13 @@ func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.
 		return fmt.Errorf("error listing DBInstances: %w", err)
 	}
 
-	logger.Info("dbinstances fetched successfully", "total_dbinstances", len(dbInstances.Items))
+	logger.Info("DBInstances fetched successfully", "total_dbinstances", len(dbInstances.Items))
 
 	for _, dbInstance := range dbInstances.Items {
 		instanceLogger := logger.WithValues("DBInstanceName", dbInstance.Name)
 		instanceLogger.Info("processing DBInstance")
 
-		// Remove the prefix from the DBInstance name to derive the DatabaseClaim name.
+		// Extract the DatabaseClaim name from the DBInstance name by removing the prefix and suffix.
 		nameWithoutPrefix := strings.TrimPrefix(dbInstance.Name, prefix+"-")
 		nameWithoutSuffix := nameWithoutPrefix
 
@@ -51,7 +52,7 @@ func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.
 			continue
 		}
 
-		// Attempt to fetch the associated DatabaseClaim by field selector on name.
+		// Fetch the associated DatabaseClaim by name.
 		dbClaimsTest := v1.DatabaseClaimList{}
 		fieldSelectorOptions := []client.ListOption{
 			client.MatchingFields{
@@ -91,7 +92,8 @@ func SyncDBInstances(ctx context.Context, viper *viper.Viper, kubeClient client.
 	return nil
 }
 
-// updateDBInstanceLabels updates the labels of a DBInstance while preserving existing labels.
+// updateDBInstanceLabels updates the labels of a DBInstance while preserving any existing labels.
+// It ensures that only new or changed labels are updated in the DBInstance.
 func updateDBInstanceLabels(ctx context.Context, kubeClient client.Client, dbInstance *v1alpha1.DBInstance, newLabels map[string]string, logger logr.Logger) error {
 	logger.Info("starting update of DBInstance labels")
 
@@ -116,8 +118,8 @@ func updateDBInstanceLabels(ctx context.Context, kubeClient client.Client, dbIns
 		return nil
 	}
 
-	// Attempt to update the DBInstance.
-	logger.Info("applying updated labels to DBInstance", "UpdatedLabels", dbInstance.Labels)
+	// Attempt to apply the updated labels to the DBInstance.
+	logger.Info("applying updated labels to DBInstance", "updatedLabels", dbInstance.Labels)
 	if err := kubeClient.Update(ctx, dbInstance); err != nil {
 		return fmt.Errorf("error updating DBInstance labels: %w", err)
 	}

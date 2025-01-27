@@ -1,10 +1,11 @@
 package databaseclaim
 
+// PropagateLabels extracts and propagates the labels 'app.kubernetes.io/dbclaim-name'
+// and 'app.kubernetes.io/dbclaim-namespace' from a DatabaseClaim.
 func PropagateLabels(dbClaimLabels map[string]string) map[string]string {
 	keysToPropagate := []string{
-		"app.kubernetes.io/component",
-		"app.kubernetes.io/instance",
-		"app.kubernetes.io/name",
+		"app.kubernetes.io/dbclaim-name",
+		"app.kubernetes.io/dbclaim-namespace",
 	}
 
 	labels := make(map[string]string)

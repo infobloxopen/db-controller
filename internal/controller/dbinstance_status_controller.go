@@ -9,6 +9,7 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	statusmanager "github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -75,23 +76,18 @@ func (r *DBInstanceStatusReconciler) getDBClaimRefFromDBInstance(dbInstance *cro
 		return nil, fmt.Errorf("DBInstance %s has no labels", dbInstance.Name)
 	}
 
-	instanceLabel, exists := labels["app.kubernetes.io/instance"]
-	if !exists {
-		err := errors.New("DBInstance is missing app.kubernetes.io/instance required label")
-		logger.Error(err, err.Error(), "DBInstance", dbInstance.Name)
-		return nil, err
-	}
+	dbClaimName, nameExists := labels["app.kubernetes.io/dbclaim-name"]
+	dbClaimNamespace, namespaceExists := labels["app.kubernetes.io/dbclaim-namespace"]
 
-	componentLabel, exists := labels["app.kubernetes.io/component"]
-	if !exists {
-		err := errors.New("DBInstance is missing app.kubernetes.io/component required label")
-		logger.Error(err, err.Error(), "DBInstance", dbInstance.Name)
+	if !nameExists || !namespaceExists {
+		err := errors.New("missing required labels app.kubernetes.io/dbclaim-name or app.kubernetes.io/dbclaim-namespace")
+		logger.Error(err, "DBInstance is missing required labels", "DBInstance", dbInstance.Name)
 		return nil, err
 	}
 
 	dbClaimNSName := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-%s", instanceLabel, componentLabel),
-		Namespace: instanceLabel,
+		Name:      dbClaimName,
+		Namespace: dbClaimNamespace,
 	}
 
 	return &dbClaimNSName, nil
@@ -103,13 +99,13 @@ func (r *DBInstanceStatusReconciler) getDatabaseClaim(ctx context.Context, dbCla
 	if err := r.Get(ctx, *dbClaimRef, &dbClaim); err != nil {
 		return nil, fmt.Errorf("failed to get DatabaseClaim: %w", err)
 	}
-
 	return &dbClaim, nil
 }
 
-// updateDatabaseClaimStatus updates the status of the DatabaseClaim based on the DBInstance status.
+// updateDatabaseClaimStatus propagates labels from a DatabaseClaim to a DBInstance
+// and updates the DatabaseClaim status based on the DBInstance conditions.
 func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *v1.DatabaseClaim, logger logr.Logger) error {
-	if dbInstance.Status.Conditions == nil || len(dbInstance.Status.Conditions) == 0 {
+	if len(dbInstance.Status.Conditions) == 0 {
 		logger.Info("DBInstance has no conditions", "DBInstance", dbInstance.Name)
 		return nil
 	}
@@ -126,7 +122,6 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 				string(condition.Reason),
 				condition.Message,
 			)
-			conditionSyncedAtProvider.LastTransitionTime = condition.LastTransitionTime
 		case xpv1.TypeReady:
 			conditionReadyAtProvider = v1.CreateCondition(
 				v1.ConditionReady,
@@ -134,8 +129,17 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 				string(condition.Reason),
 				condition.Message,
 			)
-			conditionReadyAtProvider.LastTransitionTime = condition.LastTransitionTime
 		}
+	}
+
+	// Propagate labels from DatabaseClaim to DBInstance.
+	newLabels := databaseclaim.PropagateLabels(map[string]string{
+		"app.kubernetes.io/dbclaim-name":      dbClaim.Name,
+		"app.kubernetes.io/dbclaim-namespace": dbClaim.Namespace,
+	})
+	if err := updateDBInstanceLabels(ctx, r.Client, dbInstance, newLabels, logger); err != nil {
+		logger.Error(err, "failed to update labels for DBInstance", "DBInstance", dbInstance.Name)
+		return err
 	}
 
 	if conditionReadyAtProvider.Status == metav1.ConditionTrue && conditionSyncedAtProvider.Status == metav1.ConditionTrue {

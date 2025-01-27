@@ -296,15 +296,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start the manager
-	setupLog.Info("Starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
-
-	// Start the manager
-	setupLog.Info("Starting manager")
+	// Start the manager.
+	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
@@ -312,7 +305,7 @@ func main() {
 
 	// Start label propagation logic if enabled.
 	if enableLabelPropagation {
-		setupLog.Info("Starting label propagation for DBInstances")
+		setupLog.Info("starting label propagation for DBInstances")
 		go func() {
 			if err := controller.SyncDBInstances(context.Background(), ctlConfig, mgr.GetClient(), setupLog); err != nil {
 				setupLog.Error(err, "failed to propagate labels for dbinstances")

@@ -29,8 +29,8 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 				Namespace: "default",
 				Name:      "default-dbinstance",
 				Labels: map[string]string{
-					"app.kubernetes.io/instance":  "default",
-					"app.kubernetes.io/component": "dbclaim",
+					"app.kubernetes.io/dbclaim-name":      "default-dbclaim",
+					"app.kubernetes.io/dbclaim-namespace": "default",
 				},
 			},
 			Spec: v1alpha1.DBInstanceSpec{

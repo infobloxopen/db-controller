@@ -17,6 +17,7 @@ import (
 )
 
 // Helper function to create string pointers
+// Used to simplify assigning string values to pointer fields in test resources.
 func strPtr(s string) *string {
 	return &s
 }
@@ -70,9 +71,8 @@ var _ = Describe("DBInstance Labels Management with envtest", func() {
 				Name:      "redirect-dbapi",
 				Namespace: "default",
 				Labels: map[string]string{
-					"app.kubernetes.io/component": "database",
-					"app.kubernetes.io/instance":  "redirect",
-					"app.kubernetes.io/name":      "redirect",
+					"app.kubernetes.io/dbclaim-name":      "redirect",
+					"app.kubernetes.io/dbclaim-namespace": "default",
 				},
 			},
 		}
@@ -105,15 +105,11 @@ var _ = Describe("DBInstance Labels Management with envtest", func() {
 		Eventually(func() map[string]string {
 			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
 			return updatedDBInstance.Labels
-		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/component", "database"))
+		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/dbclaim-name", "redirect"))
 		Eventually(func() map[string]string {
 			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
 			return updatedDBInstance.Labels
-		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/instance", "redirect"))
-		Eventually(func() map[string]string {
-			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
-			return updatedDBInstance.Labels
-		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/name", "redirect"))
+		}, "10s", "1s").Should(HaveKeyWithValue("app.kubernetes.io/dbclaim-namespace", "default"))
 		Eventually(func() map[string]string {
 			_ = k8sClient.Get(ctx, client.ObjectKey{Name: "box-3-redirect-dbapi-2f2d3cd1"}, updatedDBInstance)
 			return updatedDBInstance.Labels
