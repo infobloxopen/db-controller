@@ -147,6 +147,16 @@ func (m *StatusManager) SetStatusCondition(ctx context.Context, dbClaim *v1.Data
 	dbClaim.Status.Conditions = append(dbClaim.Status.Conditions, condition)
 }
 
+func (m *StatusManager) RemoveConditionByType(dbClaim *v1.DatabaseClaim, conditionType string) {
+	var newConditions []metav1.Condition
+	for _, cond := range dbClaim.Status.Conditions {
+		if cond.Type != conditionType {
+			newConditions = append(newConditions, cond)
+		}
+	}
+	dbClaim.Status.Conditions = newConditions
+}
+
 func (m *StatusManager) SetConditionAndUpdateStatus(ctx context.Context, dbClaim *v1.DatabaseClaim, condition metav1.Condition) error {
 	m.SetStatusCondition(ctx, dbClaim, condition)
 
@@ -211,4 +221,23 @@ func (m *StatusManager) MigrationInProgressStatus(ctx context.Context, dbClaim *
 
 	err := m.UpdateStatus(ctx, dbClaim)
 	return ctrl.Result{Requeue: true}, err
+}
+
+// ActiveDBSuccessReconcile clears the error status and determines if the DB version is explicitly 
+// defined.
+func (m *StatusManager) ActiveDBSuccessReconcile(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
+	result, err := m.SuccessAndUpdateCondition(ctx, dbClaim)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if dbClaim.Status.ActiveDB.DbState == v1.Ready && dbClaim.Spec.DBVersion == "" {
+		if err := m.SetConditionAndUpdateStatus(ctx, dbClaim, v1.NoDbVersionStatus()); err != nil {
+			return result, err
+		}
+	} else {
+		m.RemoveConditionByType(dbClaim, v1.NoDbVersionStatus().Type)
+	}
+
+	return result, err
 }

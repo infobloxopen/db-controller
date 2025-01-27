@@ -405,7 +405,7 @@ func (r *DatabaseClaimReconciler) executeDbClaimRequest(ctx context.Context, req
 		}
 		dbClaim.Status.NewDB = v1.Status{}
 
-		return r.statusManager.SuccessAndUpdateCondition(ctx, dbClaim)
+		return r.statusManager.ActiveDBSuccessReconcile(ctx, dbClaim)
 	}
 
 	logr.Error(fmt.Errorf("unhandled mode: %v", operationMode), "unhandled mode")
