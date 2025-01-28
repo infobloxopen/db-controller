@@ -34,7 +34,7 @@ type DBInstanceStatusReconciler struct {
 // Reconcile reconciles DBInstance with its corresponding DatabaseClaim.
 func (r *DBInstanceStatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Starting DBInstance Status reconciliation", "DBInstance", req.NamespacedName)
+	logger.Info("starting DBInstance status reconciliation", "DBInstance", req.NamespacedName)
 
 	dbInstance, err := r.getDBInstance(ctx, req)
 	if err != nil {
@@ -55,7 +55,7 @@ func (r *DBInstanceStatusReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("Reconciliation complete", "DBInstance", req.NamespacedName)
+	logger.Info("reconciliation complete", "DBInstance", req.NamespacedName)
 	return ctrl.Result{}, nil
 }
 
@@ -102,7 +102,7 @@ func (r *DBInstanceStatusReconciler) getDatabaseClaim(ctx context.Context, dbCla
 	return &dbClaim, nil
 }
 
-// updateDatabaseClaimStatus propagates labels from a DatabaseClaim to a DBInstance
+// updateDatabaseClaimStatus propagates labels from a DatabaseClaim to a DBInstance.
 // and updates the DatabaseClaim status based on the DBInstance conditions.
 func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Context, dbInstance *crossplaneaws.DBInstance, dbClaim *v1.DatabaseClaim, logger logr.Logger) error {
 	if len(dbInstance.Status.Conditions) == 0 {
@@ -132,11 +132,7 @@ func (r *DBInstanceStatusReconciler) updateDatabaseClaimStatus(ctx context.Conte
 		}
 	}
 
-	// Propagate labels from DatabaseClaim to DBInstance.
-	newLabels := databaseclaim.PropagateLabels(map[string]string{
-		"app.kubernetes.io/dbclaim-name":      dbClaim.Name,
-		"app.kubernetes.io/dbclaim-namespace": dbClaim.Namespace,
-	})
+	newLabels := databaseclaim.PropagateLabels(dbClaim)
 	if err := updateDBInstanceLabels(ctx, r.Client, dbInstance, newLabels, logger); err != nil {
 		logger.Error(err, "failed to update labels for DBInstance", "DBInstance", dbInstance.Name)
 		return err

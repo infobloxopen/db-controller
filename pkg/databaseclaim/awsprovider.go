@@ -242,7 +242,10 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 
 	}
 
-	labels := PropagateLabels(dbClaim.Labels)
+	labels := map[string]string{
+		"app.kubernetes.io/dbclaim-name":      dbClaim.Name,
+		"app.kubernetes.io/dbclaim-namespace": dbClaim.Namespace,
+	}
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -399,7 +402,10 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
-	labels := PropagateLabels(dbClaim.Labels)
+	labels := map[string]string{
+		"app.kubernetes.io/dbclaim-name":      dbClaim.Name,
+		"app.kubernetes.io/dbclaim-namespace": dbClaim.Namespace,
+	}
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,

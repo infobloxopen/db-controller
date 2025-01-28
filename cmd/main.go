@@ -41,6 +41,7 @@ import (
 	"github.com/infobloxopen/db-controller/internal/controller"
 	"github.com/infobloxopen/db-controller/internal/metrics"
 	mutating "github.com/infobloxopen/db-controller/internal/webhook"
+	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
@@ -240,7 +241,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
 		os.Exit(1)
 	}
+	if err = webhookpersistancev1.SetupDatabaseClaimWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DatabaseClaim")
+		os.Exit(1)
+	}
 
+	if err = webhookpersistancev1.SetupDbRoleClaimWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DbRoleClaim")
+		os.Exit(1)
+	}
 	if err := (&controller.DBInstanceStatusReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -289,12 +298,6 @@ func main() {
 	setupLog.Info("starting metrics updater")
 	ctx := ctrl.SetupSignalHandler()
 	go metrics.StartUpdater(ctx, mgr.GetClient())
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
 
 	// Start the manager.
 	setupLog.Info("starting manager")

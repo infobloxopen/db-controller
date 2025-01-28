@@ -63,7 +63,7 @@ var _ = Describe("DBInstanceStatusReconciler", func() {
 	})
 
 	It("Should reconcile and update the DatabaseClaim status to Synced=True", func() {
-		// Retrieve the created DBInstance and update its status
+		// Retrieve the created DBInstance and update its status.
 		var dbInstanceObjKey = types.NamespacedName{
 			Namespace: "default",
 			Name:      "default-dbinstance",
