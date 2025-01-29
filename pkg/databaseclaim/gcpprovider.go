@@ -424,6 +424,30 @@ func (r *DatabaseClaimReconciler) deleteExternalResourcesGCP(ctx context.Context
 	return nil
 }
 
+func (r *DatabaseClaimReconciler) cloudDatabaseExistsGCP(ctx context.Context, dbHostName string) bool {
+	dbInstance := &crossplanegcp.Instance{}
+	dbCluster := &crossplanegcp.Cluster{}
+
+	var instanceExists, clusterExists bool
+	var err error
+
+	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbCluster)
+	if err == nil {
+		clusterExists = true
+	} else if !errors.IsNotFound(err) {
+		return false // Unexpected error, assume failure
+	}
+
+	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbInstance)
+	if err == nil {
+		instanceExists = true
+	} else if !errors.IsNotFound(err) {
+		return false
+	}
+
+	return instanceExists && clusterExists
+}
+
 func (r *DatabaseClaimReconciler) deleteCloudDatabaseGCP(dbHostName string, ctx context.Context) error {
 
 	logr := log.FromContext(ctx)

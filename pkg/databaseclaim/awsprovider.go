@@ -3,7 +3,6 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
-
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
@@ -741,6 +740,30 @@ func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context
 	// else reclaimPolicy == "retain" nothing to do!
 
 	return nil
+}
+
+func (r *DatabaseClaimReconciler) cloudDatabaseExistsAWS(ctx context.Context, dbHostName string) bool {
+	dbInstance := &crossplaneaws.DBInstance{}
+	dbCluster := &crossplaneaws.DBCluster{}
+
+	var instanceExists, clusterExists bool
+	var err error
+
+	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbCluster)
+	if err == nil {
+		clusterExists = true
+	} else if !errors.IsNotFound(err) {
+		return false // Unexpected error, assume failure
+	}
+
+	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbInstance)
+	if err == nil {
+		instanceExists = true
+	} else if !errors.IsNotFound(err) {
+		return false
+	}
+
+	return instanceExists && clusterExists
 }
 
 func (r *DatabaseClaimReconciler) deleteCloudDatabaseAWS(dbHostName string, ctx context.Context) error {

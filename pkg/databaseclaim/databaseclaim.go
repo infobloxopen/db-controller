@@ -563,6 +563,18 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	}
 	defer dbClient.Close()
 
+	if dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
+		// Verify if the `ib` schema exists to ensure the database isn't already managed,
+		// avoiding migration to a potentially populated database.
+		exists, err := dbClient.SchemaExists(dbclient.IBSchema)
+		if err != nil {
+			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("failed to check schema existence: %w", err))
+		}
+		if exists {
+			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration aborted: attempt to migrate to a previusly managed database"))
+		}
+	}
+
 	// Series of partial updates to the status newb, get ready
 
 	// Update connection info to object
@@ -594,9 +606,22 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	return ctrl.Result{}, nil
 }
 
-func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
+func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) bool {
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
 
+	if basefun.GetCloud(r.Config.Viper) == "aws" {
+		return r.cloudDatabaseExistsAWS(ctx, dbHostIdentifier)
+	}
+
+	return r.cloudDatabaseExistsAWS(ctx, dbHostIdentifier)
+}
+
+func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
 	logr := log.FromContext(ctx)
+
+	if r.providerCRAlreadyExists(ctx, reqInfo, dbClaim) {
+		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration attempt error: crossplane provider CR already exists"))
+	}
 
 	if dbClaim.Status.MigrationState == "" {
 		dbClaim.Status.MigrationState = pgctl.S_Initial.String()
@@ -628,12 +653,11 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, r
 		return r.statusManager.SetError(ctx, dbClaim, err)
 	}
 
+	// Preserve credentials to temp secret or less we risk losing state
 	err = r.setSourceDsnInTempSecret(ctx, sourceDSN, dbClaim)
 	if err != nil {
 		return r.statusManager.SetError(ctx, dbClaim, err)
 	}
-
-	// Preserve credentials to temp secret or less we risk losing state
 
 	// Update migration state to one of these
 	// M_MigrationInProgress, M_UpgradeDBInProgress
