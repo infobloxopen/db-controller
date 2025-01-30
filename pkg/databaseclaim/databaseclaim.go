@@ -614,7 +614,7 @@ func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, r
 		return r.cloudDatabaseExistsAWS(ctx, dbHostIdentifier)
 	}
 
-	return r.cloudDatabaseExistsAWS(ctx, dbHostIdentifier)
+	return r.cloudDatabaseExistsGCP(ctx, dbHostIdentifier)
 }
 
 func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
