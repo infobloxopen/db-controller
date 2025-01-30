@@ -571,7 +571,8 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("failed to check schema existence: %w", err))
 		}
 		if exists {
-			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration aborted: attempt to migrate to a previusly managed database"))
+			dbClaim.Status.MigrationState = ""
+			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration aborted: attempt to migrate to a previously managed database"))
 		}
 	}
 
