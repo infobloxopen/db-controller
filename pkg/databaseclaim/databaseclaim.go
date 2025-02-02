@@ -3,6 +3,8 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"strings"
 	"time"
 
@@ -607,20 +609,51 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	return ctrl.Result{}, nil
 }
 
-func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) bool {
-	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
+func crExists(ctx context.Context, cli client.Reader, crName string, obj client.Object) bool {
+	var exists bool
+	var err error
 
-	if basefun.GetCloud(r.Config.Viper) == "aws" {
-		return r.cloudDatabaseExistsAWS(ctx, dbHostIdentifier)
+	err = cli.Get(ctx, client.ObjectKey{Name: crName}, obj)
+	if err == nil {
+		exists = true
+	} else if !errors.IsNotFound(err) {
+		return false // Unexpected error, assume failure
 	}
 
-	return r.cloudDatabaseExistsGCP(ctx, dbHostIdentifier)
+	return exists
+}
+
+func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (bool, error) {
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
+
+	var (
+		instance client.Object
+		cluster  client.Object
+	)
+
+	switch cloudProvider := basefun.GetCloud(r.Config.Viper); cloudProvider {
+	case "aws":
+		instance, cluster = &crossplaneaws.DBInstance{}, &crossplaneaws.DBCluster{}
+	case "gcp":
+		instance, cluster = &crossplanegcp.Instance{}, &crossplanegcp.Cluster{}
+	default:
+		return false, fmt.Errorf("unsupported cloud provider: %s", cloudProvider)
+	}
+
+	exists := crExists(ctx, r.Client, dbHostIdentifier, cluster) && crExists(ctx, r.Client, dbHostIdentifier, instance)
+
+	return exists, nil
 }
 
 func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
 	logr := log.FromContext(ctx)
 
-	if r.providerCRAlreadyExists(ctx, reqInfo, dbClaim) {
+	exists, err := r.providerCRAlreadyExists(ctx, reqInfo, dbClaim)
+	if err != nil {
+		return r.statusManager.SetError(ctx, dbClaim, err)
+	}
+
+	if exists {
 		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration attempt error: crossplane provider CR already exists"))
 	}
 

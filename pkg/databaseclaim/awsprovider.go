@@ -742,30 +742,6 @@ func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context
 	return nil
 }
 
-func (r *DatabaseClaimReconciler) cloudDatabaseExistsAWS(ctx context.Context, dbHostName string) bool {
-	dbInstance := &crossplaneaws.DBInstance{}
-	dbCluster := &crossplaneaws.DBCluster{}
-
-	var instanceExists, clusterExists bool
-	var err error
-
-	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbCluster)
-	if err == nil {
-		clusterExists = true
-	} else if !errors.IsNotFound(err) {
-		return false // Unexpected error, assume failure
-	}
-
-	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbInstance)
-	if err == nil {
-		instanceExists = true
-	} else if !errors.IsNotFound(err) {
-		return false
-	}
-
-	return instanceExists && clusterExists
-}
-
 func (r *DatabaseClaimReconciler) deleteCloudDatabaseAWS(dbHostName string, ctx context.Context) error {
 
 	logr := log.FromContext(ctx)
