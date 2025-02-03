@@ -2,10 +2,8 @@ package databaseclaim
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"testing"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	role "github.com/infobloxopen/db-controller/pkg/roleclaim"
@@ -150,22 +148,17 @@ func TestCreateOrUpdateSecret(t *testing.T) {
 			}
 
 			err := dbClaimReconciler.createOrUpdateSecret(ctx, &dbClaim, &claimConnInfo, tt.args.cloud)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("Test '%s' failed: unexpected error state: got err=%v, wantErr=%v", tt.name, err, tt.wantErr)
-			}
-			if err != nil {
-				t.Logf("Expected error for '%s': %v", tt.name, err)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
 
 func TestCreateSecret(t *testing.T) {
-
-	RegisterFailHandler(Fail)
-
 	mockClient := role.MockClient{}
-
 	dbClaimReconciler := DatabaseClaimReconciler{
 		Client: &mockClient,
 	}
@@ -193,30 +186,23 @@ func TestCreateSecret(t *testing.T) {
 	}
 
 	err := dbClaimReconciler.createSecret(ctx, &dbClaim, "dsn", "dsnUri", "ro_dsnUri", &claimConnInfo)
+	assert.NoError(t, err, "Error updating secret")
 
 	secret := mockClient.CreatedObject.(*corev1.Secret)
 
-	Expect(secret.Data[v1.DSNKey]).To(Equal([]byte("dsn")))
-	Expect(secret.Data[v1.DSNURIKey]).To(Equal([]byte("dsnUri")))
-	Expect(secret.Data[v1.ReplicaDSNURIKey]).To(Equal([]byte("ro_dsnUri")))
-	Expect(secret.Data["hostname"]).To(Equal([]byte("host")))
-	Expect(secret.Data["port"]).To(Equal([]byte("123")))
-	Expect(secret.Data["database"]).To(Equal([]byte("dbName")))
-	Expect(secret.Data["username"]).To(Equal([]byte("user")))
-	Expect(secret.Data["password"]).To(Equal([]byte("pass")))
-	Expect(secret.Data["sslmode"]).To(Equal([]byte("ssl")))
-
-	if err != nil {
-		t.Errorf("Error updating secret: %s", err)
-	}
+	assert.Equal(t, []byte("dsn"), secret.Data[v1.DSNKey], "DSN should match")
+	assert.Equal(t, []byte("dsnUri"), secret.Data[v1.DSNURIKey], "DSNURI should match")
+	assert.Equal(t, []byte("ro_dsnUri"), secret.Data[v1.ReplicaDSNURIKey], "ReplicaDSNURI should match")
+	assert.Equal(t, []byte("host"), secret.Data["hostname"], "Hostname should match")
+	assert.Equal(t, []byte("123"), secret.Data["port"], "Port should match")
+	assert.Equal(t, []byte("dbName"), secret.Data["database"], "DatabaseName should match")
+	assert.Equal(t, []byte("user"), secret.Data["username"], "Username should match")
+	assert.Equal(t, []byte("pass"), secret.Data["password"], "Password should match")
+	assert.Equal(t, []byte("ssl"), secret.Data["sslmode"], "SSLMode should match")
 }
 
 func TestUpdateSecret(t *testing.T) {
-
-	RegisterFailHandler(Fail)
-
 	mockClient := role.MockClient{}
-
 	dbClaimReconciler := DatabaseClaimReconciler{
 		Client: &mockClient,
 	}
@@ -233,7 +219,6 @@ func TestUpdateSecret(t *testing.T) {
 	secret := corev1.Secret{
 		Data: make(map[string][]byte),
 	}
-
 	dbClaim := v1.DatabaseClaim{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
@@ -247,18 +232,15 @@ func TestUpdateSecret(t *testing.T) {
 	}
 
 	err := dbClaimReconciler.updateSecret(ctx, &dbClaim, "dsn", "dsnUri", "ro_dsnUri", &claimConnInfo, &secret)
+	assert.NoError(t, err, "Error updating secret")
 
-	Expect(secret.Data[v1.DSNKey]).To(Equal([]byte("dsn")))
-	Expect(secret.Data[v1.DSNURIKey]).To(Equal([]byte("dsnUri")))
-	Expect(secret.Data[v1.ReplicaDSNURIKey]).To(Equal([]byte("ro_dsnUri")))
-	Expect(secret.Data["hostname"]).To(Equal([]byte("host")))
-	Expect(secret.Data["port"]).To(Equal([]byte("123")))
-	Expect(secret.Data["database"]).To(Equal([]byte("dbName")))
-	Expect(secret.Data["username"]).To(Equal([]byte("user")))
-	Expect(secret.Data["password"]).To(Equal([]byte("pass")))
-	Expect(secret.Data["sslmode"]).To(Equal([]byte("ssl")))
-
-	if err != nil {
-		t.Errorf("Error updating secret: %s", err)
-	}
+	assert.Equal(t, []byte("dsn"), secret.Data[v1.DSNKey], "DSN should match")
+	assert.Equal(t, []byte("dsnUri"), secret.Data[v1.DSNURIKey], "DSNURI should match")
+	assert.Equal(t, []byte("ro_dsnUri"), secret.Data[v1.ReplicaDSNURIKey], "ReplicaDSNURI should match")
+	assert.Equal(t, []byte("host"), secret.Data["hostname"], "Hostname should match")
+	assert.Equal(t, []byte("123"), secret.Data["port"], "Port should match")
+	assert.Equal(t, []byte("dbName"), secret.Data["database"], "DatabaseName should match")
+	assert.Equal(t, []byte("user"), secret.Data["username"], "Username should match")
+	assert.Equal(t, []byte("pass"), secret.Data["password"], "Password should match")
+	assert.Equal(t, []byte("ssl"), secret.Data["sslmode"], "SSLMode should match")
 }
