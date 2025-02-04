@@ -616,6 +616,8 @@ func crExists(ctx context.Context, cli client.Reader, crName string, obj client.
 	err = cli.Get(ctx, client.ObjectKey{Name: crName}, obj)
 	if err == nil {
 		exists = true
+	} else if !errors.IsNotFound(err) {
+		return false // Unexpected error, assume failure
 	}
 
 	return exists

@@ -2,7 +2,6 @@ package databaseclaim
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 
@@ -66,24 +65,24 @@ func TestSuccessAndUpdateCondition(t *testing.T) {
 
 			result, err := m.SuccessAndUpdateCondition(context.Background(), dbClaim)
 
-			if tt.expectError {
-				assert.Error(t, err)
+			if tt.expectError && err == nil {
+				t.Errorf("expected an error but got nil")
 			}
 
-			if !tt.expectError {
-				assert.NoError(t, err)
+			if !tt.expectError && err != nil {
+				t.Errorf("did not expect an error but got: %v", err)
 			}
 
-			if tt.expectedRequeue {
-				assert.True(t, result.Requeue)
+			if tt.expectedRequeue && !result.Requeue {
+				t.Errorf("expected Requeue to be true but got false")
 			}
 
-			if !tt.expectedRequeue {
-				assert.False(t, result.Requeue)
+			if !tt.expectedRequeue && result.Requeue {
+				t.Errorf("expected Requeue to be false but got true")
 			}
 
-			if tt.expectedRequeueAfter != 0 {
-				assert.Equal(t, tt.expectedRequeueAfter, result.RequeueAfter)
+			if tt.expectedRequeueAfter != 0 && result.RequeueAfter != tt.expectedRequeueAfter {
+				t.Errorf("expected RequeueAfter to be %v but got %v", tt.expectedRequeueAfter, result.RequeueAfter)
 			}
 		})
 	}
@@ -101,11 +100,22 @@ func TestUpdateClusterStatus(t *testing.T) {
 	}
 
 	m.UpdateClusterStatus(status, hostParams)
-	assert.Equal(t, "12.7", status.DBVersion)
-	assert.Equal(t, v1.Postgres, status.Type)
-	assert.Equal(t, "micro", status.Shape)
-	assert.Equal(t, 10, status.MinStorageGB)
-	assert.Equal(t, int64(50), status.MaxStorageGB)
+
+	if status.DBVersion != "12.7" {
+		t.Errorf("expected DBVersion to be '12.7', got '%s'", status.DBVersion)
+	}
+	if status.Type != v1.Postgres {
+		t.Errorf("expected Type to be 'Postgres', got '%s'", status.Type)
+	}
+	if status.Shape != "micro" {
+		t.Errorf("expected Shape to be 'micro', got '%s'", status.Shape)
+	}
+	if status.MinStorageGB != 10 {
+		t.Errorf("expected MinStorageGB to be 10, got '%d'", status.MinStorageGB)
+	}
+	if status.MaxStorageGB != 50 {
+		t.Errorf("expected MaxStorageGB to be 50, got '%d'", status.MaxStorageGB)
+	}
 }
 
 func TestUpdateDBStatus(t *testing.T) {
@@ -115,8 +125,13 @@ func TestUpdateDBStatus(t *testing.T) {
 
 	m.UpdateDBStatus(status, dbName)
 
-	assert.Equal(t, dbName, status.ConnectionInfo.DatabaseName, "DatabaseName should match")
-	assert.NotNil(t, status.ConnectionInfoUpdatedAt, "ConnectionInfoUpdatedAt should be set")
+	if status.ConnectionInfo.DatabaseName != "testdb" {
+		t.Errorf("expected DatabaseName to be 'testdb', got '%s'", status.ConnectionInfo.DatabaseName)
+	}
+
+	if status.ConnectionInfoUpdatedAt == nil {
+		t.Errorf("expected ConnectionInfoUpdatedAt to be set, got nil")
+	}
 }
 
 func TestUpdateHostPortStatus(t *testing.T) {
@@ -128,10 +143,21 @@ func TestUpdateHostPortStatus(t *testing.T) {
 
 	m.UpdateHostPortStatus(status, host, port, sslMode)
 
-	assert.Equal(t, host, status.ConnectionInfo.Host, "Host should match")
-	assert.Equal(t, port, status.ConnectionInfo.Port, "Port should match")
-	assert.Equal(t, sslMode, status.ConnectionInfo.SSLMode, "SSLMode should match")
-	assert.NotNil(t, status.ConnectionInfoUpdatedAt, "ConnectionInfoUpdatedAt should be set")
+	if status.ConnectionInfo.Host != host {
+		t.Errorf("expected Host to be '%s', got '%s'", host, status.ConnectionInfo.Host)
+	}
+
+	if status.ConnectionInfo.Port != port {
+		t.Errorf("expected Port to be '%s', got '%s'", port, status.ConnectionInfo.Port)
+	}
+
+	if status.ConnectionInfo.SSLMode != sslMode {
+		t.Errorf("expected SSLMode to be '%s', got '%s'", sslMode, status.ConnectionInfo.SSLMode)
+	}
+
+	if status.ConnectionInfoUpdatedAt == nil {
+		t.Errorf("expected ConnectionInfoUpdatedAt to be set, got nil")
+	}
 }
 
 func TestUpdateUserStatus(t *testing.T) {
@@ -143,8 +169,19 @@ func TestUpdateUserStatus(t *testing.T) {
 
 	m.UpdateUserStatus(status, reqInfo, userName, userPassword)
 
-	assert.Equal(t, userName, status.ConnectionInfo.Username, "Username should match")
-	assert.NotNil(t, status.UserUpdatedAt, "UserUpdatedAt should be set")
-	assert.Equal(t, userPassword, reqInfo.TempSecret, "TempSecret should match")
-	assert.NotNil(t, status.ConnectionInfoUpdatedAt, "ConnectionInfoUpdatedAt should be set")
+	if status.ConnectionInfo.Username != userName {
+		t.Errorf("expected Username to be '%s', got '%s'", userName, status.ConnectionInfo.Username)
+	}
+
+	if status.UserUpdatedAt == nil {
+		t.Errorf("expected UserUpdatedAt to be set, got nil")
+	}
+
+	if reqInfo.TempSecret != userPassword {
+		t.Errorf("expected TempSecret to be '%s', got '%s'", userPassword, reqInfo.TempSecret)
+	}
+
+	if status.ConnectionInfoUpdatedAt == nil {
+		t.Errorf("expected ConnectionInfoUpdatedAt to be set, got nil")
+	}
 }

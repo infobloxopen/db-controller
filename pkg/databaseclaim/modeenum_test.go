@@ -2,7 +2,6 @@ package databaseclaim
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"testing"
 
 	"github.com/aws/smithy-go/ptr"
@@ -206,7 +205,9 @@ func TestGetMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := getMode(context.Background(), tt.reqInfo, tt.dbClaim)
-			assert.Equal(t, tt.expected, got)
+			if got != tt.expected {
+				t.Errorf("getMode() = %v, want %v", got, tt.expected)
+			}
 		})
 	}
 }
