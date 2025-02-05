@@ -457,6 +457,12 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 		return false, err
 	}
 
+	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(
+		DBClaimTags(dbClaim.Spec.Tags).DBTags(),
+		OperationalStatusTagKey,
+		OperationalStatusActiveValue,
+	)
+
 	if dbClaim.Spec.PreferredMaintenanceWindow != nil {
 		dbInstance.Spec.ForProvider.PreferredMaintenanceWindow = dbClaim.Spec.PreferredMaintenanceWindow
 	}

@@ -19,6 +19,7 @@ package controller
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -54,6 +55,7 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 var controllerReconciler *DatabaseClaimReconciler
+var statusControllerReconciler *DBInstanceStatusReconciler
 var namespace string
 var logger logr.Logger
 var env = "testenv"
@@ -136,6 +138,7 @@ var _ = BeforeSuite(func() {
 		Password:  "postgres",
 		DockerTag: "15",
 	})
+	Expect(testdb.Ping()).To(Succeed(), "Database connection failed")
 	logger.Info("postgres_setup_took", "duration", time.Since(now))
 
 	// Mock table for testing migrations
@@ -151,8 +154,11 @@ var _ = BeforeSuite(func() {
 	By("setting up the database controller")
 	configPath, err := filepath.Abs(filepath.Join("..", "..", "cmd", "config", "config.yaml"))
 	Expect(err).NotTo(HaveOccurred())
+	_, err = os.Stat(configPath)
+	Expect(err).NotTo(HaveOccurred(), "Configuration file not found at path: %s", configPath)
 
 	viperCfg := config.NewConfig(configPath)
+	Expect(viperCfg).NotTo(BeNil(), "Failed to initialize Viper configuration")
 	// Used by kctlutils
 	viperCfg.Set("SERVICE_NAMESPACE", "default")
 	controllerReconciler = &DatabaseClaimReconciler{
@@ -169,6 +175,11 @@ var _ = BeforeSuite(func() {
 	controllerReconciler.Config.Viper.Set("defaultMasterusername", "postgres")
 	controllerReconciler.Config.Viper.Set("defaultSslMode", "disable")
 
+	statusControllerReconciler = &DBInstanceStatusReconciler{
+		Client:        k8sClient,
+		Scheme:        k8sClient.Scheme(),
+		StatusManager: databaseclaim.NewStatusManager(k8sClient, viperCfg),
+	}
 })
 
 var _ = AfterSuite(func() {

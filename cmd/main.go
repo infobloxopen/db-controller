@@ -67,6 +67,7 @@ func init() {
 	utilruntime.Must(crossplanerdsv1alpha1.SchemeBuilder.AddToScheme(scheme))
 
 	utilruntime.Must(crossplanegcpv1beta2.SchemeBuilder.AddToScheme(scheme))
+
 }
 
 func main() {
@@ -245,6 +246,14 @@ func main() {
 
 	if err = webhookpersistancev1.SetupDbRoleClaimWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "DbRoleClaim")
+		os.Exit(1)
+	}
+
+	if err := (&controller.DBInstanceStatusReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DBInstanceStatus")
 		os.Exit(1)
 	}
 
