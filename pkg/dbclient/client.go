@@ -440,7 +440,10 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 		grantDB := `
 			GRANT ALL PRIVILEGES ON DATABASE %s TO %s;
 			GRANT ALL ON SCHEMA %s TO %s;
-			GRANT ALL ON ALL TABLES IN SCHEMA %s TO %s;
+			GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %s;
+			GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
+			GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA %s TO %s;
+			GRANT ALL PRIVILEGES ON ALL TYPES IN SCHEMA %s TO %s;
 		`
 		grantSchemaPrivileges := `
 			GRANT ALL ON SCHEMA %s TO %s;
@@ -454,10 +457,22 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 
 		_, err := pc.DB.Exec(
 			fmt.Sprintf(grantDB,
+				// PRIVILEGES ON Database
 				pq.QuoteIdentifier(dbName),
 				pq.QuoteIdentifier(rolename),
+				// On SCHEMA
 				pq.QuoteIdentifier(schema),
 				pq.QuoteIdentifier(rolename),
+				// Tables
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				// Sequences
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				// FUNCTIONS
+				pq.QuoteIdentifier(schema),
+				pq.QuoteIdentifier(rolename),
+				// TYPES
 				pq.QuoteIdentifier(schema),
 				pq.QuoteIdentifier(rolename)))
 		if err != nil {
@@ -535,6 +550,11 @@ func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, erro
 			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s;
 			GRANT USAGE ON ALL SEQUENCES IN SCHEMA %s TO %s;
 			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON SEQUENCES TO %s;
+			GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON SEQUENCES TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON FUNCTIONS TO %s;
+			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON TYPES TO %s;
+
 		`
 		db, err := pc.getDB(dbName)
 		if err != nil {
