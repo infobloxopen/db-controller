@@ -78,7 +78,7 @@ func DatabaseReadyCondition() metav1.Condition {
 		ConditionSync,
 		metav1.ConditionTrue,
 		ReasonAvailable,
-		"Database is provisioned.",
+		"Database is provisioned",
 	)
 }
 
@@ -106,5 +106,15 @@ func ReconcileSuccessCondition() metav1.Condition {
 		metav1.ConditionTrue,
 		ReasonAvailable,
 		"Database successfully synchronized and ready for use",
+	)
+}
+
+// NoDbVersionStatus reflect whether a DatabaseClaim is using an implied older version and should specify its version in .spec.dbVersion
+func NoDbVersionStatus() metav1.Condition {
+	return CreateCondition(
+		ReasonNeedsMigrate,
+		metav1.ConditionTrue,
+		ReasonAvailable,
+		"No database version specified",
 	)
 }

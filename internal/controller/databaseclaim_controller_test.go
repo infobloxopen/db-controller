@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -33,7 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	persistancev1 "github.com/infobloxopen/db-controller/api/v1"
 	v1 "github.com/infobloxopen/db-controller/api/v1"
+	"github.com/infobloxopen/db-controller/internal/dockerdb"
 	"github.com/infobloxopen/db-controller/pkg/hostparams"
 )
 
@@ -189,6 +190,42 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
 		})
 
+		It("Should have DSN and URIDSN keys populated", func() {
+			By("Reconciling the created resource")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			var claim persistancev1.DatabaseClaim
+			err = k8sClient.Get(ctx, typeNamespacedName, &claim)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(claim.Status.Error).To(Equal(""))
+
+			By("Checking the user credentials secret")
+
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, key := range []string{v1.DSNKey, v1.DSNURIKey, "fixme.txt", "uri_fixme.txt"} {
+				Expect(secret.Data[key]).NotTo(BeNil())
+			}
+			oldKey := secret.Data[v1.DSNKey]
+			Expect(secret.Data[v1.DSNKey]).To(Equal(secret.Data["fixme.txt"]))
+			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
+			// Slow down the test so creds are rotated, 60ns rotation time
+			By("Rotate passwords and verify credentials are updated")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = k8sClient.Get(ctx, typeNamespacedSecretName, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Data[v1.DSNKey]).NotTo(Equal(oldKey))
+			Expect(secret.Data[v1.DSNKey]).To(Equal(secret.Data["fixme.txt"]))
+			Expect(secret.Data[v1.DSNURIKey]).To(Equal(secret.Data["uri_fixme.txt"]))
+
+		})
+
 		It("Should succeed with no error status to reconcile CR with DBVersion", func() {
 			By("Updating the DatabaseClaim resource with a DB Version 13.3")
 			resource := &v1.DatabaseClaim{}
@@ -289,6 +326,36 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("Reconcile rotates the username", func() {
+			By("Updating CR with a DB Version")
+
+			resource := &persistancev1.DatabaseClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Spec.DBVersion).To(Equal(""))
+
+			By("Rotating to UserSuffixA")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
+			By("Rotating to UserSuffixB")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_b"))
+
+			By("Rotating to UserSuffixA")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
+			Expect(resource.Status.Error).To(Equal(""))
+			Expect(resource.Status.ActiveDB.ConnectionInfo.Username).To(Equal("postgres_a"))
+
 		})
 	})
 })

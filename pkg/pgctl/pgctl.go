@@ -376,12 +376,11 @@ func (s *copy_schema_state) Execute() (State, error) {
 
 	restoreExec := restore.Exec(dumpExec.FileName, ExecOptions{StreamPrint: true})
 	if restoreExec.Error != nil {
-		log.Error(restoreExec.Error.Err, "restore failed")
-
+		log.Error(restoreExec.Error.Err, "restore failed", "cmd output", restoreExec.Error.CmdOutput)
 		// Attempt to drop schemas after restore failure.
 		dropResult := restore.DropSchemas()
 		if dropResult.Error != nil {
-			log.Error(dropResult.Error.Err, "failed to drop schemas")
+			log.Error(dropResult.Error.Err, "failed to drop schemas", "cmd output", dropResult.Error.CmdOutput)
 			return nil, dropResult.Error.Err
 		}
 
