@@ -330,9 +330,8 @@ var _ = Describe("DatabaseClaim Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
 
 			resource.Labels = map[string]string{
-				"app.kubernetes.io/component": resource.Labels["app.kubernetes.io/component"],
-				"app.kubernetes.io/instance":  resource.Labels["app.kubernetes.io/instance"],
-				"app.kubernetes.io/name":      resource.Labels["app.kubernetes.io/name"],
+				"app.kubernetes.io/dbclaim-name":      resource.Name,
+				"app.kubernetes.io/dbclaim-namespace": resource.Namespace,
 			}
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
 

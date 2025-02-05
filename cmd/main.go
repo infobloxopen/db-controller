@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -40,12 +41,12 @@ import (
 	"github.com/infobloxopen/db-controller/internal/controller"
 	"github.com/infobloxopen/db-controller/internal/metrics"
 	mutating "github.com/infobloxopen/db-controller/internal/webhook"
+	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	"github.com/infobloxopen/db-controller/pkg/config"
 	"github.com/infobloxopen/db-controller/pkg/databaseclaim"
 	"github.com/infobloxopen/db-controller/pkg/rdsauth"
 	"github.com/infobloxopen/db-controller/pkg/roleclaim"
 
-	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
@@ -75,6 +76,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var enableLabelPropagation bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -87,6 +89,8 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enableLabelPropagation, "enable-label-propagation", false,
+		"Enable the propagation of DatabaseClaim labels to DBInstance objects")
 
 	var class string
 	var configFile string
@@ -237,7 +241,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DbRoleClaim")
 		os.Exit(1)
 	}
-
 	if err = webhookpersistancev1.SetupDatabaseClaimWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "DatabaseClaim")
 		os.Exit(1)
@@ -245,6 +248,13 @@ func main() {
 
 	if err = webhookpersistancev1.SetupDbRoleClaimWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "DbRoleClaim")
+		os.Exit(1)
+	}
+	if err := (&controller.DBInstanceStatusReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DBInstanceStatus")
 		os.Exit(1)
 	}
 
@@ -289,9 +299,22 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 	go metrics.StartUpdater(ctx, mgr.GetClient())
 
+	// Start the manager.
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+
+	// Start label propagation logic if enabled.
+	if enableLabelPropagation {
+		setupLog.Info("starting label propagation for DBInstances")
+		go func() {
+			if err := controller.SyncDBInstances(context.Background(), ctlConfig, mgr.GetClient(), setupLog); err != nil {
+				setupLog.Error(err, "failed to propagate labels for dbinstances")
+			} else {
+				setupLog.Info("label propagation completed successfully")
+			}
+		}()
 	}
 }

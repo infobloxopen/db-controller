@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -97,6 +98,19 @@ func ReconcileErrorCondition(err error) metav1.Condition {
 		metav1.ConditionFalse,
 		ReasonUnavailable,
 		fmt.Sprintf("Reconciliation encountered an issue: %v", err),
+	)
+}
+
+func ReconcileSyncErrorCondition(err error) metav1.Condition {
+	message := "Reconciliation encountered an issue"
+	if err != nil {
+		message = fmt.Sprintf("%s: %v", message, err)
+	}
+	return CreateCondition(
+		ConditionSync,
+		metav1.ConditionFalse,
+		ReasonUnavailable,
+		message,
 	)
 }
 
