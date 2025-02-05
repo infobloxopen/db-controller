@@ -26,7 +26,7 @@ spec:
         - /bin/sh
         - -c
         - |
-          ls /etc/secrets
+          test -f /etc/secrets/uri_dsn.txt || { echo "Error: URI file does not exist"; exit 1; }
           cat /etc/secrets/uri_dsn.txt
           for i in $(seq 1 10); do
             echo "Attempt $i: Connecting to PostgreSQL..."

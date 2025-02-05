@@ -127,7 +127,8 @@ var _ = Describe("dsnexec defaulting", func() {
 		Expect(sidecar.VolumeMounts[0].MountPath).To(Equal(MountPathExec))
 		Expect(sidecar.VolumeMounts[0].ReadOnly).To(BeTrue())
 		Expect(sidecar.ReadinessProbe).ToNot(BeNil())
-		Expect(sidecar.LivenessProbe).ToNot(BeNil())
+		// FIXME: liveness probes deactivated DEVOPS-30642
+		// Expect(sidecar.LivenessProbe).ToNot(BeNil())
 	})
 
 	It("pre-mutated pods are not re-mutated", func() {
