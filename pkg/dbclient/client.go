@@ -394,28 +394,10 @@ func (pc *client) SchemaExists(schemaName string) (bool, error) {
 func (pc *client) CreateSchema(schemaName string) (bool, error) {
 	createSchema := strings.Replace(`
 		CREATE SCHEMA IF NOT EXISTS "%schema%";
-		
-		-- Revoke all privileges from PUBLIC
 		REVOKE ALL ON SCHEMA "%schema%" FROM PUBLIC;
-		REVOKE ALL ON ALL TABLES IN SCHEMA "%schema%" FROM PUBLIC;
-		REVOKE ALL ON ALL SEQUENCES IN SCHEMA "%schema%" FROM PUBLIC;
-		REVOKE ALL ON ALL FUNCTIONS IN SCHEMA "%schema%" FROM PUBLIC;
-		REVOKE ALL ON ALL TYPES IN SCHEMA "%schema%" FROM PUBLIC;
-
-		-- Grant usage on schema
 		GRANT USAGE ON SCHEMA "%schema%" TO PUBLIC;
-
-		-- Grant SELECT on tables
+		REVOKE ALL ON ALL TABLES IN SCHEMA "%schema%" FROM PUBLIC;
 		GRANT SELECT ON ALL TABLES IN SCHEMA "%schema%" TO PUBLIC;
-
-		-- Grant USAGE on sequences (for reading values)
-		GRANT USAGE ON ALL SEQUENCES IN SCHEMA "%schema%" TO PUBLIC;
-
-		-- Grant EXECUTE on functions (for calling stored procedures)
-		GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA "%schema%" TO PUBLIC;
-
-		-- Grant USAGE on types (for using custom types)
-		GRANT USAGE ON ALL TYPES IN SCHEMA "%schema%" TO PUBLIC;
 	`, "%schema%", schemaName, -1)
 
 	_, err := pc.DB.Exec(createSchema)
