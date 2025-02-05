@@ -458,7 +458,6 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 			GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA %s TO %s;
-			GRANT ALL PRIVILEGES ON ALL TYPES IN SCHEMA %s TO %s;
 		`
 
 		_, err = db.Exec(fmt.Sprintf(grantPrivileges,
@@ -539,19 +538,12 @@ func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, erro
 		GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %s TO %s;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s;
 
-		-- Grant USAGE on all sequences
-		GRANT USAGE ON ALL SEQUENCES IN SCHEMA %s TO %s;
-		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON SEQUENCES TO %s;
-
 		-- Grant ALL privileges on all sequences
 		GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON SEQUENCES TO %s;
 
 		-- Grant ALL privileges on all functions
 		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON FUNCTIONS TO %s;
-
-		-- Grant ALL privileges on all types
-		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON TYPES TO %s;
 	`
 
 		db, err := pc.getDB(dbName)
@@ -608,10 +600,6 @@ func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, err
 			-- Grant EXECUTE on all functions
 			GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA %s TO %s;
 			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT EXECUTE ON FUNCTIONS TO %s;
-		
-			-- Grant USAGE on all types
-			GRANT USAGE ON ALL TYPES IN SCHEMA %s TO %s;
-			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON TYPES TO %s;
 		`
 		db, err := pc.getDB(dbName)
 		if err != nil {
