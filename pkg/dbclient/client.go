@@ -466,7 +466,6 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
-			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 		))
 		if err != nil {
 			pc.log.Error(err, "could not set permissions to role "+rolename)
@@ -563,9 +562,6 @@ func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, erro
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			))
 		if err != nil {
 			pc.log.Error(err, "could not set schema privileges to role "+rolename)
@@ -611,8 +607,6 @@ func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, err
 		_, err = db.Exec(
 			fmt.Sprintf(grantSchemaPrivileges,
 				pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
