@@ -1,12 +1,14 @@
 package databaseclaim
 
-func propagateLabels(dbClaimLabels map[string]string) map[string]string {
+// PropagateLabels filters and propagates specific labels from DatabaseClaim.
+func PropagateLabels(dbClaimLabels map[string]string) map[string]string {
 	keysToPropagate := []string{
 		"app.kubernetes.io/component",
 		"app.kubernetes.io/instance",
 		"app.kubernetes.io/name",
 	}
 
+	// Initialize the map to store propagated labels
 	labels := make(map[string]string)
 
 	for _, key := range keysToPropagate {

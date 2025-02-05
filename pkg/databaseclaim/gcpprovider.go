@@ -176,7 +176,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterGCP(ctx context.Context, reqInf
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
-	labels := propagateLabels(dbClaim.Labels)
+	labels := PropagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,
@@ -305,7 +305,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceGCP(ctx context.Contex
 
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 
-	labels := propagateLabels(dbClaim.Labels)
+	labels := PropagateLabels(dbClaim.Labels)
 
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name: dbHostName,

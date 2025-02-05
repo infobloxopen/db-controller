@@ -12,6 +12,14 @@ rules:
   - create
   - patch
 - apiGroups:
+  - database.aws.crossplane.io
+  resources:
+  - dbinstances
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - persistance.atlas.infoblox.com
   resources:
   - databaseclaims
