@@ -78,13 +78,12 @@ func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnE
 	var readinessProbe *corev1.Probe
 	if enableReady {
 		readinessProbe = &corev1.Probe{
-
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"psql -h localhost -c \"SELECT 1\"",
+						fmt.Sprintf("psql \"$(cat %s/%s)\" -c \"SELECT 1\"", MountPathExec, SecretKey),
 					},
 				},
 			},
@@ -94,9 +93,10 @@ func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnE
 		}
 	}
 
+	// FIXME: figure out a liveness probe for dsnexec
 	var livenessProbe *corev1.Probe
-
-	if enableLiveness {
+	_ = livenessProbe
+	if false && enableLiveness {
 		livenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
@@ -128,9 +128,9 @@ func mutatePodExec(ctx context.Context, pod *corev1.Pod, secretName string, dsnE
 				Value: fmt.Sprintf("%s/%s", MountPathExec, SecretKey),
 			},
 		},
-		// Test connection to upstream database
-		LivenessProbe: livenessProbe,
-		// Test connection to pgbouncer
+		// FIXME: figure out a liveness probe for dsnexec
+		// LivenessProbe: livenessProbe,
+		// Test connection to specified database
 		ReadinessProbe: readinessProbe,
 		VolumeMounts: []corev1.VolumeMount{
 			{

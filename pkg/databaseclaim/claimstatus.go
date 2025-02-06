@@ -223,7 +223,7 @@ func (m *StatusManager) MigrationInProgressStatus(ctx context.Context, dbClaim *
 	return ctrl.Result{Requeue: true}, err
 }
 
-// ActiveDBSuccessReconcile clears the error status and determines if the DB version is explicitly 
+// ActiveDBSuccessReconcile clears the error status and determines if the DB version is explicitly
 // defined.
 func (m *StatusManager) ActiveDBSuccessReconcile(ctx context.Context, dbClaim *v1.DatabaseClaim) (reconcile.Result, error) {
 	result, err := m.SuccessAndUpdateCondition(ctx, dbClaim)
