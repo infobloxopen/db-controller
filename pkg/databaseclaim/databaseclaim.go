@@ -3,6 +3,8 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"strings"
 	"time"
 
@@ -563,6 +565,19 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	}
 	defer dbClient.Close()
 
+	if dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
+		// Verify if the `ib` schema exists to ensure the database isn't already managed,
+		// avoiding migration to a potentially populated database.
+		exists, err := dbClient.SchemaExists(dbclient.IBSchema)
+		if err != nil {
+			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("failed to check schema existence: %w", err))
+		}
+		if exists {
+			dbClaim.Status.MigrationState = ""
+			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration aborted: attempt to migrate to a previously managed database"))
+		}
+	}
+
 	// Series of partial updates to the status newb, get ready
 
 	// Update connection info to object
@@ -594,9 +609,53 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	return ctrl.Result{}, nil
 }
 
-func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
+func crExists(ctx context.Context, cli client.Reader, crName string, obj client.Object) bool {
+	var exists bool
+	var err error
 
+	err = cli.Get(ctx, client.ObjectKey{Name: crName}, obj)
+	if err == nil {
+		exists = true
+	} else if !errors.IsNotFound(err) {
+		return false // Unexpected error, assume failure
+	}
+
+	return exists
+}
+
+func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim) (bool, error) {
+	dbHostIdentifier := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
+
+	var (
+		instance client.Object
+		cluster  client.Object
+	)
+
+	switch cloudProvider := basefun.GetCloud(r.Config.Viper); cloudProvider {
+	case "aws":
+		instance, cluster = &crossplaneaws.DBInstance{}, &crossplaneaws.DBCluster{}
+	case "gcp":
+		instance, cluster = &crossplanegcp.Instance{}, &crossplanegcp.Cluster{}
+	default:
+		return false, fmt.Errorf("unsupported cloud provider: %s", cloudProvider)
+	}
+
+	exists := crExists(ctx, r.Client, dbHostIdentifier, cluster) && crExists(ctx, r.Client, dbHostIdentifier, instance)
+
+	return exists, nil
+}
+
+func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
 	logr := log.FromContext(ctx)
+
+	exists, err := r.providerCRAlreadyExists(ctx, reqInfo, dbClaim)
+	if err != nil {
+		return r.statusManager.SetError(ctx, dbClaim, err)
+	}
+
+	if exists {
+		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration attempt error: crossplane provider CR already exists"))
+	}
 
 	if dbClaim.Status.MigrationState == "" {
 		dbClaim.Status.MigrationState = pgctl.S_Initial.String()
@@ -628,12 +687,11 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, r
 		return r.statusManager.SetError(ctx, dbClaim, err)
 	}
 
+	// Preserve credentials to temp secret or less we risk losing state
 	err = r.setSourceDsnInTempSecret(ctx, sourceDSN, dbClaim)
 	if err != nil {
 		return r.statusManager.SetError(ctx, dbClaim, err)
 	}
-
-	// Preserve credentials to temp secret or less we risk losing state
 
 	// Update migration state to one of these
 	// M_MigrationInProgress, M_UpgradeDBInProgress

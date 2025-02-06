@@ -89,10 +89,6 @@ var _ = Describe("claim migrate", func() {
 			Name:      sourceSecretName,
 			Namespace: "default",
 		}
-		// typeNamespacedTargetSecretName := types.NamespacedName{
-		// 	Name:      targetSecretName,
-		// 	Namespace: "default",
-		// }
 
 		claim := &persistancev1.DatabaseClaim{}
 
@@ -225,7 +221,6 @@ var _ = Describe("claim migrate", func() {
 		})
 
 		It("Migrate", func() {
-
 			Expect(controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})).To(Equal(success))
 			var dbc persistancev1.DatabaseClaim
 			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
@@ -243,7 +238,7 @@ var _ = Describe("claim migrate", func() {
 
 			By(fmt.Sprintf("Mocking a RDS pod to look like crossplane set it up: %s", fakeCPSecretName))
 			fakeCli, fakeDSN, fakeCancel := dockerdb.MockRDS(GinkgoT(), ctxLogger, k8sClient, fakeCPSecretName, "migrate", dbc.Spec.DatabaseName)
-			DeferCleanup(fakeCancel)
+			defer fakeCancel()
 
 			fakeCPSecret := corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -314,8 +309,52 @@ var _ = Describe("claim migrate", func() {
 			var owner string
 			Expect(row.Scan(&owner)).NotTo(HaveOccurred())
 			Expect(owner).To(Equal(migratedowner))
-
 		})
 
+		It("Fail to migrate to existing db", func() {
+			By("Reconciling the controller for the first time")
+			Expect(controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})).To(Equal(success))
+
+			By("Fetching the DatabaseClaim resource")
+			var dbc persistancev1.DatabaseClaim
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+
+			By("Ensuring there are no initial errors")
+			Expect(dbc.Status.Error).To(BeEmpty())
+
+			By("Ensuring the active database connection info is set")
+			Eventually(func() *persistancev1.DatabaseClaimConnectionInfo {
+				Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+				return dbc.Status.ActiveDB.ConnectionInfo
+			}).ShouldNot(BeNil())
+
+			By("Generating host parameters")
+			hostParams, err := hostparams.New(controllerReconciler.Config.Viper, &dbc)
+			Expect(err).ToNot(HaveOccurred())
+
+			fakeCPSecretName := fmt.Sprintf("%s-%s-%s", env, resourceName, hostParams.Hash())
+
+			By(fmt.Sprintf("Mocking an RDS pod for crossplane setup: %s", fakeCPSecretName))
+			fakeCli, _, fakeCancel := dockerdb.MockRDS(GinkgoT(), ctxLogger, k8sClient, fakeCPSecretName, "migrate", dbc.Spec.DatabaseName)
+			DeferCleanup(fakeCancel)
+
+			By("Creating the expected schema in the fake database")
+			fakeCli.Exec(`CREATE SCHEMA IF NOT EXISTS ib`)
+
+			By("Disabling UseExistingSource and attempting migration")
+			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+			dbc.Spec.UseExistingSource = ptr.To(false)
+			Expect(k8sClient.Update(ctxLogger, &dbc)).NotTo(HaveOccurred())
+
+			By("Reconciling again to trigger migration failure")
+			_, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).To(HaveOccurred())
+
+			By("Verifying migration failure is recorded in status")
+			Eventually(func() string {
+				Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
+				return dbc.Status.Error
+			}).Should(Equal("migration aborted: attempt to migrate to a previously managed database"))
+		})
 	})
 })
