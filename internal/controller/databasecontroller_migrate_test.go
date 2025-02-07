@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"net/url"
 	"strings"
 	"time"
@@ -258,6 +259,13 @@ var _ = Describe("claim migrate", func() {
 			dbc.Spec.UseExistingSource = ptr.To(false)
 			Expect(k8sClient.Update(ctxLogger, &dbc)).NotTo(HaveOccurred())
 			res, err := controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+
+			hostParams, err = hostparams.New(controllerReconciler.Config.Viper, &dbc)
+			Expect(err).ToNot(HaveOccurred())
+			resAws := &crossplaneaws.DBInstance{}
+			resAws.SetName(env + "-" + resourceName + "-" + hostParams.Hash())
+			Expect(patchCrossplaneCRReadiness(ctxLogger, k8sClient, resAws)).NotTo(HaveOccurred())
+			res, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).To(BeNil())
 			Expect(dbc.Status.Error).To(Equal(""))
 			Expect(res.Requeue).To(BeTrue())
@@ -265,7 +273,7 @@ var _ = Describe("claim migrate", func() {
 			By("Check source DSN looks roughly correct")
 			activeDB := dbc.Status.ActiveDB
 			Expect(activeDB.ConnectionInfo).NotTo(BeNil())
-			compareDSN := strings.Replace(testDSN, "//postgres:postgres", fmt.Sprintf("//%s_b:", migratedowner), 1)
+			compareDSN := strings.Replace(testDSN, "//postgres:postgres", fmt.Sprintf("//%s_a:", migratedowner), 1)
 			Expect(activeDB.ConnectionInfo.Uri()).To(Equal(compareDSN))
 
 			By("Check target DSN looks roughly correct")
@@ -345,6 +353,14 @@ var _ = Describe("claim migrate", func() {
 			Expect(k8sClient.Get(ctxLogger, typeNamespacedName, &dbc)).NotTo(HaveOccurred())
 			dbc.Spec.UseExistingSource = ptr.To(false)
 			Expect(k8sClient.Update(ctxLogger, &dbc)).NotTo(HaveOccurred())
+
+			By("Reconciling once for transitioning the db instance to ready")
+			_, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+			hostParams, err = hostparams.New(controllerReconciler.Config.Viper, &dbc)
+			Expect(err).ToNot(HaveOccurred())
+			resAws := &crossplaneaws.DBInstance{}
+			resAws.SetName(env + "-" + resourceName + "-" + hostParams.Hash())
+			Expect(patchCrossplaneCRReadiness(ctxLogger, k8sClient, resAws)).NotTo(HaveOccurred())
 
 			By("Reconciling again to trigger migration failure")
 			_, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})

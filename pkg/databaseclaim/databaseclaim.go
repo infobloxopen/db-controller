@@ -1097,10 +1097,11 @@ func (r *DatabaseClaimReconciler) getPasswordRotationTime() time.Duration {
 
 // FindStatusCondition finds the conditionType in conditions.
 func (r *DatabaseClaimReconciler) isResourceReady(typ, name string, resourceStatus xpv1.ResourceStatus) (bool, error) {
-	if ok, err := isResourceReady(resourceStatus); err != nil {
-		return ok, fmt.Errorf("%s %s: %w", typ, name, err)
+	ok, err := isResourceReady(resourceStatus)
+	if err != nil {
+		return false, fmt.Errorf("%s %s: %w", typ, name, err)
 	}
-	return true, nil
+	return ok, nil
 }
 
 func isResourceReady(resourceStatus xpv1.ResourceStatus) (bool, error) {

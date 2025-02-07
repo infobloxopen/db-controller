@@ -17,8 +17,12 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -177,3 +181,27 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+func patchCrossplaneCRReadiness(ctx context.Context, k8sClient client.Client, resource client.Object) error {
+	now := metav1.Now()
+	patchData := map[string]interface{}{
+		"status": map[string]interface{}{
+			"conditions": []map[string]interface{}{
+				{
+					"type":               "Ready",
+					"status":             "True",
+					"reason":             "Reconciled",
+					"message":            "Resource is ready",
+					"lastTransitionTime": now.Format(time.RFC3339),
+				},
+			},
+		},
+	}
+
+	patchBytes, err := json.Marshal(patchData)
+	if err != nil {
+		return err
+	}
+
+	return k8sClient.Status().Patch(ctx, resource, client.RawPatch(types.MergePatchType, patchBytes))
+}
