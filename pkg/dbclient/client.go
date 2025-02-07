@@ -20,6 +20,7 @@ const (
 	RDSReplicationRole = "rds_replication"
 	GCPReplicationRole = "alloydbreplica"
 	RDSSuperUserRole   = "rds_superuser"
+	IBSchema           = "ib"
 )
 
 var defaultExtensions = []string{"citext", "uuid-ossp",
@@ -319,8 +320,7 @@ func (pc *client) ManageSystemFunctions(dbName string, functions map[string]stri
 	pc.log.Info("ManageSystemFunctions - connected to " + dbName)
 	defer db.Close()
 	//check if schema ib exists
-	var exists bool
-	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'ib')").Scan(&exists)
+	exists, err := pc.SchemaExists(IBSchema)
 	if err != nil {
 		pc.log.Error(err, "could not query for schema ib")
 		return err
