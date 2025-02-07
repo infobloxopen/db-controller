@@ -354,6 +354,14 @@ var _ = Describe("claim migrate", func() {
 			dbc.Spec.UseExistingSource = ptr.To(false)
 			Expect(k8sClient.Update(ctxLogger, &dbc)).NotTo(HaveOccurred())
 
+			By("Reconciling once for transitioning the db instance to ready")
+			_, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
+			hostParams, err = hostparams.New(controllerReconciler.Config.Viper, &dbc)
+			Expect(err).ToNot(HaveOccurred())
+			resAws := &crossplaneaws.DBInstance{}
+			resAws.SetName(env + "-" + resourceName + "-" + hostParams.Hash())
+			Expect(patchCrossplaneCRReadiness(ctxLogger, k8sClient, resAws)).NotTo(HaveOccurred())
+
 			By("Reconciling again to trigger migration failure")
 			_, err = controllerReconciler.Reconcile(ctxLogger, reconcile.Request{NamespacedName: typeNamespacedName})
 			Expect(err).To(HaveOccurred())
