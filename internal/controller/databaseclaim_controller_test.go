@@ -405,29 +405,6 @@ var _ = Describe("DatabaseClaim Controller", func() {
 
 		})
 
-		//It("Should fail to reconcile a newDB if secret is present", func() {
-		//	By(fmt.Sprintf("creating secret: %s", secretName))
-		//	secret := &corev1.Secret{
-		//		ObjectMeta: metav1.ObjectMeta{
-		//			Name:      secretName,
-		//			Namespace: "default",
-		//		},
-		//	}
-		//	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-		//	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-		//
-		//	By("Mocking crossplane instance readiness")
-		//	resource := &persistancev1.DatabaseClaim{}
-		//	Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).NotTo(HaveOccurred())
-		//	hostParams, err := hostparams.New(controllerReconciler.Config.Viper, resource)
-		//	res := &crossplaneaws.DBInstance{}
-		//	res.SetName(env + "-" + resourceName + "-" + hostParams.Hash())
-		//	Expect(patchCrossplaneCRReadiness(ctx, k8sClient, res)).NotTo(HaveOccurred())
-		//
-		//	_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-		//	Expect(err).To(HaveOccurred())
-		//})
-
 		It("Reconcile rotates the username", func() {
 			By("Updating CR with a DB Version")
 
