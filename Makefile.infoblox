@@ -17,7 +17,7 @@ DSNEXEC_IMG ?= ghcr.io/infobloxopen/db-controller/dsnexec:${GIT_COMMIT}
 	git config user.email | awk -F@ '{print $$1}' > .id
 
 .env: force
-	kubectl config current-context | awk -F@ '{print $$1}' > .env
+	$(KUBECTL) config current-context | awk -F@ '{print $$1}' > .env
 
 # Make a rule always rebuild
 force:
@@ -52,6 +52,15 @@ helm: $(HELM) ## Download golangci-lint locally if necessary.
 $(HELM): $(LOCALBIN)
 	@test -s $(LOCALBIN)/helm || { curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH="${PATH}":$(LOCALBIN) HELM_INSTALL_DIR=$(LOCALBIN) BINARY_NAME=helm-$(HELM_VERSION) bash -s -- --version $(HELM_VERSION) --no-sudo; }
 	@ln -sf $(LOCALBIN)/helm-$(HELM_VERSION) $(LOCALBIN)/helm
+
+kubectl ?= $(LOCALBIN)/kubectl
+KUBECTL_VERSION ?= v1.28.0
+
+.PHONY: helm
+kubectl: $(KUBECTL)
+$(KUBECTL):
+	@test -s $(LOCALBIN)/kubectl || { curl -LO https://storage.googleapis.com/kubernetes-release/release/$(KUBECTL_VERSION)/bin/linux/amd64/kubectl; chmod +x kubectl; mv kubectl $(LOCALBIN)/kubectl; }
+	@ln -sf $(LOCALBIN)/kubectl $(LOCALBIN)/kubectl
 
 .PHONY: helms3
 helms3: helm $(HELMS3)
