@@ -10,7 +10,7 @@ jobs:
   integration:
     strategy:
       matrix:
-        runner: [box-3, devops-admin-gcp-dev-usce1]
+        runner: [box-3]
     runs-on: ${{ matrix.runner }}
     name: Run on ${{ matrix.runner }}
     steps:
