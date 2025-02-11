@@ -3,10 +3,11 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
-	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"strings"
 	"time"
+
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
@@ -242,7 +243,7 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DepYamlPath = r.Config.MetricsDepYamlPath
 	cfg.ConfigYamlPath = r.Config.MetricsConfigYamlPath
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
-	cfg.DatasourceFileName = v1.DSNKey
+	cfg.DatasourceFileName = v1.DSNURIKey
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 
