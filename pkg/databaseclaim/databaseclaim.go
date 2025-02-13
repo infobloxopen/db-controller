@@ -7,13 +7,12 @@ import (
 	"time"
 
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
-
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -820,8 +819,6 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		TargetDBAdminDsn: targetMasterDsn,
 		ExportFilePath:   basefun.GetPgTempFolder(r.Config.Viper),
 	}
-
-	logr.V(debugLevel).Info("pctl_dsn", "config", config)
 
 	s, err := pgctl.GetReplicatorState(migrationState, config)
 	if err != nil {
