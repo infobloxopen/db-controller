@@ -455,6 +455,7 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 		grantPrivileges := `
 			GRANT ALL PRIVILEGES ON DATABASE %s TO %s;
 			GRANT ALL ON SCHEMA %s TO %s;
+			GRANT CREATE ON SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA %s TO %s;
@@ -462,6 +463,7 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 
 		_, err = db.Exec(fmt.Sprintf(grantPrivileges,
 			pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename),
+			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
