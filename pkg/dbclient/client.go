@@ -457,12 +457,10 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 			GRANT ALL ON SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %s;
 			GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
-			GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA %s TO %s;
 		`
 
 		_, err = db.Exec(fmt.Sprintf(grantPrivileges,
 			pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename),
-			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
@@ -540,9 +538,6 @@ func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, erro
 		-- Grant ALL privileges on all sequences
 		GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %s;
 		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON SEQUENCES TO %s;
-
-		-- Grant ALL privileges on all functions
-		ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL PRIVILEGES ON FUNCTIONS TO %s;
 	`
 
 		db, err := pc.getDB(dbName)
@@ -556,7 +551,6 @@ func (pc *client) CreateRegularRole(dbName, rolename, schema string) (bool, erro
 		_, err = db.Exec(
 			fmt.Sprintf(grantSchemaPrivileges,
 				pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
@@ -592,10 +586,6 @@ func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, err
 			-- Grant USAGE on all sequences
 			GRANT USAGE ON ALL SEQUENCES IN SCHEMA %s TO %s;
 			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT USAGE ON SEQUENCES TO %s;
-		
-			-- Grant EXECUTE on all functions
-			GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA %s TO %s;
-			ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT EXECUTE ON FUNCTIONS TO %s;
 		`
 		db, err := pc.getDB(dbName)
 		if err != nil {
@@ -607,8 +597,6 @@ func (pc *client) CreateReadOnlyRole(dbName, rolename, schema string) (bool, err
 		_, err = db.Exec(
 			fmt.Sprintf(grantSchemaPrivileges,
 				pq.QuoteIdentifier(dbName), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
-				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
 				pq.QuoteIdentifier(schema), pq.QuoteIdentifier(rolename),
