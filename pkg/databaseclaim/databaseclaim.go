@@ -3,16 +3,16 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
-	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
-	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"strings"
 	"time"
 
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -242,7 +242,7 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DepYamlPath = r.Config.MetricsDepYamlPath
 	cfg.ConfigYamlPath = r.Config.MetricsConfigYamlPath
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
-	cfg.DatasourceFileName = v1.DSNKey
+	cfg.DatasourceFileName = v1.DSNURIKey
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 
@@ -819,8 +819,6 @@ func (r *DatabaseClaimReconciler) reconcileMigrationInProgress(ctx context.Conte
 		TargetDBAdminDsn: targetMasterDsn,
 		ExportFilePath:   basefun.GetPgTempFolder(r.Config.Viper),
 	}
-
-	logr.V(debugLevel).Info("pctl_dsn", "config", config)
 
 	s, err := pgctl.GetReplicatorState(migrationState, config)
 	if err != nil {
