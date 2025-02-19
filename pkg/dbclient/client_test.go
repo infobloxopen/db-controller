@@ -45,7 +45,7 @@ func TestPostgresGrantRolePrivileges(t *testing.T) {
 	}
 	_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(roleName)))
 
-	err = pc.GrantRolePrivileges(dbName, roleName, "public")
+	err = pc.grantRolePrivileges(dbName, roleName, "public")
 	if err != nil {
 		t.Errorf("\t%s GrantRolePrivileges() error = %v", failed, err)
 	}

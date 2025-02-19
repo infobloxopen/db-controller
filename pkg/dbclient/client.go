@@ -426,39 +426,44 @@ func (pc *client) CreateRole(dbName, rolename, schema string) (bool, error) {
 
 	start := time.Now()
 	var exists bool
-	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles where pg_roles.rolname = $1)", rolename).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = $1)", rolename).Scan(&exists)
 	if err != nil {
 		pc.log.Error(err, "could not query for role")
 		metrics.UsersCreatedErrors.WithLabelValues("read error").Inc()
 		return false, err
 	}
 
+	created := false
 	if !exists {
-		pc.log.Info("creating a ROLE", "role", rolename)
-
-		_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
-		if err != nil {
-			pc.log.Error(err, "could not create role "+rolename)
-			metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
+		if err := pc.createRole(rolename); err != nil {
 			return false, err
 		}
-
-		pc.log.Info("role has been created", "role", rolename)
-		metrics.UsersCreated.Inc()
-		duration := time.Since(start)
-		metrics.UsersCreateTime.Observe(duration.Seconds())
+		created = true
 	}
 
-	err = pc.GrantRolePrivileges(dbName, rolename, schema)
-	if err != nil {
-		pc.log.Error(err, "could not grant privileges")
-		return false, err
+	if err := pc.grantRolePrivileges(dbName, rolename, schema); err != nil {
+		return created, err
 	}
 
-	return true, nil
+	metrics.UsersCreateTime.Observe(time.Since(start).Seconds())
+	return created, nil
 }
 
-func (pc *client) GrantRolePrivileges(dbName, rolename, schema string) error {
+func (pc *client) createRole(rolename string) error {
+	pc.log.Info("creating a ROLE", "role", rolename)
+	_, err := pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(rolename)))
+	if err != nil {
+		pc.log.Error(err, "could not create role", "role", rolename)
+		metrics.UsersCreatedErrors.WithLabelValues("create error").Inc()
+		return err
+	}
+	pc.log.Info("role has been created", "role", rolename)
+	metrics.UsersCreated.Inc()
+	return nil
+}
+
+func (pc *client) grantRolePrivileges(dbName, rolename, schema string) error {
+	pc.log.Info("granting privileges to role", "dbName", dbName, "role", rolename, "schema", schema)
 	db, err := pc.getDB(dbName)
 	if err != nil {
 		pc.log.Error(err, "could not connect to db", "database", dbName)
