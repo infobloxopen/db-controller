@@ -1,6 +1,9 @@
 package dbclient
 
 import (
+	"fmt"
+	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -16,6 +19,50 @@ const failed = "\u2717"
 func NewTestLogger(t *testing.T) logr.Logger {
 	zapTest := zaptest.NewLogger(t)
 	return zapr.NewLogger(zapTest)
+}
+
+func TestPostgresGrantRolePrivileges(t *testing.T) {
+	roleName := uuid.New().String()
+	dbName := uuid.New().String()
+
+	db, dsn, dbClose := dockerdb.Run(dockerdb.Config{
+		Username: "testuser",
+		Password: "testpassword",
+		Database: dbName,
+	})
+	defer dbClose()
+
+	pc := &client{
+		dbType:  "postgres",
+		dbURL:   dsn,
+		DB:      db,
+		adminDB: db,
+		log:     NewTestLogger(t),
+	}
+
+	_, err := pc.CreateDatabase(dbName)
+	if err != nil {
+	}
+	_, err = pc.DB.Exec(fmt.Sprintf("CREATE ROLE %s WITH NOLOGIN", pq.QuoteIdentifier(roleName)))
+
+	err = pc.grantRolePrivileges(dbName, roleName, "public")
+	if err != nil {
+		t.Errorf("\t%s GrantRolePrivileges() error = %v", failed, err)
+	}
+
+	var dbPriv, schemaPriv, tablePriv bool
+	err = pc.DB.QueryRow(`
+	SELECT 
+		has_database_privilege($1, $2, 'CONNECT'),
+		has_schema_privilege($1, $3, 'USAGE'),
+		has_schema_privilege($1, $3, 'CREATE')
+	`, roleName, dbName, "public").Scan(&dbPriv, &schemaPriv, &tablePriv)
+
+	if err != nil {
+		t.Errorf("\t%s Error checking privileges: %v", failed, err)
+	} else if !dbPriv || !schemaPriv || !tablePriv {
+		t.Errorf("\t%s Role does not have expected privileges", failed)
+	}
 }
 
 func TestPostgresClientOperations(t *testing.T) {
