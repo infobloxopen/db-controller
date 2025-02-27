@@ -17,7 +17,7 @@ func (p *CloudNativePGProvider) CreateDatabase(ctx context.Context, spec Databas
 	return nil
 }
 
-func (p *CloudNativePGProvider) DeleteDatabase(ctx context.Context, name string) error {
+func (p *CloudNativePGProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) error {
 	return nil
 }
 

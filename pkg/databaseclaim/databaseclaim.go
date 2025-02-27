@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	"github.com/infobloxopen/db-controller/pkg/providers"
 	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"strings"
 	"time"
@@ -79,6 +80,7 @@ type DatabaseClaimReconciler struct {
 	Config        *DatabaseClaimConfig
 	kctl          *kctlutils.Client
 	statusManager *StatusManager
+	provider      providers.Provider
 }
 
 // New returns a configured databaseclaim reconciler
@@ -88,6 +90,7 @@ func New(cli client.Client, cfg *DatabaseClaimConfig) *DatabaseClaimReconciler {
 		Config:        cfg,
 		kctl:          kctlutils.New(cli, cfg.Viper.GetString("SERVICE_NAMESPACE")),
 		statusManager: NewStatusManager(cli, cfg.Viper),
+		provider:      providers.NewProvider(cfg.Viper, cli, cfg.Namespace),
 	}
 }
 
@@ -189,7 +192,8 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 			if basefun.GetCloud(r.Config.Viper) == "aws" {
 				// our finalizer is present, so lets handle any external dependency
-				if err := r.deleteExternalResourcesAWS(ctx, &reqInfo, &dbClaim); err != nil {
+				spec := NewDatabaseSpecFromRequestInfo(&reqInfo, &dbClaim, r.getMode(ctx, &reqInfo, &dbClaim), r.Config.Viper)
+				if err := r.provider.DeleteDatabase(ctx, spec); err != nil {
 					// if fail to delete the external dependency here, return with error
 					// so that it can be retried
 					return ctrl.Result{}, err
@@ -514,7 +518,8 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	isReady := false
 	var err error
 	if cloud == "aws" {
-		isReady, err = r.manageCloudHostAWS(ctx, reqInfo, dbClaim, operationalMode)
+		spec := NewDatabaseSpecFromRequestInfo(reqInfo, dbClaim, operationalMode, r.Config.Viper)
+		isReady, err = r.provider.CreateDatabase(ctx, spec)
 		if err != nil {
 			logr.Error(err, "manage_cloud_host_AWS")
 			return ctrl.Result{}, err
