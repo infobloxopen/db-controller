@@ -9,15 +9,15 @@ import (
 type CloudNativePGProvider struct {
 }
 
-func NewCloudNativePGProvider(k8sClient client.Client, config *viper.Viper) *CloudNativePGProvider {
+func newCloudNativePGProvider(k8sClient client.Client, config *viper.Viper, serviceNS string) Provider {
 	return &CloudNativePGProvider{}
 }
 
-func (p *CloudNativePGProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) error {
-	return nil
+func (p *CloudNativePGProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bool, error) {
+	return false, nil
 }
 
-func (p *CloudNativePGProvider) DeleteDatabase(ctx context.Context, name string) error {
+func (p *CloudNativePGProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) error {
 	return nil
 }
 
