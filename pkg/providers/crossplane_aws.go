@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -125,7 +124,7 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) err
 }
 
 func (p *AWSProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error) {
-	return nil, nil
+	panic("not implemented")
 }
 
 func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) error {
@@ -203,7 +202,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 		}
 	}
 
-	// Handle cluster
+	// Handle aurora database cluster creation
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: params.ResourceName}
 	if err := p.k8sClient.Get(ctx, clusterKey, dbCluster); err != nil {
@@ -223,7 +222,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 		}
 	}
 
-	// Handle database instance
+	// Handle primary database instance
 	primaryDbInstance := &crossplaneaws.DBInstance{}
 	primaryInstanceKey := client.ObjectKey{Name: params.ResourceName}
 	if err := p.k8sClient.Get(ctx, primaryInstanceKey, primaryDbInstance); err != nil {
@@ -251,6 +250,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 		return err
 	}
 
+	// Handle secondary database instance
 	if basefun.GetMultiAZEnabled(p.config) {
 		secondaryDbInstance := &crossplaneaws.DBInstance{}
 		secondaryInstanceKey := client.ObjectKey{Name: params.ResourceName + "-2"}
@@ -429,8 +429,6 @@ func (p *AWSProvider) postgresDBParameterGroup(params DatabaseSpec) *crossplanea
 }
 
 func (p *AWSProvider) updateDBInstance(ctx context.Context, params DatabaseSpec, dbInstance *crossplaneaws.DBInstance) error {
-	logr := log.FromContext(ctx)
-
 	// Create a patch snapshot from current DBInstance
 	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 
@@ -471,7 +469,6 @@ func (p *AWSProvider) updateDBInstance(ctx context.Context, params DatabaseSpec,
 		dbInstance.Spec.ForProvider.PreferredMaintenanceWindow = params.PreferredMaintenanceWindow
 	}
 
-	logr.Info("updating crossplane DBInstance resource", "DBInstance", dbInstance.Name)
 	err = p.k8sClient.Patch(ctx, dbInstance, patchDBInstance)
 	if err != nil {
 		return err
@@ -707,8 +704,6 @@ func (p *AWSProvider) auroraInstanceParamGroup(params DatabaseSpec) *crossplanea
 }
 
 func (p *AWSProvider) auroraUpdateDBCluster(ctx context.Context, params DatabaseSpec, dbCluster *crossplaneaws.DBCluster) error {
-	logr := log.FromContext(ctx)
-
 	// Create a patch snapshot from current DBCluster
 	patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
 	p.configureDBTags(&params)
@@ -733,7 +728,6 @@ func (p *AWSProvider) auroraUpdateDBCluster(ctx context.Context, params Database
 		return nil
 	}
 
-	logr.Info("updating crossplane DBCluster resource", "DBCluster", dbCluster.Name)
 	err = p.k8sClient.Patch(ctx, dbCluster, patchDBCluster)
 	if err != nil {
 		return err
