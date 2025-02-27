@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -128,12 +129,14 @@ func (p *AWSProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSp
 }
 
 func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) error {
+	logger := log.FromContext(ctx)
 	// Handle database parameter group
 	paramGroupName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 
 	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
 		if errors.IsNotFound(err) {
+			logger.Info("Creating Postgres Instance parameter group", "paramGroupName", paramGroupName)
 			if err := p.k8sClient.Create(ctx, p.auroraInstanceParamGroup(params)); err != nil {
 				return fmt.Errorf("failed to create DB parameter group: %w", err)
 			}
@@ -156,6 +159,7 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 				return fmt.Errorf("failed to manage master password: %w", passwordErr)
 			}
 
+			logger.Info("Creating Postgres db instance", "dbInstance", params.ResourceName)
 			if err := p.k8sClient.Create(ctx, dbInstance); err != nil {
 				return fmt.Errorf("failed to create DB instance: %w", err)
 			}
@@ -170,18 +174,20 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 
 	err := p.updateDBInstance(ctx, params, dbInstance)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update DB instance: %w", err)
 	}
 
 	return nil
 }
 
 func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) error {
+	logger := log.FromContext(ctx)
 	// Handle database instance parameter group
 	paramGroupName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
 		if errors.IsNotFound(err) {
+			logger.Info("Creating Aurora DB Instance parameter group", "paramGroupName", paramGroupName)
 			if err := p.k8sClient.Create(ctx, p.auroraInstanceParamGroup(params)); err != nil {
 				return fmt.Errorf("failed to create DB parameter group: %w", err)
 			}
@@ -194,6 +200,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
 	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbClusterParamGroup); err != nil {
 		if errors.IsNotFound(err) {
+			logger.Info("Creating Aurora DB Cluster parameter group", "paramGroupName", paramGroupName)
 			if err := p.k8sClient.Create(ctx, p.auroraClusterParamGroup(params)); err != nil {
 				return fmt.Errorf("failed to create DB parameter group: %w", err)
 			}
@@ -213,7 +220,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 			if passwordErr != nil {
 				return fmt.Errorf("failed to manage master password: %w", passwordErr)
 			}
-
+			logger.Info("Creating Aurora DB Cluster", "name", params.ResourceName)
 			if err := p.k8sClient.Create(ctx, dbCluster); err != nil {
 				return fmt.Errorf("failed to create DB instance: %w", err)
 			}
@@ -228,6 +235,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	if err := p.k8sClient.Get(ctx, primaryInstanceKey, primaryDbInstance); err != nil {
 		if errors.IsNotFound(err) {
 			primaryDbInstance = p.auroraDBInstance(params, false)
+			logger.Info("Creating Aurora DB Instance", "name", params.ResourceName)
 			if err := p.k8sClient.Create(ctx, primaryDbInstance); err != nil {
 				return fmt.Errorf("failed to create DB instance: %w", err)
 			}
@@ -242,12 +250,12 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 
 	err := p.auroraUpdateDBCluster(ctx, params, dbCluster)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update DB cluster: %v", err)
 	}
 
 	err = p.updateDBInstance(ctx, params, primaryDbInstance)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update primary DB instance: %v", err)
 	}
 
 	// Handle secondary database instance
@@ -257,6 +265,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 		if err := p.k8sClient.Get(ctx, secondaryInstanceKey, secondaryDbInstance); err != nil {
 			if errors.IsNotFound(err) {
 				secondaryDbInstance = p.auroraDBInstance(params, true)
+				logger.Info("Creating Aurora DB Secondary Instance", "name", params.ResourceName+"-2")
 				if err := p.k8sClient.Create(ctx, secondaryDbInstance); err != nil {
 					return fmt.Errorf("failed to create DB instance: %w", err)
 				}
@@ -271,7 +280,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 
 		err := p.updateDBInstance(ctx, params, secondaryDbInstance)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to update secondary DB instance: %v", err)
 		}
 	}
 
