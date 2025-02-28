@@ -384,7 +384,7 @@ func (pc *client) ManageSystemFunctions(dbName string, functions map[string]stri
 
 func (pc *client) SchemaExists(schemaName string) (bool, error) {
 	var exists bool
-	err := pc.adminDB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)", schemaName).Scan(&exists)
+	err := pc.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)", schemaName).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("schema_exists %s: %w", schemaName, err)
 	}
