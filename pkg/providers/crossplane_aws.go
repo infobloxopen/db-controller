@@ -758,6 +758,9 @@ func (p *AWSProvider) isDBInstanceReady(ctx context.Context, instanceName string
 	dbInstance := &crossplaneaws.DBInstance{}
 	instanceKey := client.ObjectKey{Name: instanceName}
 	if err := p.k8sClient.Get(ctx, instanceKey, dbInstance); err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	return isReady(dbInstance.Status.Conditions)
