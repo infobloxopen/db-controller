@@ -17,8 +17,8 @@ func (p *GCPProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	return false, nil
 }
 
-func (p *GCPProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) error {
-	return nil
+func (p *GCPProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bool, error) {
+	return false, nil
 }
 
 func (p *GCPProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error) {

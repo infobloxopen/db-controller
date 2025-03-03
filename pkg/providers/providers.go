@@ -30,7 +30,8 @@ type DatabaseSpec struct {
 	PreferredMaintenanceWindow *string
 	BackupPolicy               string
 
-	SnapshotID *string
+	SnapshotID  *string
+	TagInactive bool
 }
 
 // Provider is an interface that abstracts provider-specific logic.
@@ -40,7 +41,7 @@ type Provider interface {
 	// Returns true if the database is fully ready, along with any encountered error.
 	CreateDatabase(ctx context.Context, spec DatabaseSpec) (bool, error)
 	// DeleteDatabase deprovisions an existing database instance.
-	DeleteDatabase(ctx context.Context, spec DatabaseSpec) error
+	DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bool, error)
 	// GetDatabase retrieves the current status of a database instance.
 	GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error)
 }

@@ -56,3 +56,19 @@ func MergeTags(existingTags, newTags []ProviderTag) []ProviderTag {
 
 	return ConvertMapToProviderTags(tagMap)
 }
+
+func CompareTags(actual, expected []ProviderTag) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	tagMap := make(map[string]string)
+	for _, tag := range actual {
+		tagMap[tag.Key] = tag.Value
+	}
+	for _, tag := range expected {
+		if val, exists := tagMap[tag.Key]; !exists || val != tag.Value {
+			return false
+		}
+	}
+	return true
+}

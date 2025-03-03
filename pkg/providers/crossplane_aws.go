@@ -73,7 +73,16 @@ func (p *AWSProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, spec.DbType, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
 }
 
-func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) error {
+// DeleteDatabase attempt to delete all crossplane resources related to the provided spec
+// optionally
+func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bool, error) {
+	if spec.TagInactive {
+		// it takes some time to propagate the tag to the underlying aws resource
+		if tagged, err := p.addInactiveOperationalTag(ctx, spec); err != nil || !tagged {
+			return tagged, err
+		}
+	}
+
 	deletionPolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	paramGroupName := getParameterGroupName(spec.ResourceName, spec.HostParams.DBVersion, spec.DbType)
 	// Delete DBClusterParameterGroup if it exists
@@ -81,7 +90,7 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) err
 	clusterParamGroupKey := client.ObjectKey{Name: paramGroupName}
 	if err := p.k8sClient.Get(ctx, clusterParamGroupKey, dbClusterParamGroup); err == nil {
 		if err := p.k8sClient.Delete(ctx, dbClusterParamGroup, deletionPolicy); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -90,7 +99,7 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) err
 	paramGroupKey := client.ObjectKey{Name: paramGroupName}
 	if err := p.k8sClient.Get(ctx, paramGroupKey, dbParameterGroup); err == nil {
 		if err := p.k8sClient.Delete(ctx, dbParameterGroup, deletionPolicy); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -99,7 +108,7 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) err
 	clusterKey := client.ObjectKey{Name: spec.ResourceName}
 	if err := p.k8sClient.Get(ctx, clusterKey, dbCluster); err == nil {
 		if err := p.k8sClient.Delete(ctx, dbCluster, deletionPolicy); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -108,7 +117,7 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) err
 	dbInstance := &crossplaneaws.DBInstance{}
 	if err := p.k8sClient.Get(ctx, instanceKey, dbInstance); err == nil {
 		if err := p.k8sClient.Delete(ctx, dbInstance, deletionPolicy); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -117,11 +126,11 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) err
 	instance2Key := client.ObjectKey{Name: spec.ResourceName + "-2"}
 	if err := p.k8sClient.Get(ctx, instance2Key, dbInstance2); err == nil {
 		if err := p.k8sClient.Delete(ctx, dbInstance2, deletionPolicy); err != nil {
-			return err
+			return false, err
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func (p *AWSProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error) {
@@ -248,7 +257,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 		return fmt.Errorf("can not create Cloud DB instance %s it is being deleted", params.ResourceName)
 	}
 
-	err := p.auroraUpdateDBCluster(ctx, params, dbCluster)
+	err := p.updateAuroraDBCluster(ctx, params, dbCluster)
 	if err != nil {
 		return fmt.Errorf("failed to update DB cluster: %v", err)
 	}
@@ -712,7 +721,7 @@ func (p *AWSProvider) auroraInstanceParamGroup(params DatabaseSpec) *crossplanea
 	}
 }
 
-func (p *AWSProvider) auroraUpdateDBCluster(ctx context.Context, params DatabaseSpec, dbCluster *crossplaneaws.DBCluster) error {
+func (p *AWSProvider) updateAuroraDBCluster(ctx context.Context, params DatabaseSpec, dbCluster *crossplaneaws.DBCluster) error {
 	// Create a patch snapshot from current DBCluster
 	patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
 	p.configureDBTags(&params)
@@ -770,7 +779,105 @@ func (p *AWSProvider) isDBClusterReady(ctx context.Context, clusterName string) 
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: clusterName}
 	if err := p.k8sClient.Get(ctx, clusterKey, dbCluster); err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	return isReady(dbCluster.Status.Conditions)
+}
+
+func (p *AWSProvider) markClusterAsInactive(ctx context.Context, name string) (bool, error) {
+	dbCluster := &crossplaneaws.DBCluster{}
+	err := p.k8sClient.Get(ctx, client.ObjectKey{
+		Name: name,
+	}, dbCluster)
+	if err != nil {
+		return false, err
+	}
+
+	if isInactiveAtProvider(dbCluster.Status.AtProvider.TagList) {
+		return true, nil
+	}
+
+	patchDBInstance := client.MergeFrom(dbCluster.DeepCopy())
+	dbCluster.Spec.ForProvider.Tags = changeToInactive(dbCluster.Spec.ForProvider.Tags)
+
+	err = p.k8sClient.Patch(ctx, dbCluster, patchDBInstance)
+	if err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+func (p *AWSProvider) markInstanceAsInactive(ctx context.Context, name string) (bool, error) {
+	dbInstance := &crossplaneaws.DBInstance{}
+	err := p.k8sClient.Get(ctx, client.ObjectKey{
+		Name: name,
+	}, dbInstance)
+	if err != nil {
+		return false, err
+	}
+
+	if isInactiveAtProvider(dbInstance.Status.AtProvider.TagList) {
+		return true, nil
+	}
+
+	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
+	dbInstance.Spec.ForProvider.Tags = changeToInactive(dbInstance.Spec.ForProvider.Tags)
+
+	err = p.k8sClient.Patch(ctx, dbInstance, patchDBInstance)
+	if err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+func isInactiveAtProvider(tags []*crossplaneaws.Tag) bool {
+	for _, tag := range tags {
+		if *tag.Key == OperationalTAGInactive.Key && *tag.Value == OperationalTAGInactive.Value {
+			return true
+		}
+	}
+	return false
+}
+
+func changeToInactive(tags []*crossplaneaws.Tag) []*crossplaneaws.Tag {
+	found := false
+	for _, tag := range tags {
+		if *tag.Key == OperationalTAGInactive.Key && *tag.Value == OperationalTAGInactive.Value {
+			found = true
+			break
+		}
+		if *tag.Key == OperationalTAGInactive.Key && *tag.Value == OperationalTAGActive.Value {
+			found = true
+			*tag.Value = OperationalTAGInactive.Value
+		}
+	}
+	if !found {
+		tags = append(tags, &crossplaneaws.Tag{Key: &OperationalTAGInactive.Key, Value: &OperationalTAGInactive.Value})
+	}
+	return tags
+}
+
+// addInactiveOperationalTag marks the instance with operational-status: inactive tag,
+// it returns ErrTagNotPropagated if the tag is not yet propagated to the cloud resource
+func (p *AWSProvider) addInactiveOperationalTag(ctx context.Context, spec DatabaseSpec) (bool, error) {
+	for _, tag := range spec.Tags {
+		if tag.Key == OperationalTAGInactive.Key || tag.Value == OperationalTAGInactive.Value {
+			return true, nil
+		}
+	}
+
+	if tagged, err := p.markInstanceAsInactive(ctx, spec.ResourceName); err != nil || !tagged {
+		return false, err
+	}
+
+	if spec.DbType == v1.AuroraPostgres {
+		if tagged, err := p.markClusterAsInactive(ctx, spec.ResourceName); err != nil || !tagged {
+			return false, err
+		}
+	}
+
+	return true, nil
 }
