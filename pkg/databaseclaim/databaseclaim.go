@@ -545,19 +545,6 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	}
 	defer dbClient.Close()
 
-	if dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
-		// Verify if the `ib` schema exists to ensure the database isn't already managed,
-		// avoiding migration to a potentially populated database.
-		exists, err := dbClient.SchemaExists(dbclient.IBSchema)
-		if err != nil {
-			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("failed to check schema existence: %w", err))
-		}
-		if exists {
-			dbClaim.Status.MigrationState = ""
-			return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration aborted: attempt to migrate to a previously managed database"))
-		}
-	}
-
 	// Series of partial updates to the status newb, get ready
 
 	// Update connection info to object
@@ -567,7 +554,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	r.statusManager.UpdateClusterStatus(&dbClaim.Status.NewDB, &reqInfo.HostParams)
 
 	// Updates the database name
-	if err := r.createDatabaseAndExtensions(ctx, reqInfo, dbClient, &dbClaim.Status.NewDB, operationalMode); err != nil {
+	if err := r.createDatabaseAndExtensions(ctx, dbClient, dbClaim, operationalMode); err != nil {
 		logr.Error(err, "unable to create database and extensions")
 		return r.statusManager.SetError(ctx, dbClaim, err)
 	}
@@ -1139,14 +1126,28 @@ func (r *DatabaseClaimReconciler) getParameterGroupName(hostParams *hostparams.H
 	}
 }
 
-func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, reqInfo *requestInfo, dbClient dbclient.Creater, status *v1.Status, operationalMode ModeEnum) error {
+func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Context, dbClient dbclient.Clienter, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) error {
 	logr := log.FromContext(ctx)
+	dbName := dbClaim.Spec.DatabaseName
 
-	dbName := reqInfo.MasterConnInfo.DatabaseName
 	created, err := dbClient.CreateDatabase(dbName)
 	if err != nil {
 		return err
 	}
+	// make sure not migrate to a previously managed database
+	if !created && dbClaim.Status.MigrationState == pgctl.S_Initial.String() {
+		// Verify if the `ib` schema exists to ensure the database isn't already managed,
+		// avoiding migration to a potentially populated database.
+		exists, err := dbClient.SchemaExists(dbclient.IBSchema)
+		if err != nil {
+			return fmt.Errorf("failed to check schema existence: %w", err)
+		}
+		if exists {
+			dbClaim.Status.MigrationState = ""
+			return fmt.Errorf("migration aborted: attempt to migrate to a previously managed database")
+		}
+	}
+
 	if created && operationalMode == M_UseNewDB {
 		//the migrations usecase takes care of copying extensions
 		//only in newDB workflow they need to be created explicitly
@@ -1157,9 +1158,10 @@ func (r *DatabaseClaimReconciler) createDatabaseAndExtensions(ctx context.Contex
 			return err
 		}
 	}
-	if created || status.ConnectionInfo.DatabaseName == "" {
-		r.statusManager.UpdateDBStatus(status, dbName)
+	if created || dbClaim.Status.NewDB.ConnectionInfo.DatabaseName == "" {
+		r.statusManager.UpdateDBStatus(&dbClaim.Status.NewDB, dbName)
 	}
+
 	return nil
 }
 
