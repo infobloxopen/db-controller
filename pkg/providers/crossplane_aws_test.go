@@ -286,6 +286,11 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 		})
 	})
 
+	Describe("update postgres database", func() {
+		When("when crossplane cr preexists the creation call we need to update with provided parameters", func() {
+		})
+	})
+
 	Describe("delete database interface usage", func() {
 		When("delete func is called with correct spec and no operational tagging", func() {
 			It("should delete postgres the database right away without adding operational tagging", func() {
@@ -308,6 +313,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 				Expect(errors.IsNotFound(err)).To(BeTrue())
 			})
 		})
+
 		When("delete func is called with correct spec and instructed to add inactive operational tagging", func() {
 			It("should delete postgres database with operational tagging only when tag is propagated to aws", func() {
 				By("creating a new database")

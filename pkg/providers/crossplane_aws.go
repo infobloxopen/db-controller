@@ -70,7 +70,7 @@ func (p *AWSProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 		}
 		return instanceReady, nil
 	}
-	return false, fmt.Errorf("%w: %q must be one of %s", v1.ErrInvalidDBType, spec.DbType, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
+	return false, fmt.Errorf("%w: %s must be one of %s", v1.ErrInvalidDBType, spec.DbType, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
 }
 
 // DeleteDatabase attempt to delete all crossplane resources related to the provided spec
@@ -139,51 +139,48 @@ func (p *AWSProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSp
 
 func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) error {
 	logger := log.FromContext(ctx)
+
 	// Handle database parameter group
 	paramGroupName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 
-	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("Creating Postgres Instance parameter group", "paramGroupName", paramGroupName)
-			if err := p.k8sClient.Create(ctx, p.auroraInstanceParamGroup(params)); err != nil {
-				return fmt.Errorf("failed to create DB parameter group: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get DB parameter group: %w", err)
+	err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup)
+	if errors.IsNotFound(err) {
+		logger.Info("Creating Postgres Instance parameter group", "paramGroupName", paramGroupName)
+		if createErr := p.k8sClient.Create(ctx, p.auroraInstanceParamGroup(params)); createErr != nil {
+			return fmt.Errorf("failed to create DB parameter group: %w", createErr)
 		}
+	} else if err != nil {
+		return fmt.Errorf("failed to get DB parameter group: %w", err)
 	}
 
 	// Handle database instance
 	dbInstance := &crossplaneaws.DBInstance{}
 	instanceKey := client.ObjectKey{Name: params.ResourceName}
 
-	if err := p.k8sClient.Get(ctx, instanceKey, dbInstance); err != nil {
-		if errors.IsNotFound(err) {
-			dbInstance = p.postgresDBInstance(params)
+	err = p.k8sClient.Get(ctx, instanceKey, dbInstance)
+	if errors.IsNotFound(err) {
+		dbInstance = p.postgresDBInstance(params)
 
-			// Create master password secret before creating the DB instance
-			passwordErr := ManageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef, p.k8sClient)
-			if passwordErr != nil {
-				return fmt.Errorf("failed to manage master password: %w", passwordErr)
-			}
-
-			logger.Info("Creating Postgres db instance", "dbInstance", params.ResourceName)
-			if err := p.k8sClient.Create(ctx, dbInstance); err != nil {
-				return fmt.Errorf("failed to create DB instance: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get DB instance: %w", err)
+		// Create master password secret before creating the DB instance
+		if passwordErr := ManageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef, p.k8sClient); passwordErr != nil {
+			return fmt.Errorf("failed to manage master password for DB instance %s: %w", params.ResourceName, passwordErr)
 		}
+
+		logger.Info("Creating Postgres db instance", "dbInstance", params.ResourceName)
+		if createErr := p.k8sClient.Create(ctx, dbInstance); createErr != nil {
+			return fmt.Errorf("failed to create DB instance %s: %w", params.ResourceName, createErr)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to get DB instance %s: %w", params.ResourceName, err)
 	}
 
 	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
 		return fmt.Errorf("can not create Cloud DB instance %s it is being deleted", params.ResourceName)
 	}
 
-	err := p.updateDBInstance(ctx, params, dbInstance)
-	if err != nil {
-		return fmt.Errorf("failed to update DB instance: %w", err)
+	if updateErr := p.updateDBInstance(ctx, params, dbInstance); updateErr != nil {
+		return fmt.Errorf("failed to update DB instance: %w", updateErr)
 	}
 
 	return nil
@@ -574,7 +571,7 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 							Name:      params.ResourceName + MasterPasswordSuffix,
 							Namespace: p.serviceNS,
 						},
-						Key: MasterPasswordSuffix,
+						Key: MasterPasswordSecretKey,
 					},
 					DBClusterParameterGroupNameRef: &xpv1.Reference{
 						Name: getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType),
