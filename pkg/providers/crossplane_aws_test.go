@@ -4,10 +4,8 @@ import (
 	"context"
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
 	"github.com/infobloxopen/db-controller/pkg/config"
-	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -62,34 +60,23 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 	BeforeEach(func() {
 		ctx = context.TODO()
 		spec = DatabaseSpec{
-			ResourceName: "env-app-name-db-1d9fb876",
-			HostParams: hostparams.HostParams{
-				Shape:                           "db.t3.medium",
-				MinStorageGB:                    10,
-				MaxStorageGB:                    20,
-				DBVersion:                       "15.7",
-				SkipFinalSnapshotBeforeDeletion: true,
-				MasterUsername:                  "root",
-				EnableIAMDatabaseAuthentication: true,
-				StorageType:                     "storage-type",
-				DeletionPolicy:                  xpv1.DeletionOrphan,
-				PubliclyAccessible:              true,
-				InstanceClass:                   "db.t3.medium",
-			},
-			DbType:       "postgres",
-			SharedDBHost: false,
-			MasterConnInfo: v1.DatabaseClaimConnectionInfo{
-				Username: "testadmin",
-				Password: "test-password-123",
-				Port:     "5432",
-			},
-			TempSecret:                 "temp-secret-abc123",
-			EnableReplicationRole:      true,
-			EnableSuperUser:            false,
-			EnablePerfInsight:          true,
-			EnableCloudwatchLogsExport: []*string{ptr.To("postgresql"), ptr.To("upgrade")},
-			BackupRetentionDays:        7,
-			CACertificateIdentifier:    ptr.To("rds-ca-2019"),
+			ResourceName:                    "env-app-name-db-1d9fb876",
+			DatabaseName:                    "app-name-db",
+			MinStorageGB:                    10,
+			MaxStorageGB:                    20,
+			DBVersion:                       "15.7",
+			SkipFinalSnapshotBeforeDeletion: true,
+			MasterUsername:                  "root",
+			EnableIAMDatabaseAuthentication: true,
+			StorageType:                     "storage-type",
+			DeletionPolicy:                  xpv1.DeletionOrphan,
+			PubliclyAccessible:              true,
+			InstanceClass:                   "db.t3.medium",
+			DbType:                          "postgres",
+			EnablePerfInsight:               true,
+			EnableCloudwatchLogsExport:      []*string{ptr.To("postgresql"), ptr.To("upgrade")},
+			BackupRetentionDays:             7,
+			CACertificateIdentifier:         ptr.To("rds-ca-2019"),
 			Tags: []ProviderTag{
 				{Key: "environment", Value: "test"},
 				{Key: "managed-by", Value: "controller-test"},
@@ -141,7 +128,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 					},
 					crossplaneaws.CustomParameter{
 						ParameterName:  ptr.To("cron.database_name"),
-						ParameterValue: ptr.To(spec.MasterConnInfo.DatabaseName),
+						ParameterValue: ptr.To(spec.DatabaseName),
 						ApplyMethod:    ptr.To("pending-reboot"),
 					},
 				))
@@ -151,22 +138,22 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
 				}).Should(Succeed())
 
-				Expect(dbInstance.Spec.ForProvider.Engine).To(Equal(ptr.To(spec.HostParams.Type)))
-				Expect(dbInstance.Spec.ForProvider.EngineVersion).To(Equal(GetEngineVersion(spec.HostParams, provider.config)))
-				Expect(dbInstance.Spec.ForProvider.DBInstanceClass).To(Equal(ptr.To(spec.HostParams.InstanceClass)))
-				Expect(dbInstance.Spec.ForProvider.AllocatedStorage).To(Equal(ptr.To(int64(spec.HostParams.MinStorageGB))))
+				Expect(dbInstance.Spec.ForProvider.Engine).To(Equal(ptr.To(spec.DbType)))
+				Expect(dbInstance.Spec.ForProvider.EngineVersion).To(Equal(GetEngineVersion(spec, provider.config)))
+				Expect(dbInstance.Spec.ForProvider.DBInstanceClass).To(Equal(ptr.To(spec.InstanceClass)))
+				Expect(dbInstance.Spec.ForProvider.AllocatedStorage).To(Equal(ptr.To(int64(spec.MinStorageGB))))
 				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-15"))
 				Expect(dbInstance.Spec.ForProvider.CACertificateIdentifier).To(Equal(spec.CACertificateIdentifier))
 				Expect(dbInstance.Spec.ForProvider.MultiAZ).To(Equal(ptr.To(basefun.GetMultiAZEnabled(provider.config))))
-				Expect(dbInstance.Spec.ForProvider.MasterUsername).To(Equal(ptr.To(spec.HostParams.MasterUsername)))
-				Expect(dbInstance.Spec.ForProvider.PubliclyAccessible).To(Equal(ptr.To(spec.HostParams.PubliclyAccessible)))
-				Expect(dbInstance.Spec.ForProvider.EnableIAMDatabaseAuthentication).To(Equal(ptr.To(spec.HostParams.EnableIAMDatabaseAuthentication)))
+				Expect(dbInstance.Spec.ForProvider.MasterUsername).To(Equal(ptr.To(spec.MasterUsername)))
+				Expect(dbInstance.Spec.ForProvider.PubliclyAccessible).To(Equal(ptr.To(spec.PubliclyAccessible)))
+				Expect(dbInstance.Spec.ForProvider.EnableIAMDatabaseAuthentication).To(Equal(ptr.To(spec.EnableIAMDatabaseAuthentication)))
 				Expect(dbInstance.Spec.ForProvider.EnablePerformanceInsights).To(Equal(ptr.To(spec.EnablePerfInsight)))
 				Expect(dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports).To(Equal(spec.EnableCloudwatchLogsExport))
 				Expect(dbInstance.Spec.ForProvider.BackupRetentionPeriod).To(Equal(ptr.To(spec.BackupRetentionDays)))
 				Expect(dbInstance.Spec.ForProvider.StorageEncrypted).To(Equal(ptr.To(true)))
-				Expect(dbInstance.Spec.ForProvider.StorageType).To(Equal(ptr.To(spec.HostParams.StorageType)))
-				Expect(dbInstance.Spec.ForProvider.Port).To(Equal(ptr.To(spec.HostParams.Port)))
+				Expect(dbInstance.Spec.ForProvider.StorageType).To(Equal(ptr.To(spec.StorageType)))
+				Expect(dbInstance.Spec.ForProvider.Port).To(Equal(ptr.To(spec.Port)))
 				Expect(dbInstance.Spec.ForProvider.PreferredMaintenanceWindow).To(Equal(spec.PreferredMaintenanceWindow))
 				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-15"))
 
@@ -184,7 +171,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 
 				// Validate Provider Config & Deletion Policy
 				Expect(dbInstance.Spec.ResourceSpec.ProviderConfigReference.Name).To(Equal(basefun.GetProviderConfig(provider.config)))
-				Expect(dbInstance.Spec.ResourceSpec.DeletionPolicy).To(Equal(spec.HostParams.DeletionPolicy))
+				Expect(dbInstance.Spec.ResourceSpec.DeletionPolicy).To(Equal(spec.DeletionPolicy))
 
 			})
 
@@ -288,6 +275,66 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 
 	Describe("update postgres database", func() {
 		When("when crossplane cr preexists the creation call we need to update with provided parameters", func() {
+			It("should propagate the new spec fields to crossplane CR", func() {
+				isReady, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
+				}).Should(Succeed())
+
+				updatedSpec := spec
+				updatedSpec.MaxStorageGB = 30
+				updatedSpec.MinStorageGB = 20
+				updatedSpec.EnableCloudwatchLogsExport = []*string{ptr.To("not"), ptr.To("upgrade")}
+				updatedSpec.EnablePerfInsight = false
+				updatedSpec.DeletionPolicy = xpv1.DeletionDelete
+
+				isReady, err = provider.CreateDatabase(ctx, updatedSpec)
+				Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
+
+				dbInstance = &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
+				}).Should(Succeed())
+
+				Expect(dbInstance.Spec.ForProvider.AllocatedStorage).To(Equal(ptr.To(int64(updatedSpec.MinStorageGB))))
+				Expect(dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports).To(Equal(updatedSpec.EnableCloudwatchLogsExport))
+				Expect(dbInstance.Spec.ForProvider.EnablePerformanceInsights).To(Equal(ptr.To(updatedSpec.EnablePerfInsight)))
+				Expect(dbInstance.Spec.ResourceSpec.DeletionPolicy).To(Equal(updatedSpec.DeletionPolicy))
+				Expect(dbInstance.Spec.ForProvider.Engine).To(Equal(ptr.To(updatedSpec.DbType)))
+				Expect(dbInstance.Spec.ForProvider.EngineVersion).To(Equal(GetEngineVersion(updatedSpec, provider.config)))
+				Expect(dbInstance.Spec.ForProvider.DBInstanceClass).To(Equal(ptr.To(updatedSpec.InstanceClass)))
+				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-15"))
+				Expect(dbInstance.Spec.ForProvider.CACertificateIdentifier).To(Equal(updatedSpec.CACertificateIdentifier))
+				Expect(dbInstance.Spec.ForProvider.MultiAZ).To(Equal(ptr.To(basefun.GetMultiAZEnabled(provider.config))))
+				Expect(dbInstance.Spec.ForProvider.MasterUsername).To(Equal(ptr.To(updatedSpec.MasterUsername)))
+				Expect(dbInstance.Spec.ForProvider.PubliclyAccessible).To(Equal(ptr.To(updatedSpec.PubliclyAccessible)))
+				Expect(dbInstance.Spec.ForProvider.EnableIAMDatabaseAuthentication).To(Equal(ptr.To(updatedSpec.EnableIAMDatabaseAuthentication)))
+				Expect(dbInstance.Spec.ForProvider.BackupRetentionPeriod).To(Equal(ptr.To(updatedSpec.BackupRetentionDays)))
+				Expect(dbInstance.Spec.ForProvider.StorageEncrypted).To(Equal(ptr.To(true)))
+				Expect(dbInstance.Spec.ForProvider.StorageType).To(Equal(ptr.To(updatedSpec.StorageType)))
+				Expect(dbInstance.Spec.ForProvider.Port).To(Equal(ptr.To(updatedSpec.Port)))
+				Expect(dbInstance.Spec.ForProvider.PreferredMaintenanceWindow).To(Equal(updatedSpec.PreferredMaintenanceWindow))
+				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-15"))
+
+				// master password
+				Expect(dbInstance.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Name).To(Equal(updatedSpec.ResourceName + MasterPasswordSuffix))
+				Expect(dbInstance.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Namespace).To(Equal(provider.serviceNS))
+				Expect(dbInstance.Spec.ResourceSpec.WriteConnectionSecretToReference.Name).To(Equal(updatedSpec.ResourceName))
+				Expect(dbInstance.Spec.ResourceSpec.WriteConnectionSecretToReference.Namespace).To(Equal(provider.serviceNS))
+
+				// Validate VPC & Security Groups
+				Expect(dbInstance.Spec.ForProvider.VPCSecurityGroupIDRefs).To(ContainElement(xpv1.Reference{
+					Name: basefun.GetVpcSecurityGroupIDRefs(provider.config),
+				}))
+				Expect(dbInstance.Spec.ForProvider.DBSubnetGroupNameRef.Name).To(Equal(basefun.GetDbSubnetGroupNameRef(provider.config)))
+
+				// Validate Provider Config & Deletion Policy
+				Expect(dbInstance.Spec.ResourceSpec.ProviderConfigReference.Name).To(Equal(basefun.GetProviderConfig(provider.config)))
+			})
 		})
 	})
 
@@ -748,6 +795,342 @@ func TestChangeToInactive(t *testing.T) {
 				if !reflect.DeepEqual(result[i], expectedTag) {
 					t.Errorf("Unexpected tag at index %d: expected %v, actual %v", i, expectedTag, result[i])
 				}
+			}
+		})
+	}
+}
+
+func TestAuroraDBInstance(t *testing.T) {
+	tests := []struct {
+		name             string
+		params           DatabaseSpec
+		isSecondInstance bool
+		expectedResult   *crossplaneaws.DBInstance
+	}{
+		{
+			name: "Creates primary Aurora DB instance with correct configuration",
+			params: DatabaseSpec{
+				ResourceName:                    "test-db-cluster",
+				DbType:                          AwsAuroraPostgres,
+				InstanceClass:                   "db.r5.large",
+				PubliclyAccessible:              true,
+				EnablePerfInsight:               true,
+				PreferredMaintenanceWindow:      ptr.To("sun:05:00-sun:06:00"),
+				SkipFinalSnapshotBeforeDeletion: true,
+				CACertificateIdentifier:         ptr.To("rds-ca-2019"),
+				DeletionPolicy:                  xpv1.DeletionDelete,
+				Labels:                          map[string]string{"env": "test"},
+				Tags:                            []ProviderTag{{Key: "Environment", Value: "Test"}},
+			},
+			isSecondInstance: false,
+			expectedResult: &crossplaneaws.DBInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-db-cluster",
+					Labels: map[string]string{"env": "test"},
+				},
+				Spec: crossplaneaws.DBInstanceSpec{
+					ForProvider: crossplaneaws.DBInstanceParameters{
+						CACertificateIdentifier: ptr.To("rds-ca-2019"),
+						Region:                  "us-west-2",
+						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
+							ApplyImmediately:  ptr.To(true),
+							SkipFinalSnapshot: true,
+							EngineVersion:     ptr.To("15"),
+							DBParameterGroupNameRef: &xpv1.Reference{
+								Name: "param-group-test-db-cluster",
+							},
+						},
+						Engine:                      ptr.To("aurora-postgresql"),
+						DBInstanceClass:             ptr.To("db.r5.large"),
+						PubliclyAccessible:          ptr.To(true),
+						DBClusterIdentifier:         ptr.To("test-db-cluster"),
+						EnablePerformanceInsights:   ptr.To(true),
+						EnableCloudwatchLogsExports: nil,
+						PreferredMaintenanceWindow:  ptr.To("sun:05:00-sun:06:00"),
+						Tags: []*crossplaneaws.Tag{
+							{Key: ptr.To("Environment"), Value: ptr.To("Test")},
+						},
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						ProviderConfigReference: &xpv1.Reference{
+							Name: "aws-provider",
+						},
+						DeletionPolicy: xpv1.DeletionDelete,
+					},
+				},
+			},
+		},
+		{
+			name: "Creates secondary Aurora DB instance with -2 suffix",
+			params: DatabaseSpec{
+				ResourceName:                    "test-db-cluster",
+				DbType:                          AwsAuroraPostgres,
+				InstanceClass:                   "db.r5.xlarge",
+				PubliclyAccessible:              false,
+				EnablePerfInsight:               false,
+				PreferredMaintenanceWindow:      ptr.To("mon:03:00-mon:04:00"),
+				SkipFinalSnapshotBeforeDeletion: false,
+				CACertificateIdentifier:         ptr.To("rds-ca-2019"),
+				DeletionPolicy:                  xpv1.DeletionOrphan,
+				Labels:                          map[string]string{"env": "prod"},
+				Tags:                            []ProviderTag{{Key: "Environment", Value: "Production"}},
+			},
+			isSecondInstance: true,
+			expectedResult: &crossplaneaws.DBInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-db-cluster-2",
+					Labels: map[string]string{"env": "prod"},
+				},
+				Spec: crossplaneaws.DBInstanceSpec{
+					ForProvider: crossplaneaws.DBInstanceParameters{
+						CACertificateIdentifier: ptr.To("rds-ca-2019"),
+						Region:                  "us-west-2",
+						CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
+							ApplyImmediately:  ptr.To(true),
+							SkipFinalSnapshot: false,
+							EngineVersion:     ptr.To("13.4"),
+							DBParameterGroupNameRef: &xpv1.Reference{
+								Name: "param-group-test-db-cluster",
+							},
+						},
+						Engine:                      ptr.To("aurora-postgresql"),
+						DBInstanceClass:             ptr.To("db.r5.xlarge"),
+						PubliclyAccessible:          ptr.To(false),
+						DBClusterIdentifier:         ptr.To("test-db-cluster"),
+						EnablePerformanceInsights:   ptr.To(false),
+						EnableCloudwatchLogsExports: nil,
+						PreferredMaintenanceWindow:  ptr.To("mon:03:00-mon:04:00"),
+						Tags: []*crossplaneaws.Tag{
+							{Key: ptr.To("Environment"), Value: ptr.To("Production")},
+						},
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						ProviderConfigReference: &xpv1.Reference{
+							Name: "aws-provider",
+						},
+						DeletionPolicy: xpv1.DeletionOrphan,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			RegisterTestingT(t)
+			mockConfig := viper.New()
+			mockConfig.Set("providerConfig", "aws-provider")
+			mockConfig.Set("region", "us-west-2")
+			provider := &AWSProvider{config: mockConfig}
+
+			result := provider.auroraDBInstance(tc.params, tc.isSecondInstance)
+			Expect(result.ObjectMeta.Name).To(Equal(tc.expectedResult.ObjectMeta.Name))
+			Expect(result.ObjectMeta.Labels).To(Equal(tc.expectedResult.ObjectMeta.Labels))
+			Expect(result.Spec.ForProvider.Engine).To(Equal(tc.expectedResult.Spec.ForProvider.Engine))
+			Expect(result.Spec.ForProvider.DBInstanceClass).To(Equal(tc.expectedResult.Spec.ForProvider.DBInstanceClass))
+			Expect(result.Spec.ForProvider.PubliclyAccessible).To(Equal(tc.expectedResult.Spec.ForProvider.PubliclyAccessible))
+			Expect(result.Spec.ForProvider.DBClusterIdentifier).To(Equal(tc.expectedResult.Spec.ForProvider.DBClusterIdentifier))
+			Expect(result.Spec.ForProvider.EnablePerformanceInsights).To(Equal(tc.expectedResult.Spec.ForProvider.EnablePerformanceInsights))
+			Expect(result.Spec.ForProvider.PreferredMaintenanceWindow).To(Equal(tc.expectedResult.Spec.ForProvider.PreferredMaintenanceWindow))
+			Expect(result.Spec.ForProvider.CACertificateIdentifier).To(Equal(tc.expectedResult.Spec.ForProvider.CACertificateIdentifier))
+			Expect(result.Spec.ForProvider.ApplyImmediately).To(Equal(tc.expectedResult.Spec.ForProvider.ApplyImmediately))
+			Expect(result.Spec.ForProvider.SkipFinalSnapshot).To(Equal(tc.expectedResult.Spec.ForProvider.SkipFinalSnapshot))
+			Expect(result.Spec.DeletionPolicy).To(Equal(tc.expectedResult.Spec.DeletionPolicy))
+			Expect(result.Spec.ProviderConfigReference.Name).To(Equal(tc.expectedResult.Spec.ProviderConfigReference.Name))
+			Expect(result.Spec.ForProvider.Region).To(Equal("us-west-2"))
+
+			if len(tc.params.Tags) > 0 {
+				Expect(len(result.Spec.ForProvider.Tags)).To(BeNumerically(">", 0))
+			}
+		})
+	}
+}
+
+func TestAuroraDBCluster(t *testing.T) {
+	tests := []struct {
+		name           string
+		params         DatabaseSpec
+		expectedResult *crossplaneaws.DBCluster
+	}{
+		{
+			name: "Creates Aurora DB Cluster with backup retention days",
+			params: DatabaseSpec{
+				ResourceName:                    "test-db-cluster",
+				DBVersion:                       "aurora-mysql",
+				BackupRetentionDays:             7,
+				SkipFinalSnapshotBeforeDeletion: true,
+				MasterUsername:                  "admin",
+				EnableIAMDatabaseAuthentication: true,
+				StorageType:                     "aurora",
+				Port:                            3306,
+				EnableCloudwatchLogsExport:      []*string{ptr.To("audit"), ptr.To("error")},
+				PreferredMaintenanceWindow:      ptr.To("sun:05:00-sun:06:00"),
+				DeletionPolicy:                  xpv1.DeletionDelete,
+				Tags:                            []ProviderTag{{Key: "Environment", Value: "Test"}},
+			},
+			expectedResult: &crossplaneaws.DBCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-db-cluster",
+				},
+				Spec: crossplaneaws.DBClusterSpec{
+					ForProvider: crossplaneaws.DBClusterParameters{
+						Region:                "us-west-2",
+						BackupRetentionPeriod: ptr.To(int64(7)),
+						CustomDBClusterParameters: crossplaneaws.CustomDBClusterParameters{
+							SkipFinalSnapshot: true,
+							VPCSecurityGroupIDRefs: []xpv1.Reference{
+								{Name: "security-group-id"},
+							},
+							DBSubnetGroupNameRef: &xpv1.Reference{
+								Name: "subnet-group",
+							},
+							AutogeneratePassword: true,
+							MasterUserPasswordSecretRef: &xpv1.SecretKeySelector{
+								SecretReference: xpv1.SecretReference{
+									Name:      "test-db-cluster-master-password",
+									Namespace: "default",
+								},
+								Key: "password",
+							},
+							DBClusterParameterGroupNameRef: &xpv1.Reference{
+								Name: "param-group-test-db-cluster",
+							},
+							EngineVersion: ptr.To("aurora-postgresql"),
+						},
+						Engine: ptr.To("aurora-mysql"),
+						Tags: []*crossplaneaws.Tag{
+							{Key: ptr.To("Environment"), Value: ptr.To("Test")},
+						},
+						MasterUsername:                  ptr.To("admin"),
+						EnableIAMDatabaseAuthentication: ptr.To(true),
+						StorageEncrypted:                ptr.To(true),
+						StorageType:                     ptr.To("aurora"),
+						Port:                            ptr.To(int64(3306)),
+						EnableCloudwatchLogsExports:     []*string{ptr.To("audit"), ptr.To("error")},
+						IOPS:                            nil,
+						PreferredMaintenanceWindow:      ptr.To("sun:05:00-sun:06:00"),
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						WriteConnectionSecretToReference: &xpv1.SecretReference{
+							Name:      "test-db-cluster",
+							Namespace: "default",
+						},
+						ProviderConfigReference: &xpv1.Reference{
+							Name: "aws-provider",
+						},
+						DeletionPolicy: xpv1.DeletionDelete,
+					},
+				},
+			},
+		},
+		{
+			name: "Creates Aurora DB Cluster without backup retention days",
+			params: DatabaseSpec{
+				ResourceName:                    "prod-db-cluster",
+				DBVersion:                       "aurora-postgresql",
+				BackupRetentionDays:             0,
+				SkipFinalSnapshotBeforeDeletion: false,
+				MasterUsername:                  "postgres",
+				EnableIAMDatabaseAuthentication: false,
+				StorageType:                     "aurora-iopt1",
+				Port:                            5432,
+				EnableCloudwatchLogsExport:      []*string{ptr.To("postgresql")},
+				PreferredMaintenanceWindow:      ptr.To("mon:03:00-mon:04:00"),
+				DeletionPolicy:                  xpv1.DeletionOrphan,
+				Tags:                            []ProviderTag{{Key: "Environment", Value: "Production"}},
+			},
+			expectedResult: &crossplaneaws.DBCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "prod-db-cluster",
+				},
+				Spec: crossplaneaws.DBClusterSpec{
+					ForProvider: crossplaneaws.DBClusterParameters{
+						Region:                "us-west-2",
+						BackupRetentionPeriod: nil,
+						CustomDBClusterParameters: crossplaneaws.CustomDBClusterParameters{
+							SkipFinalSnapshot: false,
+							VPCSecurityGroupIDRefs: []xpv1.Reference{
+								{Name: "security-group-id"},
+							},
+							DBSubnetGroupNameRef: &xpv1.Reference{
+								Name: "subnet-group",
+							},
+							AutogeneratePassword: true,
+							MasterUserPasswordSecretRef: &xpv1.SecretKeySelector{
+								SecretReference: xpv1.SecretReference{
+									Name:      "prod-db-cluster-master-password",
+									Namespace: "default",
+								},
+								Key: "password",
+							},
+							DBClusterParameterGroupNameRef: &xpv1.Reference{
+								Name: "param-group-prod-db-cluster",
+							},
+							EngineVersion: ptr.To("13.4"),
+						},
+						Engine: ptr.To("aurora-postgresql"),
+						Tags: []*crossplaneaws.Tag{
+							{Key: ptr.To("Environment"), Value: ptr.To("Production")},
+						},
+						MasterUsername:                  ptr.To("postgres"),
+						EnableIAMDatabaseAuthentication: ptr.To(false),
+						StorageEncrypted:                ptr.To(true),
+						StorageType:                     ptr.To("aurora-iopt1"),
+						Port:                            ptr.To(int64(5432)),
+						EnableCloudwatchLogsExports:     []*string{ptr.To("postgresql")},
+						IOPS:                            nil,
+						PreferredMaintenanceWindow:      ptr.To("mon:03:00-mon:04:00"),
+					},
+					ResourceSpec: xpv1.ResourceSpec{
+						WriteConnectionSecretToReference: &xpv1.SecretReference{
+							Name:      "prod-db-cluster",
+							Namespace: "default",
+						},
+						ProviderConfigReference: &xpv1.Reference{
+							Name: "aws-provider",
+						},
+						DeletionPolicy: xpv1.DeletionOrphan,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			RegisterTestingT(t)
+			mockConfig := viper.New()
+			mockConfig.Set("providerConfig", "aws-provider")
+			mockConfig.Set("region", "us-west-2")
+			provider := &AWSProvider{config: mockConfig}
+
+			result := provider.auroraDBCluster(tc.params)
+
+			Expect(result.ObjectMeta.Name).To(Equal(tc.expectedResult.ObjectMeta.Name))
+			Expect(result.Spec.ForProvider.Engine).To(Equal(tc.expectedResult.Spec.ForProvider.Engine))
+			Expect(result.Spec.ForProvider.BackupRetentionPeriod).To(Equal(tc.expectedResult.Spec.ForProvider.BackupRetentionPeriod))
+			Expect(result.Spec.ForProvider.MasterUsername).To(Equal(tc.expectedResult.Spec.ForProvider.MasterUsername))
+			Expect(result.Spec.ForProvider.EnableIAMDatabaseAuthentication).To(Equal(tc.expectedResult.Spec.ForProvider.EnableIAMDatabaseAuthentication))
+			Expect(result.Spec.ForProvider.StorageEncrypted).To(Equal(tc.expectedResult.Spec.ForProvider.StorageEncrypted))
+			Expect(result.Spec.ForProvider.StorageType).To(Equal(tc.expectedResult.Spec.ForProvider.StorageType))
+			Expect(result.Spec.ForProvider.Port).To(Equal(tc.expectedResult.Spec.ForProvider.Port))
+			Expect(result.Spec.ForProvider.EnableCloudwatchLogsExports).To(Equal(tc.expectedResult.Spec.ForProvider.EnableCloudwatchLogsExports))
+			Expect(result.Spec.ForProvider.PreferredMaintenanceWindow).To(Equal(tc.expectedResult.Spec.ForProvider.PreferredMaintenanceWindow))
+
+			Expect(result.Spec.ForProvider.SkipFinalSnapshot).To(Equal(tc.expectedResult.Spec.ForProvider.SkipFinalSnapshot))
+			Expect(result.Spec.ForProvider.AutogeneratePassword).To(Equal(tc.expectedResult.Spec.ForProvider.AutogeneratePassword))
+
+			Expect(result.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Name).To(Equal(tc.params.ResourceName + MasterPasswordSuffix))
+			Expect(result.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Namespace).To(Equal(provider.serviceNS))
+			Expect(result.Spec.ForProvider.MasterUserPasswordSecretRef.Key).To(Equal(MasterPasswordSecretKey))
+
+			Expect(result.Spec.DeletionPolicy).To(Equal(tc.expectedResult.Spec.DeletionPolicy))
+			Expect(result.Spec.ProviderConfigReference.Name).To(Equal(tc.expectedResult.Spec.ProviderConfigReference.Name))
+			Expect(result.Spec.WriteConnectionSecretToReference.Name).To(Equal(tc.params.ResourceName))
+			Expect(result.Spec.WriteConnectionSecretToReference.Namespace).To(Equal(provider.serviceNS))
+
+			if len(tc.params.Tags) > 0 {
+				Expect(len(result.Spec.ForProvider.Tags)).To(BeNumerically(">", 0))
 			}
 		})
 	}

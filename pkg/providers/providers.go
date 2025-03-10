@@ -3,8 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
-	v1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/pkg/hostparams"
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/spf13/viper"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -12,18 +11,26 @@ import (
 
 // DatabaseSpec defines the required parameters to provision a database using any provider.
 type DatabaseSpec struct {
-	ResourceName               string
-	HostParams                 hostparams.HostParams
-	DbType                     v1.DatabaseType
-	SharedDBHost               bool
-	MasterConnInfo             v1.DatabaseClaimConnectionInfo
-	TempSecret                 string
-	EnableReplicationRole      bool
-	EnableSuperUser            bool
-	EnablePerfInsight          bool
-	EnableCloudwatchLogsExport []*string
-	BackupRetentionDays        int64
-	CACertificateIdentifier    *string
+	ResourceName string
+	DatabaseName string
+	DbType       string
+	Port         int64
+	MinStorageGB int
+	MaxStorageGB int64
+	DBVersion    string
+
+	MasterUsername                  string
+	InstanceClass                   string
+	StorageType                     string
+	SkipFinalSnapshotBeforeDeletion bool
+	PubliclyAccessible              bool
+	EnableIAMDatabaseAuthentication bool
+	DeletionPolicy                  xpv1.DeletionPolicy
+	IsDefaultVersion                bool
+	EnablePerfInsight               bool
+	EnableCloudwatchLogsExport      []*string
+	BackupRetentionDays             int64
+	CACertificateIdentifier         *string
 
 	Tags                       []ProviderTag
 	Labels                     map[string]string

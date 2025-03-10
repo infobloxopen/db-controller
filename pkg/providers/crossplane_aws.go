@@ -19,6 +19,8 @@ const (
 	MasterPasswordSuffix    = "-master"
 	MasterPasswordSecretKey = "password"
 	SnapshotSource          = "Snapshot"
+	AwsPostgres             = "postgres"
+	AwsAuroraPostgres       = "aurora-postgresql"
 )
 
 type AWSProvider struct {
@@ -36,8 +38,11 @@ func newAWSProvider(k8sClient client.Client, config *viper.Viper, serviceNS stri
 }
 
 func (p *AWSProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bool, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("provisioning crossplane aws database", "DatabaseSpec", spec)
+
 	switch spec.DbType {
-	case v1.AuroraPostgres:
+	case AwsAuroraPostgres:
 		err := p.createAuroraDB(ctx, spec)
 		if err != nil {
 			return false, err
@@ -50,16 +55,17 @@ func (p *AWSProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 		if err != nil {
 			return false, err
 		}
+		logger.Info("checking provisioned instance readiness", "instanceReady", instanceReady, "clusterReady", clusterReady)
 		if basefun.GetMultiAZEnabled(p.config) {
 			instance2Ready, err := p.isDBInstanceReady(ctx, spec.ResourceName+"-2")
 			if err != nil {
 				return false, err
 			}
+			logger.Info("checking provisioned instance readiness", "instance2Ready", instance2Ready)
 			return instanceReady && instance2Ready && clusterReady, nil
 		}
-
 		return instanceReady && clusterReady, nil
-	case v1.Postgres:
+	case AwsPostgres:
 		err := p.createPostgres(ctx, spec)
 		if err != nil {
 			return false, err
@@ -68,6 +74,7 @@ func (p *AWSProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 		if err != nil {
 			return false, err
 		}
+		logger.Info("checking provisioned instance readiness", "instanceReady", instanceReady)
 		return instanceReady, nil
 	}
 	return false, fmt.Errorf("%w: %s must be one of %s", v1.ErrInvalidDBType, spec.DbType, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
@@ -84,7 +91,7 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	}
 
 	deletionPolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
-	paramGroupName := getParameterGroupName(spec.ResourceName, spec.HostParams.DBVersion, spec.DbType)
+	paramGroupName := getParameterGroupName(spec)
 	// Delete DBClusterParameterGroup if it exists
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
 	clusterParamGroupKey := client.ObjectKey{Name: paramGroupName}
@@ -141,7 +148,7 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 	logger := log.FromContext(ctx)
 
 	// Handle database parameter group
-	paramGroupName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
+	paramGroupName := getParameterGroupName(params)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 
 	err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup)
@@ -189,7 +196,7 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) error {
 	logger := log.FromContext(ctx)
 	// Handle database instance parameter group
-	paramGroupName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
+	paramGroupName := getParameterGroupName(params)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
 		if errors.IsNotFound(err) {
@@ -294,14 +301,14 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 }
 
 func (p *AWSProvider) postgresDBInstance(params DatabaseSpec) *crossplaneaws.DBInstance {
-	ms64 := int64(params.HostParams.MinStorageGB)
+	ms64 := int64(params.MinStorageGB)
 	multiAZ := basefun.GetMultiAZEnabled(p.config)
 
 	var maxStorageVal *int64
-	if params.HostParams.MaxStorageGB == 0 {
+	if params.MaxStorageGB == 0 {
 		maxStorageVal = nil
 	} else {
-		maxStorageVal = &params.HostParams.MaxStorageGB
+		maxStorageVal = &params.MaxStorageGB
 	}
 
 	var restoreFrom *crossplaneaws.RestoreDBInstanceBackupConfiguration
@@ -327,7 +334,7 @@ func (p *AWSProvider) postgresDBInstance(params DatabaseSpec) *crossplaneaws.DBI
 				Region:                  basefun.GetRegion(p.config),
 				CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 					ApplyImmediately:  ptr.To(true),
-					SkipFinalSnapshot: params.HostParams.SkipFinalSnapshotBeforeDeletion,
+					SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 					VPCSecurityGroupIDRefs: []xpv1.Reference{
 						{Name: basefun.GetVpcSecurityGroupIDRefs(p.config)},
 					},
@@ -342,26 +349,26 @@ func (p *AWSProvider) postgresDBInstance(params DatabaseSpec) *crossplaneaws.DBI
 						},
 						Key: MasterPasswordSecretKey,
 					},
-					EngineVersion: GetEngineVersion(params.HostParams, p.config),
+					EngineVersion: GetEngineVersion(params, p.config),
 					RestoreFrom:   restoreFrom,
 					DBParameterGroupNameRef: &xpv1.Reference{
-						Name: getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType),
+						Name: getParameterGroupName(params),
 					},
 				},
-				Engine:                          &params.HostParams.Type,
+				Engine:                          &params.DbType,
 				MultiAZ:                         &multiAZ,
-				DBInstanceClass:                 &params.HostParams.InstanceClass,
+				DBInstanceClass:                 &params.InstanceClass,
 				AllocatedStorage:                &ms64,
 				MaxAllocatedStorage:             maxStorageVal,
-				MasterUsername:                  &params.HostParams.MasterUsername,
-				PubliclyAccessible:              &params.HostParams.PubliclyAccessible,
-				EnableIAMDatabaseAuthentication: &params.HostParams.EnableIAMDatabaseAuthentication,
+				MasterUsername:                  &params.MasterUsername,
+				PubliclyAccessible:              &params.PubliclyAccessible,
+				EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 				EnablePerformanceInsights:       &params.EnablePerfInsight,
 				EnableCloudwatchLogsExports:     params.EnableCloudwatchLogsExport,
 				BackupRetentionPeriod:           &params.BackupRetentionDays,
 				StorageEncrypted:                ptr.To(true),
-				StorageType:                     &params.HostParams.StorageType,
-				Port:                            &params.HostParams.Port,
+				StorageType:                     &params.StorageType,
+				Port:                            &params.Port,
 				PreferredMaintenanceWindow:      params.PreferredMaintenanceWindow,
 				Tags: ConvertFromProviderTags(params.Tags, func(tag ProviderTag) *crossplaneaws.Tag {
 					return &crossplaneaws.Tag{Key: &tag.Key, Value: &tag.Value}
@@ -375,7 +382,7 @@ func (p *AWSProvider) postgresDBInstance(params DatabaseSpec) *crossplaneaws.DBI
 				ProviderConfigReference: &xpv1.Reference{
 					Name: basefun.GetProviderConfig(p.config),
 				},
-				DeletionPolicy: params.HostParams.DeletionPolicy,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
@@ -389,11 +396,11 @@ func (p *AWSProvider) postgresDBParameterGroup(params DatabaseSpec) *crossplanea
 	forceSsl := "rds.force_ssl"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	pgName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
+	pgName := getParameterGroupName(params)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
-	cronValue := params.MasterConnInfo.DatabaseName
+	cronValue := params.DatabaseName
 	desc := "custom PG for " + pgName
 
 	return &crossplaneaws.DBParameterGroup{
@@ -406,8 +413,8 @@ func (p *AWSProvider) postgresDBParameterGroup(params DatabaseSpec) *crossplanea
 				Description: &desc,
 				CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 					DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-						Engine:        params.HostParams.Type,
-						EngineVersion: GetEngineVersion(params.HostParams, p.config),
+						Engine:        params.DbType,
+						EngineVersion: GetEngineVersion(params, p.config),
 					},
 					Parameters: []crossplaneaws.CustomParameter{
 						{ParameterName: &logical,
@@ -437,7 +444,7 @@ func (p *AWSProvider) postgresDBParameterGroup(params DatabaseSpec) *crossplanea
 				ProviderConfigReference: &xpv1.Reference{
 					Name: basefun.GetProviderConfig(p.config),
 				},
-				DeletionPolicy: params.HostParams.DeletionPolicy,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
@@ -447,16 +454,16 @@ func (p *AWSProvider) updateDBInstance(ctx context.Context, params DatabaseSpec,
 	// Create a patch snapshot from current DBInstance
 	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 
-	if params.DbType == v1.Postgres {
+	if params.DbType == AwsPostgres {
 		multiAZ := basefun.GetMultiAZEnabled(p.config)
-		ms64 := int64(params.HostParams.MinStorageGB)
+		ms64 := int64(params.MinStorageGB)
 		dbInstance.Spec.ForProvider.AllocatedStorage = &ms64
 
 		var maxStorageVal *int64
-		if params.HostParams.MaxStorageGB == 0 {
+		if params.MaxStorageGB == 0 {
 			maxStorageVal = nil
 		} else {
-			maxStorageVal = &params.HostParams.MaxStorageGB
+			maxStorageVal = &params.MaxStorageGB
 		}
 		dbInstance.Spec.ForProvider.MaxAllocatedStorage = maxStorageVal
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = params.EnableCloudwatchLogsExport
@@ -464,9 +471,9 @@ func (p *AWSProvider) updateDBInstance(ctx context.Context, params DatabaseSpec,
 	}
 	enablePerfInsight := params.EnablePerfInsight
 	dbInstance.Spec.ForProvider.EnablePerformanceInsights = &enablePerfInsight
-	dbInstance.Spec.DeletionPolicy = params.HostParams.DeletionPolicy
+	dbInstance.Spec.DeletionPolicy = params.DeletionPolicy
 	dbInstance.Spec.ForProvider.CACertificateIdentifier = params.CACertificateIdentifier
-	if params.DbType == v1.AuroraPostgres {
+	if params.DbType == AwsAuroraPostgres {
 		dbInstance.Spec.ForProvider.EnableCloudwatchLogsExports = nil
 	}
 	// Compute a json patch based on the changed DBInstance
@@ -511,15 +518,15 @@ func (p *AWSProvider) auroraDBInstance(params DatabaseSpec, isSecondInstance boo
 				Region:                  basefun.GetRegion(p.config),
 				CustomDBInstanceParameters: crossplaneaws.CustomDBInstanceParameters{
 					ApplyImmediately:  ptr.To(true),
-					SkipFinalSnapshot: params.HostParams.SkipFinalSnapshotBeforeDeletion,
-					EngineVersion:     GetEngineVersion(params.HostParams, p.config),
+					SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
+					EngineVersion:     GetEngineVersion(params, p.config),
 					DBParameterGroupNameRef: &xpv1.Reference{
-						Name: getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType),
+						Name: getParameterGroupName(params),
 					},
 				},
-				Engine:                      &params.HostParams.Type,
-				DBInstanceClass:             &params.HostParams.InstanceClass,
-				PubliclyAccessible:          &params.HostParams.PubliclyAccessible,
+				Engine:                      &params.DbType,
+				DBInstanceClass:             &params.InstanceClass,
+				PubliclyAccessible:          &params.PubliclyAccessible,
 				DBClusterIdentifier:         &params.ResourceName,
 				EnablePerformanceInsights:   &params.EnablePerfInsight,
 				EnableCloudwatchLogsExports: nil,
@@ -532,7 +539,7 @@ func (p *AWSProvider) auroraDBInstance(params DatabaseSpec, isSecondInstance boo
 				ProviderConfigReference: &xpv1.Reference{
 					Name: basefun.GetProviderConfig(p.config),
 				},
-				DeletionPolicy: params.HostParams.DeletionPolicy,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
@@ -558,7 +565,7 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 				Region:                basefun.GetRegion(p.config),
 				BackupRetentionPeriod: auroraBackupRetentionPeriod,
 				CustomDBClusterParameters: crossplaneaws.CustomDBClusterParameters{
-					SkipFinalSnapshot: params.HostParams.SkipFinalSnapshotBeforeDeletion,
+					SkipFinalSnapshot: params.SkipFinalSnapshotBeforeDeletion,
 					VPCSecurityGroupIDRefs: []xpv1.Reference{
 						{Name: basefun.GetVpcSecurityGroupIDRefs(p.config)},
 					},
@@ -574,19 +581,19 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 						Key: MasterPasswordSecretKey,
 					},
 					DBClusterParameterGroupNameRef: &xpv1.Reference{
-						Name: getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType),
+						Name: getParameterGroupName(params),
 					},
-					EngineVersion: GetEngineVersion(params.HostParams, p.config),
+					EngineVersion: GetEngineVersion(params, p.config),
 				},
-				Engine: &params.HostParams.Type,
+				Engine: &params.DBVersion,
 				Tags: ConvertFromProviderTags(params.Tags, func(tag ProviderTag) *crossplaneaws.Tag {
 					return &crossplaneaws.Tag{Key: &tag.Key, Value: &tag.Value}
 				}),
-				MasterUsername:                  &params.HostParams.MasterUsername,
-				EnableIAMDatabaseAuthentication: &params.HostParams.EnableIAMDatabaseAuthentication,
+				MasterUsername:                  &params.MasterUsername,
+				EnableIAMDatabaseAuthentication: &params.EnableIAMDatabaseAuthentication,
 				StorageEncrypted:                ptr.To(true),
-				StorageType:                     &params.HostParams.StorageType,
-				Port:                            &params.HostParams.Port,
+				StorageType:                     &params.StorageType,
+				Port:                            &params.Port,
 				EnableCloudwatchLogsExports:     params.EnableCloudwatchLogsExport,
 				IOPS:                            nil,
 				PreferredMaintenanceWindow:      params.PreferredMaintenanceWindow,
@@ -599,7 +606,7 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 				ProviderConfigReference: &xpv1.Reference{
 					Name: basefun.GetProviderConfig(p.config),
 				},
-				DeletionPolicy: params.HostParams.DeletionPolicy,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
@@ -613,11 +620,11 @@ func (p *AWSProvider) auroraClusterParamGroup(params DatabaseSpec) *crossplaneaw
 	forceSsl := "rds.force_ssl"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	pgName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
+	pgName := getParameterGroupName(params)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
-	cronValue := params.MasterConnInfo.DatabaseName
+	cronValue := params.DatabaseName
 	desc := "custom PG for " + pgName
 
 	return &crossplaneaws.DBClusterParameterGroup{
@@ -630,8 +637,8 @@ func (p *AWSProvider) auroraClusterParamGroup(params DatabaseSpec) *crossplaneaw
 				Description: &desc,
 				CustomDBClusterParameterGroupParameters: crossplaneaws.CustomDBClusterParameterGroupParameters{
 					DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-						Engine:        params.HostParams.Type,
-						EngineVersion: GetEngineVersion(params.HostParams, p.config),
+						Engine:        params.DbType,
+						EngineVersion: GetEngineVersion(params, p.config),
 					},
 					Parameters: []crossplaneaws.CustomParameter{
 						{ParameterName: &logical,
@@ -661,7 +668,7 @@ func (p *AWSProvider) auroraClusterParamGroup(params DatabaseSpec) *crossplaneaw
 				ProviderConfigReference: &xpv1.Reference{
 					Name: basefun.GetProviderConfig(p.config),
 				},
-				DeletionPolicy: params.HostParams.DeletionPolicy,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
@@ -672,11 +679,11 @@ func (p *AWSProvider) auroraInstanceParamGroup(params DatabaseSpec) *crossplanea
 	reboot := "pending-reboot"
 	transactionTimeout := "idle_in_transaction_session_timeout"
 	transactionTimeoutValue := "300000"
-	pgName := getParameterGroupName(params.ResourceName, params.HostParams.DBVersion, params.DbType)
+	pgName := getParameterGroupName(params)
 	sharedLib := "shared_preload_libraries"
 	sharedLibValue := "pg_stat_statements,pg_cron"
 	cron := "cron.database_name"
-	cronValue := params.MasterConnInfo.DatabaseName
+	cronValue := params.DatabaseName
 	desc := "custom PG for " + pgName
 
 	return &crossplaneaws.DBParameterGroup{
@@ -689,8 +696,8 @@ func (p *AWSProvider) auroraInstanceParamGroup(params DatabaseSpec) *crossplanea
 				Description: &desc,
 				CustomDBParameterGroupParameters: crossplaneaws.CustomDBParameterGroupParameters{
 					DBParameterGroupFamilySelector: &crossplaneaws.DBParameterGroupFamilyNameSelector{
-						Engine:        params.HostParams.Type,
-						EngineVersion: GetEngineVersion(params.HostParams, p.config),
+						Engine:        params.DbType,
+						EngineVersion: GetEngineVersion(params, p.config),
 					},
 					Parameters: []crossplaneaws.CustomParameter{
 						{ParameterName: &transactionTimeout,
@@ -712,7 +719,7 @@ func (p *AWSProvider) auroraInstanceParamGroup(params DatabaseSpec) *crossplanea
 				ProviderConfigReference: &xpv1.Reference{
 					Name: basefun.GetProviderConfig(p.config),
 				},
-				DeletionPolicy: params.HostParams.DeletionPolicy,
+				DeletionPolicy: params.DeletionPolicy,
 			},
 		},
 	}
@@ -729,8 +736,8 @@ func (p *AWSProvider) updateAuroraDBCluster(ctx context.Context, params Database
 	if params.BackupRetentionDays != 0 {
 		dbCluster.Spec.ForProvider.BackupRetentionPeriod = &params.BackupRetentionDays
 	}
-	dbCluster.Spec.ForProvider.StorageType = &params.HostParams.StorageType
-	dbCluster.Spec.DeletionPolicy = params.HostParams.DeletionPolicy
+	dbCluster.Spec.ForProvider.StorageType = &params.StorageType
+	dbCluster.Spec.DeletionPolicy = params.DeletionPolicy
 
 	// Compute a json patch based on the changed RDSInstance
 	dbClusterPatchData, err := patchDBCluster.Data(dbCluster)
@@ -870,7 +877,7 @@ func (p *AWSProvider) addInactiveOperationalTag(ctx context.Context, spec Databa
 		return false, err
 	}
 
-	if spec.DbType == v1.AuroraPostgres {
+	if spec.DbType == AwsAuroraPostgres {
 		if tagged, err := p.markClusterAsInactive(ctx, spec.ResourceName); err != nil || !tagged {
 			return false, err
 		}

@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
-	"github.com/infobloxopen/db-controller/pkg/hostparams"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
@@ -62,24 +60,24 @@ func generateMasterPassword() (string, error) {
 	return pass, nil
 }
 
-func GetEngineVersion(params hostparams.HostParams, config *viper.Viper) *string {
+func GetEngineVersion(spec DatabaseSpec, config *viper.Viper) *string {
 	defaultMajorVersion := ""
-	if params.IsDefaultVersion {
+	if spec.IsDefaultVersion {
 		defaultMajorVersion = basefun.GetDefaultMajorVersion(config)
 	} else {
-		defaultMajorVersion = params.DBVersion
+		defaultMajorVersion = spec.DBVersion
 	}
 	return &defaultMajorVersion
 }
 
-func getParameterGroupName(providerResourceName, dbVersion string, dbType v1.DatabaseType) string {
-	switch dbType {
-	case v1.Postgres:
-		return providerResourceName + "-" + (strings.Split(dbVersion, "."))[0]
-	case v1.AuroraPostgres:
-		return providerResourceName + "-a-" + (strings.Split(dbVersion, "."))[0]
+func getParameterGroupName(spec DatabaseSpec) string {
+	switch spec.DbType {
+	case AwsPostgres:
+		return spec.ResourceName + "-" + (strings.Split(spec.DBVersion, "."))[0]
+	case AwsAuroraPostgres:
+		return spec.ResourceName + "-a-" + (strings.Split(spec.DBVersion, "."))[0]
 	default:
-		return providerResourceName + "-" + (strings.Split(dbVersion, "."))[0]
+		return spec.ResourceName + "-" + (strings.Split(spec.DBVersion, "."))[0]
 	}
 }
 
