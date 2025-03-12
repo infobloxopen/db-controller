@@ -194,5 +194,5 @@ probes:
     enabled: true
 
 dashboard:
-  enabled: true
+  enabled: false
   alert: "devops-alerts"
