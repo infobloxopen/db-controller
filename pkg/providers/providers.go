@@ -60,7 +60,7 @@ func NewProvider(config *viper.Viper, k8sClient client.Client, serviceNS string)
 	case "aws":
 		return newAWSProvider(k8sClient, config, serviceNS)
 	case "gcp":
-		return newGCPProvider(k8sClient, config)
+		return newGCPProvider(k8sClient, config, serviceNS)
 	case "cloudnative-pg":
 		return nil
 	default:
