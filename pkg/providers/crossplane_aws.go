@@ -24,14 +24,15 @@ const (
 )
 
 type AWSProvider struct {
-	k8sClient client.Client
+	client.Client
+
 	config    *viper.Viper
 	serviceNS string
 }
 
-func newAWSProvider(k8sClient client.Client, config *viper.Viper, serviceNS string) Provider {
+func newAWSProvider(Client client.Client, config *viper.Viper, serviceNS string) Provider {
 	return &AWSProvider{
-		k8sClient: k8sClient,
+		Client:    Client,
 		config:    config,
 		serviceNS: serviceNS,
 	}
@@ -95,8 +96,8 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	// Delete DBClusterParameterGroup if it exists
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
 	clusterParamGroupKey := client.ObjectKey{Name: paramGroupName}
-	if err := p.k8sClient.Get(ctx, clusterParamGroupKey, dbClusterParamGroup); err == nil {
-		if err := p.k8sClient.Delete(ctx, dbClusterParamGroup, deletionPolicy); err != nil {
+	if err := p.Client.Get(ctx, clusterParamGroupKey, dbClusterParamGroup); err == nil {
+		if err := p.Client.Delete(ctx, dbClusterParamGroup, deletionPolicy); err != nil {
 			return false, err
 		}
 	}
@@ -104,8 +105,8 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	// Delete DBParameterGroup if it exists
 	dbParameterGroup := &crossplaneaws.DBParameterGroup{}
 	paramGroupKey := client.ObjectKey{Name: paramGroupName}
-	if err := p.k8sClient.Get(ctx, paramGroupKey, dbParameterGroup); err == nil {
-		if err := p.k8sClient.Delete(ctx, dbParameterGroup, deletionPolicy); err != nil {
+	if err := p.Client.Get(ctx, paramGroupKey, dbParameterGroup); err == nil {
+		if err := p.Client.Delete(ctx, dbParameterGroup, deletionPolicy); err != nil {
 			return false, err
 		}
 	}
@@ -113,8 +114,8 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	// Delete DBCluster if it exists
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: spec.ResourceName}
-	if err := p.k8sClient.Get(ctx, clusterKey, dbCluster); err == nil {
-		if err := p.k8sClient.Delete(ctx, dbCluster, deletionPolicy); err != nil {
+	if err := p.Client.Get(ctx, clusterKey, dbCluster); err == nil {
+		if err := p.Client.Delete(ctx, dbCluster, deletionPolicy); err != nil {
 			return false, err
 		}
 	}
@@ -122,8 +123,8 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	// Delete DBInstance if it exists
 	instanceKey := client.ObjectKey{Name: spec.ResourceName}
 	dbInstance := &crossplaneaws.DBInstance{}
-	if err := p.k8sClient.Get(ctx, instanceKey, dbInstance); err == nil {
-		if err := p.k8sClient.Delete(ctx, dbInstance, deletionPolicy); err != nil {
+	if err := p.Client.Get(ctx, instanceKey, dbInstance); err == nil {
+		if err := p.Client.Delete(ctx, dbInstance, deletionPolicy); err != nil {
 			return false, err
 		}
 	}
@@ -131,8 +132,8 @@ func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	// Delete secondary DBInstance if it exists
 	dbInstance2 := &crossplaneaws.DBInstance{}
 	instance2Key := client.ObjectKey{Name: spec.ResourceName + "-2"}
-	if err := p.k8sClient.Get(ctx, instance2Key, dbInstance2); err == nil {
-		if err := p.k8sClient.Delete(ctx, dbInstance2, deletionPolicy); err != nil {
+	if err := p.Client.Get(ctx, instance2Key, dbInstance2); err == nil {
+		if err := p.Client.Delete(ctx, dbInstance2, deletionPolicy); err != nil {
 			return false, err
 		}
 	}
@@ -151,10 +152,10 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 	paramGroupName := getParameterGroupName(params)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 
-	err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup)
+	err := p.Client.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup)
 	if errors.IsNotFound(err) {
 		logger.Info("Creating Postgres Instance parameter group", "paramGroupName", paramGroupName)
-		if createErr := p.k8sClient.Create(ctx, p.postgresDBInstance(params)); createErr != nil {
+		if createErr := p.Client.Create(ctx, p.postgresDBParameterGroup(params)); createErr != nil {
 			return fmt.Errorf("failed to create DB parameter group: %w", createErr)
 		}
 	} else if err != nil {
@@ -165,17 +166,17 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 	dbInstance := &crossplaneaws.DBInstance{}
 	instanceKey := client.ObjectKey{Name: params.ResourceName}
 
-	err = p.k8sClient.Get(ctx, instanceKey, dbInstance)
+	err = p.Client.Get(ctx, instanceKey, dbInstance)
 	if errors.IsNotFound(err) {
 		dbInstance = p.postgresDBInstance(params)
 
 		// Create master password secret before creating the DB instance
-		if passwordErr := ManageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef, p.k8sClient); passwordErr != nil {
+		if passwordErr := ManageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef, p.Client); passwordErr != nil {
 			return fmt.Errorf("failed to manage master password for DB instance %s: %w", params.ResourceName, passwordErr)
 		}
 
 		logger.Info("Creating Postgres db instance", "dbInstance", params.ResourceName)
-		if createErr := p.k8sClient.Create(ctx, dbInstance); createErr != nil {
+		if createErr := p.Client.Create(ctx, dbInstance); createErr != nil {
 			return fmt.Errorf("failed to create DB instance %s: %w", params.ResourceName, createErr)
 		}
 	} else if err != nil {
@@ -198,10 +199,10 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	// Handle database instance parameter group
 	paramGroupName := getParameterGroupName(params)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
-	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
+	if err := p.Client.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("Creating Aurora DB Instance parameter group", "paramGroupName", paramGroupName)
-			if err := p.k8sClient.Create(ctx, p.auroraInstanceParamGroup(params)); err != nil {
+			if err := p.Client.Create(ctx, p.auroraInstanceParamGroup(params)); err != nil {
 				return fmt.Errorf("failed to create DB parameter group: %w", err)
 			}
 		} else {
@@ -211,10 +212,10 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 
 	// Handle database cluster parameter group
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
-	if err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbClusterParamGroup); err != nil {
+	if err := p.Client.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbClusterParamGroup); err != nil {
 		if errors.IsNotFound(err) {
 			logger.Info("Creating Aurora DB Cluster parameter group", "paramGroupName", paramGroupName)
-			if err := p.k8sClient.Create(ctx, p.auroraClusterParamGroup(params)); err != nil {
+			if err := p.Client.Create(ctx, p.auroraClusterParamGroup(params)); err != nil {
 				return fmt.Errorf("failed to create DB parameter group: %w", err)
 			}
 		} else {
@@ -225,16 +226,16 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	// Handle aurora database cluster creation
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: params.ResourceName}
-	if err := p.k8sClient.Get(ctx, clusterKey, dbCluster); err != nil {
+	if err := p.Client.Get(ctx, clusterKey, dbCluster); err != nil {
 		if errors.IsNotFound(err) {
 			dbCluster = p.auroraDBCluster(params)
 			// Create master password secret before creating the DB instance
-			passwordErr := ManageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef, p.k8sClient)
+			passwordErr := ManageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef, p.Client)
 			if passwordErr != nil {
 				return fmt.Errorf("failed to manage master password: %w", passwordErr)
 			}
 			logger.Info("Creating Aurora DB Cluster", "name", params.ResourceName)
-			if err := p.k8sClient.Create(ctx, dbCluster); err != nil {
+			if err := p.Client.Create(ctx, dbCluster); err != nil {
 				return fmt.Errorf("failed to create DB instance: %w", err)
 			}
 		} else {
@@ -245,11 +246,11 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	// Handle primary database instance
 	primaryDbInstance := &crossplaneaws.DBInstance{}
 	primaryInstanceKey := client.ObjectKey{Name: params.ResourceName}
-	if err := p.k8sClient.Get(ctx, primaryInstanceKey, primaryDbInstance); err != nil {
+	if err := p.Client.Get(ctx, primaryInstanceKey, primaryDbInstance); err != nil {
 		if errors.IsNotFound(err) {
 			primaryDbInstance = p.auroraDBInstance(params, false)
 			logger.Info("Creating Aurora DB Instance", "name", params.ResourceName)
-			if err := p.k8sClient.Create(ctx, primaryDbInstance); err != nil {
+			if err := p.Client.Create(ctx, primaryDbInstance); err != nil {
 				return fmt.Errorf("failed to create DB instance: %w", err)
 			}
 		} else {
@@ -275,11 +276,11 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	if basefun.GetMultiAZEnabled(p.config) {
 		secondaryDbInstance := &crossplaneaws.DBInstance{}
 		secondaryInstanceKey := client.ObjectKey{Name: params.ResourceName + "-2"}
-		if err := p.k8sClient.Get(ctx, secondaryInstanceKey, secondaryDbInstance); err != nil {
+		if err := p.Client.Get(ctx, secondaryInstanceKey, secondaryDbInstance); err != nil {
 			if errors.IsNotFound(err) {
 				secondaryDbInstance = p.auroraDBInstance(params, true)
 				logger.Info("Creating Aurora DB Secondary Instance", "name", params.ResourceName+"-2")
-				if err := p.k8sClient.Create(ctx, secondaryDbInstance); err != nil {
+				if err := p.Client.Create(ctx, secondaryDbInstance); err != nil {
 					return fmt.Errorf("failed to create DB instance: %w", err)
 				}
 			} else {
@@ -491,7 +492,7 @@ func (p *AWSProvider) updateDBInstance(ctx context.Context, params DatabaseSpec,
 		dbInstance.Spec.ForProvider.PreferredMaintenanceWindow = params.PreferredMaintenanceWindow
 	}
 
-	err = p.k8sClient.Patch(ctx, dbInstance, patchDBInstance)
+	err = p.Client.Patch(ctx, dbInstance, patchDBInstance)
 	if err != nil {
 		return err
 	}
@@ -750,7 +751,7 @@ func (p *AWSProvider) updateAuroraDBCluster(ctx context.Context, params Database
 		return nil
 	}
 
-	err = p.k8sClient.Patch(ctx, dbCluster, patchDBCluster)
+	err = p.Client.Patch(ctx, dbCluster, patchDBCluster)
 	if err != nil {
 		return err
 	}
@@ -770,7 +771,7 @@ func (p *AWSProvider) configureDBTags(params *DatabaseSpec) {
 func (p *AWSProvider) isDBInstanceReady(ctx context.Context, instanceName string) (bool, error) {
 	dbInstance := &crossplaneaws.DBInstance{}
 	instanceKey := client.ObjectKey{Name: instanceName}
-	if err := p.k8sClient.Get(ctx, instanceKey, dbInstance); err != nil {
+	if err := p.Client.Get(ctx, instanceKey, dbInstance); err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
 		}
@@ -782,7 +783,7 @@ func (p *AWSProvider) isDBInstanceReady(ctx context.Context, instanceName string
 func (p *AWSProvider) isDBClusterReady(ctx context.Context, clusterName string) (bool, error) {
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: clusterName}
-	if err := p.k8sClient.Get(ctx, clusterKey, dbCluster); err != nil {
+	if err := p.Client.Get(ctx, clusterKey, dbCluster); err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
 		}
@@ -793,7 +794,7 @@ func (p *AWSProvider) isDBClusterReady(ctx context.Context, clusterName string) 
 
 func (p *AWSProvider) markClusterAsInactive(ctx context.Context, name string) (bool, error) {
 	dbCluster := &crossplaneaws.DBCluster{}
-	err := p.k8sClient.Get(ctx, client.ObjectKey{
+	err := p.Client.Get(ctx, client.ObjectKey{
 		Name: name,
 	}, dbCluster)
 	if err != nil {
@@ -807,7 +808,7 @@ func (p *AWSProvider) markClusterAsInactive(ctx context.Context, name string) (b
 	patchDBInstance := client.MergeFrom(dbCluster.DeepCopy())
 	dbCluster.Spec.ForProvider.Tags = changeToInactive(dbCluster.Spec.ForProvider.Tags)
 
-	err = p.k8sClient.Patch(ctx, dbCluster, patchDBInstance)
+	err = p.Client.Patch(ctx, dbCluster, patchDBInstance)
 	if err != nil {
 		return false, err
 	}
@@ -816,7 +817,7 @@ func (p *AWSProvider) markClusterAsInactive(ctx context.Context, name string) (b
 
 func (p *AWSProvider) markInstanceAsInactive(ctx context.Context, name string) (bool, error) {
 	dbInstance := &crossplaneaws.DBInstance{}
-	err := p.k8sClient.Get(ctx, client.ObjectKey{
+	err := p.Client.Get(ctx, client.ObjectKey{
 		Name: name,
 	}, dbInstance)
 	if err != nil {
@@ -830,7 +831,7 @@ func (p *AWSProvider) markInstanceAsInactive(ctx context.Context, name string) (
 	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
 	dbInstance.Spec.ForProvider.Tags = changeToInactive(dbInstance.Spec.ForProvider.Tags)
 
-	err = p.k8sClient.Patch(ctx, dbInstance, patchDBInstance)
+	err = p.Client.Patch(ctx, dbInstance, patchDBInstance)
 	if err != nil {
 		return false, err
 	}

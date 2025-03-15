@@ -91,7 +91,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 			SnapshotID:                 nil,
 		}
 		provider = &AWSProvider{
-			k8sClient: k8sClient,
+			Client:    k8sClient,
 			config:    controllerConfig,
 			serviceNS: "db-controller",
 		}
@@ -480,7 +480,7 @@ func TestIsDBInstanceReady(t *testing.T) {
 			}
 
 			provider := &AWSProvider{
-				k8sClient: fakeClient,
+				Client: fakeClient,
 			}
 
 			ready, err := provider.isDBInstanceReady(ctx, test.instanceName)
@@ -568,7 +568,7 @@ func TestIsDBClusterReady(t *testing.T) {
 			}
 
 			provider := &AWSProvider{
-				k8sClient: fakeClient,
+				Client: fakeClient,
 			}
 
 			ready, err := provider.isDBClusterReady(ctx, test.clusterName)
