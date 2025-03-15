@@ -154,7 +154,7 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 	err := p.k8sClient.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup)
 	if errors.IsNotFound(err) {
 		logger.Info("Creating Postgres Instance parameter group", "paramGroupName", paramGroupName)
-		if createErr := p.k8sClient.Create(ctx, p.auroraInstanceParamGroup(params)); createErr != nil {
+		if createErr := p.k8sClient.Create(ctx, p.postgresDBInstance(params)); createErr != nil {
 			return fmt.Errorf("failed to create DB parameter group: %w", createErr)
 		}
 	} else if err != nil {
