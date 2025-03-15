@@ -402,6 +402,342 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 	})
 })
 
+var _ = Describe("AWSProvider create Aurora database", func() {
+	var (
+		provider *AWSProvider
+		ctx      context.Context
+		spec     DatabaseSpec
+	)
+
+	BeforeEach(func() {
+		ctx = context.TODO()
+		spec = DatabaseSpec{
+			ResourceName:                    "env-app-name-db-1d9fb876",
+			DatabaseName:                    "app-name-db",
+			MinStorageGB:                    10,
+			MaxStorageGB:                    20,
+			DBVersion:                       "15.7",
+			SkipFinalSnapshotBeforeDeletion: true,
+			MasterUsername:                  "root",
+			EnableIAMDatabaseAuthentication: true,
+			StorageType:                     "storage-type",
+			DeletionPolicy:                  xpv1.DeletionOrphan,
+			PubliclyAccessible:              true,
+			InstanceClass:                   "db.t3.medium",
+			DbType:                          "aurora-postgresql",
+			EnablePerfInsight:               true,
+			EnableCloudwatchLogsExport:      []*string{ptr.To("postgresql"), ptr.To("upgrade")},
+			BackupRetentionDays:             7,
+			CACertificateIdentifier:         ptr.To("rds-ca-2019"),
+			Tags: []ProviderTag{
+				{Key: "environment", Value: "test"},
+				{Key: "managed-by", Value: "controller-test"},
+			},
+			Labels: map[string]string{
+				"app":         "test-app",
+				"environment": "test",
+				"team":        "database",
+			},
+			PreferredMaintenanceWindow: ptr.To("sun:02:00-sun:03:00"),
+			BackupPolicy:               "daily",
+			SnapshotID:                 nil,
+		}
+		provider = &AWSProvider{
+			Client:    k8sClient,
+			config:    controllerConfig,
+			serviceNS: "db-controller",
+		}
+	})
+
+	AfterEach(func() {
+		Expect(k8sClient.DeleteAllOf(ctx, &crossplaneaws.DBInstance{})).To(Succeed())
+		Expect(k8sClient.DeleteAllOf(ctx, &crossplaneaws.DBParameterGroup{})).To(Succeed())
+		Expect(k8sClient.DeleteAllOf(ctx, &crossplaneaws.DBCluster{})).To(Succeed())
+	})
+
+	Describe("create aurora database", func() {
+		When("create function is called with correct parameters", func() {
+			It("should properly create crossplane resources", func() {
+				_, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Cluster Parameter group
+				clusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876-a-15"}, clusterParamGroup)
+				}).Should(Succeed())
+
+				// Instance parameter group
+				paramGroup := &crossplaneaws.DBParameterGroup{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876-a-15"}, paramGroup)
+				}).Should(Succeed())
+
+				// DB Cluster
+				dbCluster := &crossplaneaws.DBCluster{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbCluster)
+				}).Should(Succeed())
+
+				// Instance
+				dbInstance := &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
+				}).Should(Succeed())
+
+				// Master secret
+				masterSecret := &corev1.Secret{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, client.ObjectKey{Name: "env-app-name-db-1d9fb876-master", Namespace: "db-controller"}, masterSecret)
+				}).Should(Succeed())
+
+			})
+
+			It("should creates master password secret for the new database instance", func() {
+				_, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Define the expected secret key
+				secretKey := types.NamespacedName{
+					Name:      spec.ResourceName + MasterPasswordSuffix,
+					Namespace: provider.serviceNS,
+				}
+
+				// Validate that the secret is created
+				masterSecret := &corev1.Secret{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, secretKey, masterSecret)
+				}).Should(Succeed())
+
+				// Validate the secret contains the expected key
+				Expect(masterSecret.Data).To(HaveKey(MasterPasswordSecretKey))
+				Expect(masterSecret.Data[MasterPasswordSecretKey]).ToNot(BeEmpty())
+			})
+
+			//It("should return true when database is already provisioned", func() {
+			//	isReady, err := provider.CreateDatabase(ctx, spec)
+			//	Expect(err).ToNot(HaveOccurred())
+			//	Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
+			//
+			//	dbInstance := &crossplaneaws.DBInstance{}
+			//	Eventually(func() error {
+			//		return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
+			//	}).Should(Succeed())
+			//
+			//	updatedInstance := dbInstance.DeepCopy()
+			//	updatedInstance.Status.Conditions = []xpv1.Condition{
+			//		{
+			//			Type:               xpv1.TypeReady,
+			//			Status:             corev1.ConditionTrue,
+			//			LastTransitionTime: metav1.Now(),
+			//		},
+			//	}
+			//
+			//	// Manually trigger an Update (not Status().Update())
+			//	Expect(k8sClient.Update(ctx, updatedInstance)).To(Succeed())
+			//
+			//	// Call CreateDatabase again and check if it returns true
+			//	isReady, err = provider.CreateDatabase(ctx, spec)
+			//	Expect(err).ToNot(HaveOccurred())
+			//	Expect(isReady).To(BeTrue()) // Now, the database should be marked as ready
+			//})
+
+			It("should it propagates the spec provider tags to database instance, add operational active tag, and add backup tag", func() {
+				_, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
+				}).Should(Succeed())
+
+				expectedTags := spec.Tags
+				expectedTags = append(expectedTags, OperationalTAGActive)
+				expectedTags = append(expectedTags, ProviderTag{Key: BackupPolicyKey, Value: spec.BackupPolicy})
+				// Validate Tags
+				Expect(dbInstance.Spec.ForProvider.Tags).To(ConsistOf(ConvertFromProviderTags(expectedTags, func(tag ProviderTag) *crossplaneaws.Tag {
+					return &crossplaneaws.Tag{Key: &tag.Key, Value: &tag.Value}
+				})))
+			})
+
+			It("should configures RestoreDBInstanceBackupConfiguration when snapshot id is passed", func() {
+				newSpec := spec
+				newSpec.SnapshotID = ptr.To("snapshot-id")
+
+				_, err := provider.CreateDatabase(ctx, newSpec)
+				Expect(err).ToNot(HaveOccurred())
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
+				}).Should(Succeed())
+
+				Expect(dbInstance.Spec.ForProvider.RestoreFrom).ToNot(BeNil())
+				Expect(dbInstance.Spec.ForProvider.RestoreFrom.Snapshot.SnapshotIdentifier).To(Equal(newSpec.SnapshotID))
+				Expect(dbInstance.Spec.ForProvider.RestoreFrom.Source).To(Equal(ptr.To(SnapshotSource)))
+			})
+
+			It("should propagate passed parameter provider labels to database instance", func() {
+				_, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
+				}).Should(Succeed())
+
+				Expect(dbInstance.Labels).To(Equal(spec.Labels))
+			})
+		})
+	})
+
+	Describe("update aurora database", func() {
+		When("when crossplane cr preexists the creation call we need to update with provided parameters", func() {
+			It("should propagate the new spec fields to crossplane CR", func() {
+				isReady, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
+				}).Should(Succeed())
+
+				updatedSpec := spec
+				updatedSpec.MaxStorageGB = 30
+				updatedSpec.MinStorageGB = 20
+				updatedSpec.EnableCloudwatchLogsExport = []*string{ptr.To("not"), ptr.To("upgrade")}
+				updatedSpec.EnablePerfInsight = false
+				updatedSpec.DeletionPolicy = xpv1.DeletionDelete
+
+				isReady, err = provider.CreateDatabase(ctx, updatedSpec)
+				Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
+
+				dbInstance = &crossplaneaws.DBInstance{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
+				}).Should(Succeed())
+
+				Expect(dbInstance.Spec.ForProvider.EnablePerformanceInsights).To(Equal(ptr.To(updatedSpec.EnablePerfInsight)))
+				Expect(dbInstance.Spec.ResourceSpec.DeletionPolicy).To(Equal(updatedSpec.DeletionPolicy))
+				Expect(dbInstance.Spec.ForProvider.Engine).To(Equal(ptr.To(updatedSpec.DbType)))
+				Expect(dbInstance.Spec.ForProvider.EngineVersion).To(Equal(GetEngineVersion(updatedSpec, provider.config)))
+				Expect(dbInstance.Spec.ForProvider.DBInstanceClass).To(Equal(ptr.To(updatedSpec.InstanceClass)))
+				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-a-15"))
+				Expect(dbInstance.Spec.ForProvider.CACertificateIdentifier).To(Equal(updatedSpec.CACertificateIdentifier))
+				Expect(dbInstance.Spec.ForProvider.MultiAZ).To(Equal(ptr.To(basefun.GetMultiAZEnabled(provider.config))))
+				Expect(dbInstance.Spec.ForProvider.MasterUsername).To(Equal(ptr.To(updatedSpec.MasterUsername)))
+				Expect(dbInstance.Spec.ForProvider.PubliclyAccessible).To(Equal(ptr.To(updatedSpec.PubliclyAccessible)))
+				Expect(dbInstance.Spec.ForProvider.EnableIAMDatabaseAuthentication).To(Equal(ptr.To(updatedSpec.EnableIAMDatabaseAuthentication)))
+				Expect(dbInstance.Spec.ForProvider.BackupRetentionPeriod).To(Equal(ptr.To(updatedSpec.BackupRetentionDays)))
+				Expect(dbInstance.Spec.ForProvider.StorageEncrypted).To(Equal(ptr.To(true)))
+				Expect(dbInstance.Spec.ForProvider.StorageType).To(Equal(ptr.To(updatedSpec.StorageType)))
+				Expect(dbInstance.Spec.ForProvider.Port).To(Equal(ptr.To(updatedSpec.Port)))
+				Expect(dbInstance.Spec.ForProvider.PreferredMaintenanceWindow).To(Equal(updatedSpec.PreferredMaintenanceWindow))
+				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-a-15"))
+
+				// master password
+				Expect(dbInstance.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Name).To(Equal(updatedSpec.ResourceName + MasterPasswordSuffix))
+				Expect(dbInstance.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Namespace).To(Equal(provider.serviceNS))
+				Expect(dbInstance.Spec.ResourceSpec.WriteConnectionSecretToReference.Name).To(Equal(updatedSpec.ResourceName))
+				Expect(dbInstance.Spec.ResourceSpec.WriteConnectionSecretToReference.Namespace).To(Equal(provider.serviceNS))
+
+				// Validate VPC & Security Groups
+				Expect(dbInstance.Spec.ForProvider.VPCSecurityGroupIDRefs).To(ContainElement(xpv1.Reference{
+					Name: basefun.GetVpcSecurityGroupIDRefs(provider.config),
+				}))
+				Expect(dbInstance.Spec.ForProvider.DBSubnetGroupNameRef.Name).To(Equal(basefun.GetDbSubnetGroupNameRef(provider.config)))
+
+				// Validate Provider Config & Deletion Policy
+				Expect(dbInstance.Spec.ResourceSpec.ProviderConfigReference.Name).To(Equal(basefun.GetProviderConfig(provider.config)))
+			})
+		})
+	})
+
+	Describe("delete database interface usage", func() {
+		When("delete func is called with correct spec and no operational tagging", func() {
+			It("should delete postgres the database right away without adding operational tagging", func() {
+				By("creating a new database")
+				_, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+
+				deleted, err := provider.DeleteDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(deleted).To(BeTrue())
+
+				paramGroup := &crossplaneaws.DBParameterGroup{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876-15"}, paramGroup)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
+				Expect(err).To(HaveOccurred())
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+			})
+		})
+
+		When("delete func is called with correct spec and instructed to add inactive operational tagging", func() {
+			It("should delete postgres database with operational tagging only when tag is propagated to aws", func() {
+				By("creating a new database")
+				_, err := provider.CreateDatabase(ctx, spec)
+				Expect(err).ToNot(HaveOccurred())
+
+				deleteSpec := spec
+				deleteSpec.TagInactive = true
+				deleted, err := provider.DeleteDatabase(ctx, deleteSpec)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(deleted).To(BeFalse())
+
+				paramGroup := &crossplaneaws.DBParameterGroup{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876-a-15"}, paramGroup)
+				Expect(err).ToNot(HaveOccurred())
+
+				dbInstance := &crossplaneaws.DBInstance{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(dbInstance.Spec.ForProvider.Tags).To(ContainElement(&crossplaneaws.Tag{
+					Key:   ptr.To("operational-status"),
+					Value: ptr.To("inactive"),
+				}))
+
+				By("simulating the operational tagging propagated to aws")
+				patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
+				dbInstance.Status.AtProvider.TagList = append(
+					dbInstance.Status.AtProvider.TagList,
+					&crossplaneaws.Tag{Key: &OperationalTAGInactive.Key, Value: &OperationalTAGInactive.Value})
+
+				err = k8sClient.Patch(ctx, dbInstance, patchDBInstance)
+				Expect(err).ToNot(HaveOccurred())
+
+				// Cluster tags
+				cluster := &crossplaneaws.DBCluster{}
+				err = k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, cluster)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(cluster.Spec.ForProvider.Tags).To(ContainElement(&crossplaneaws.Tag{
+					Key:   ptr.To("operational-status"),
+					Value: ptr.To("inactive"),
+				}))
+
+				By("simulating the operational tagging propagated to aws")
+				patchDBcluster := client.MergeFrom(cluster.DeepCopy())
+				cluster.Status.AtProvider.TagList = append(
+					cluster.Status.AtProvider.TagList,
+					&crossplaneaws.Tag{Key: &OperationalTAGInactive.Key, Value: &OperationalTAGInactive.Value})
+
+				err = k8sClient.Patch(ctx, cluster, patchDBcluster)
+				Expect(err).ToNot(HaveOccurred())
+
+				deleted, err = provider.DeleteDatabase(ctx, deleteSpec)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(deleted).To(BeTrue())
+			})
+		})
+	})
+})
+
 func createFakeClientWithObjects(objects ...k8sRuntime.Object) client.Client {
 	sch := k8sRuntime.NewScheme()
 	_ = scheme.AddToScheme(sch)

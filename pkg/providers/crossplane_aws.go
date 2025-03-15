@@ -146,41 +146,25 @@ func (p *AWSProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSp
 }
 
 func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) error {
-	logger := log.FromContext(ctx)
-
-	// Handle database parameter group
-	paramGroupName := getParameterGroupName(params)
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
-
-	err := p.Client.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup)
-	if errors.IsNotFound(err) {
-		logger.Info("Creating Postgres Instance parameter group", "paramGroupName", paramGroupName)
-		if createErr := p.Client.Create(ctx, p.postgresDBParameterGroup(params)); createErr != nil {
-			return fmt.Errorf("failed to create DB parameter group: %w", createErr)
-		}
-	} else if err != nil {
-		return fmt.Errorf("failed to get DB parameter group: %w", err)
+	paramGroupKey := client.ObjectKey{Name: getParameterGroupName(params)}
+	if err := ensureResource(ctx, p.Client, paramGroupKey, dbParamGroup, func() (*crossplaneaws.DBParameterGroup, error) {
+		return p.postgresDBParameterGroup(params), nil
+	}); err != nil {
+		return err
 	}
 
-	// Handle database instance
 	dbInstance := &crossplaneaws.DBInstance{}
 	instanceKey := client.ObjectKey{Name: params.ResourceName}
-
-	err = p.Client.Get(ctx, instanceKey, dbInstance)
-	if errors.IsNotFound(err) {
+	if err := ensureResource(ctx, p.Client, instanceKey, dbInstance, func() (*crossplaneaws.DBInstance, error) {
 		dbInstance = p.postgresDBInstance(params)
-
-		// Create master password secret before creating the DB instance
-		if passwordErr := ManageMasterPassword(ctx, dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef, p.Client); passwordErr != nil {
-			return fmt.Errorf("failed to manage master password for DB instance %s: %w", params.ResourceName, passwordErr)
+		secretRef := dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef
+		if err := ManageMasterPassword(ctx, secretRef, p.Client); err != nil {
+			return nil, fmt.Errorf("failed to create master password %v", err)
 		}
-
-		logger.Info("Creating Postgres db instance", "dbInstance", params.ResourceName)
-		if createErr := p.Client.Create(ctx, dbInstance); createErr != nil {
-			return fmt.Errorf("failed to create DB instance %s: %w", params.ResourceName, createErr)
-		}
-	} else if err != nil {
-		return fmt.Errorf("failed to get DB instance %s: %w", params.ResourceName, err)
+		return dbInstance, nil
+	}); err != nil {
+		return err
 	}
 
 	if !dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -195,74 +179,50 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 }
 
 func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) error {
-	logger := log.FromContext(ctx)
-	// Handle database instance parameter group
-	paramGroupName := getParameterGroupName(params)
+	paramGroupKey := client.ObjectKey{Name: getParameterGroupName(params)}
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
-	if err := p.Client.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbParamGroup); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("Creating Aurora DB Instance parameter group", "paramGroupName", paramGroupName)
-			if err := p.Client.Create(ctx, p.auroraInstanceParamGroup(params)); err != nil {
-				return fmt.Errorf("failed to create DB parameter group: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get DB parameter group: %w", err)
-		}
+	err := ensureResource(ctx, p.Client, paramGroupKey, dbParamGroup, func() (*crossplaneaws.DBParameterGroup, error) {
+		return p.auroraInstanceParamGroup(params), nil
+	})
+	if err != nil {
+		return err
 	}
 
-	// Handle database cluster parameter group
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
-	if err := p.Client.Get(ctx, client.ObjectKey{Name: paramGroupName}, dbClusterParamGroup); err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("Creating Aurora DB Cluster parameter group", "paramGroupName", paramGroupName)
-			if err := p.Client.Create(ctx, p.auroraClusterParamGroup(params)); err != nil {
-				return fmt.Errorf("failed to create DB parameter group: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get DB parameter group: %w", err)
-		}
+	err = ensureResource(ctx, p.Client, paramGroupKey, dbClusterParamGroup, func() (*crossplaneaws.DBClusterParameterGroup, error) {
+		return p.auroraClusterParamGroup(params), nil
+	})
+	if err != nil {
+		return err
 	}
 
-	// Handle aurora database cluster creation
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: params.ResourceName}
-	if err := p.Client.Get(ctx, clusterKey, dbCluster); err != nil {
-		if errors.IsNotFound(err) {
-			dbCluster = p.auroraDBCluster(params)
-			// Create master password secret before creating the DB instance
-			passwordErr := ManageMasterPassword(ctx, dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef, p.Client)
-			if passwordErr != nil {
-				return fmt.Errorf("failed to manage master password: %w", passwordErr)
-			}
-			logger.Info("Creating Aurora DB Cluster", "name", params.ResourceName)
-			if err := p.Client.Create(ctx, dbCluster); err != nil {
-				return fmt.Errorf("failed to create DB instance: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get DB instance: %w", err)
+	err = ensureResource(ctx, p.Client, clusterKey, dbCluster, func() (*crossplaneaws.DBCluster, error) {
+		dbCluster = p.auroraDBCluster(params)
+		newSecret := dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef
+		if err := ManageMasterPassword(ctx, newSecret, p.Client); err != nil {
+			return nil, fmt.Errorf("failed to create master password %v", err)
 		}
-	}
+		return dbCluster, nil
+	})
 
 	// Handle primary database instance
 	primaryDbInstance := &crossplaneaws.DBInstance{}
 	primaryInstanceKey := client.ObjectKey{Name: params.ResourceName}
-	if err := p.Client.Get(ctx, primaryInstanceKey, primaryDbInstance); err != nil {
-		if errors.IsNotFound(err) {
-			primaryDbInstance = p.auroraDBInstance(params, false)
-			logger.Info("Creating Aurora DB Instance", "name", params.ResourceName)
-			if err := p.Client.Create(ctx, primaryDbInstance); err != nil {
-				return fmt.Errorf("failed to create DB instance: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to get DB instance: %w", err)
-		}
+	err = ensureResource(ctx, p.Client, primaryInstanceKey, primaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
+		primaryDbInstance = p.postgresDBInstance(params)
+		return primaryDbInstance, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	if !primaryDbInstance.ObjectMeta.DeletionTimestamp.IsZero() || !dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
 		return fmt.Errorf("can not create Cloud DB instance %s it is being deleted", params.ResourceName)
 	}
 
-	err := p.updateAuroraDBCluster(ctx, params, dbCluster)
+	err = p.updateAuroraDBCluster(ctx, params, dbCluster)
 	if err != nil {
 		return fmt.Errorf("failed to update DB cluster: %v", err)
 	}
@@ -276,16 +236,12 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	if basefun.GetMultiAZEnabled(p.config) {
 		secondaryDbInstance := &crossplaneaws.DBInstance{}
 		secondaryInstanceKey := client.ObjectKey{Name: params.ResourceName + "-2"}
-		if err := p.Client.Get(ctx, secondaryInstanceKey, secondaryDbInstance); err != nil {
-			if errors.IsNotFound(err) {
-				secondaryDbInstance = p.auroraDBInstance(params, true)
-				logger.Info("Creating Aurora DB Secondary Instance", "name", params.ResourceName+"-2")
-				if err := p.Client.Create(ctx, secondaryDbInstance); err != nil {
-					return fmt.Errorf("failed to create DB instance: %w", err)
-				}
-			} else {
-				return fmt.Errorf("failed to get DB instance: %w", err)
-			}
+		err = ensureResource(ctx, p.Client, secondaryInstanceKey, secondaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
+			secondaryDbInstance = p.postgresDBInstance(params)
+			return secondaryDbInstance, nil
+		})
+		if err != nil {
+			return err
 		}
 
 		if !secondaryDbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -868,21 +824,19 @@ func changeToInactive(tags []*crossplaneaws.Tag) []*crossplaneaws.Tag {
 // addInactiveOperationalTag marks the instance with operational-status: inactive tag,
 // it returns ErrTagNotPropagated if the tag is not yet propagated to the cloud resource
 func (p *AWSProvider) addInactiveOperationalTag(ctx context.Context, spec DatabaseSpec) (bool, error) {
-	for _, tag := range spec.Tags {
-		if tag.Key == OperationalTAGInactive.Key || tag.Value == OperationalTAGInactive.Value {
-			return true, nil
-		}
-	}
-
-	if tagged, err := p.markInstanceAsInactive(ctx, spec.ResourceName); err != nil || !tagged {
+	instanceTagged, err := p.markInstanceAsInactive(ctx, spec.ResourceName)
+	if err != nil {
 		return false, err
 	}
 
-	if spec.DbType == AwsAuroraPostgres {
-		if tagged, err := p.markClusterAsInactive(ctx, spec.ResourceName); err != nil || !tagged {
-			return false, err
-		}
+	if spec.DbType != AwsAuroraPostgres {
+		return instanceTagged, nil
 	}
 
-	return true, nil
+	clusterTagged, err := p.markClusterAsInactive(ctx, spec.ResourceName)
+	if err != nil {
+		return false, err
+	}
+
+	return instanceTagged && clusterTagged, nil
 }

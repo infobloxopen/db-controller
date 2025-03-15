@@ -93,3 +93,22 @@ func isReady(cond []xpv1.Condition) (bool, error) {
 	}
 	return false, nil
 }
+
+// ensureResource ensures that a given Kubernetes resource exists in the cluster.
+// If the resource does not exist, it creates a new instance using the provided createFunc.
+func ensureResource[T client.Object](ctx context.Context, k8sClient client.Client, key client.ObjectKey, resource T, createFunc func() (T, error)) error {
+	if err := k8sClient.Get(ctx, key, resource); err != nil {
+		if errors.IsNotFound(err) {
+			newResource, createErr := createFunc()
+			if createErr != nil {
+				return createErr
+			}
+			if err := k8sClient.Create(ctx, newResource); err != nil {
+				return fmt.Errorf("failed to create resource: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to get resource: %w", err)
+		}
+	}
+	return nil
+}
