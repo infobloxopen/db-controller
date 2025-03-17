@@ -44,24 +44,32 @@ func updateMetrics(ctx context.Context, log logr.Logger, client client.Client) {
 	metrics.ExistingSourceClaims.Reset()
 
 	for _, dbClaim := range databaseClaims.Items {
-		metrics.TotalDatabaseClaims.WithLabelValues(dbClaim.Namespace).Inc()
+		dbVersion := dbClaim.Spec.DBVersion
+		if dbVersion == "" {
+			dbVersion = "none"
+		}
+		dbType := string(dbClaim.Spec.Type)
+		if dbType == "" {
+			dbType = "none"
+		}
+		metrics.TotalDatabaseClaims.WithLabelValues(dbClaim.Namespace, dbClaim.Spec.AppID, dbType, dbVersion).Inc()
 
 		if dbClaim.Status.Error != "" {
-			metrics.ErrorStateClaims.WithLabelValues(dbClaim.Namespace).Inc()
+			metrics.ErrorStateClaims.WithLabelValues(dbClaim.Namespace, dbClaim.Spec.AppID, dbClaim.Status.Error).Inc()
 		}
 
 		if dbClaim.Status.MigrationState != "" {
-			metrics.MigrationStateClaims.WithLabelValues(dbClaim.Namespace, dbClaim.Status.MigrationState).Inc()
+			metrics.MigrationStateClaims.WithLabelValues(dbClaim.Namespace, dbClaim.Status.MigrationState, dbClaim.Spec.AppID).Inc()
 		}
 
 		if dbClaim.Status.ActiveDB.DbState != "" {
-			metrics.ActiveDBState.WithLabelValues(dbClaim.Namespace, string(dbClaim.Status.ActiveDB.DbState)).Inc()
+			metrics.ActiveDBState.WithLabelValues(dbClaim.Namespace, string(dbClaim.Status.ActiveDB.DbState), dbClaim.Spec.AppID).Inc()
 		}
 
 		if dbClaim.Spec.UseExistingSource != nil && *dbClaim.Spec.UseExistingSource {
-			metrics.ExistingSourceClaims.WithLabelValues(dbClaim.Namespace, "true").Inc()
+			metrics.ExistingSourceClaims.WithLabelValues(dbClaim.Namespace, dbClaim.Spec.AppID, "true").Inc()
 		} else {
-			metrics.ExistingSourceClaims.WithLabelValues(dbClaim.Namespace, "false").Inc()
+			metrics.ExistingSourceClaims.WithLabelValues(dbClaim.Namespace, "false", dbClaim.Spec.AppID).Inc()
 		}
 	}
 }

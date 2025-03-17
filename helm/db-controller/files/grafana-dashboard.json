@@ -68,41 +68,102 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
+  "id": 18647,
   "links": [],
   "liveNow": false,
   "panels": [
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                0
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "A",
+                "5m",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "keep_state",
+        "for": "5m",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "database claims in error state.",
+        "name": "DbClaim reconcile error",
+        "noDataState": "ok",
+        "notifications": [
+          {
+            "uid": "devops-alerts"
+          }
+        ]
       },
-      "id": 58,
-      "panels": [],
-      "title": "DB Claims custom metrics",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
+      "description": "database claims in error state.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
-          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
               }
             ]
           }
@@ -113,46 +174,49 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 0
       },
-      "id": 69,
+      "id": 70,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "textMode": "auto"
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
-      "pluginVersion": "9.5.10",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(dbcontroller_total_database_claims{app_kubernetes_io_instance=\"db-controller\"})",
-          "instant": false,
+          "expr": "group without(app_kubernetes_io_component, app_kubernetes_io_instance, app_kubernetes_io_name, instance, job, kubernetes_namespace, kubernetes_pod_name, pod_template_hash) \n(dbcontroller_error_state_claims)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total number of DB claims",
-      "type": "stat"
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 0,
+          "visible": true
+        }
+      ],
+      "title": "DbClaim reconcile error",
+      "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fieldConfig": {
         "defaults": {
@@ -231,7 +295,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 0
       },
       "id": 54,
       "options": {
@@ -260,7 +324,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -275,11 +339,23 @@
       "type": "barchart"
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 58,
+      "panels": [],
+      "title": "DB Claims custom metrics",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
-      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -291,12 +367,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "blue",
                 "value": null
               }
             ]
-          },
-          "unit": "none"
+          }
         },
         "overrides": []
       },
@@ -306,7 +381,7 @@
         "x": 0,
         "y": 9
       },
-      "id": 56,
+      "id": 69,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -326,24 +401,24 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(dbcontroller_active_db_state{db_state=\"ready\", app_kubernetes_io_instance=\"db-controller\"})",
+          "expr": "sum(dbcontroller_total_database_claims{app_kubernetes_io_instance=\"db-controller\"})",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "DB claims with ready db state",
+      "title": "Total number of DB claims",
       "type": "stat"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fieldConfig": {
         "defaults": {
@@ -407,7 +482,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "expr": "sum by(env) (dbcontroller_error_state_claims{app_kubernetes_io_instance=\"db-controller\"})",
@@ -420,12 +495,191 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 56,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.10",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(dbcontroller_active_db_state{db_state=\"ready\", app_kubernetes_io_instance=\"db-controller\"})",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "DB claims with ready db state",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Displays the 95th percentile of reconciliation duration for the databaseclaim controller over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "95th percentile of reconciliation duration"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 60,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.10",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.95, sum(rate(controller_runtime_reconcile_time_seconds_bucket[1m])) by (le))",
+          "instant": false,
+          "legendFormat": "95th percentile of reconciliation duration",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Reconciliation Duration",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 25
       },
       "id": 62,
       "panels": [],
@@ -435,7 +689,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "description": "Calculates the total rate of reconciliations per minute for the databaseclaim controller.",
       "fieldConfig": {
@@ -512,7 +766,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 26
       },
       "id": 57,
       "options": {
@@ -532,7 +786,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "expr": "sum(rate(controller_runtime_reconcile_total{controller=\"databaseclaim\"}[1m])) * 60",
@@ -547,211 +801,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
-      },
-      "description": "Displays the 95th percentile of reconciliation duration for the databaseclaim controller over a 5-minute window.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "95th percentile of reconciliation duration"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 18
-      },
-      "id": 60,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "9.5.10",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "histogram_quantile(0.95, sum(rate(controller_runtime_reconcile_time_seconds_bucket[1m])) by (le))",
-          "instant": false,
-          "legendFormat": "95th percentile of reconciliation duration",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Reconciliation Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
-      },
-      "description": "Calculates the percentage of successful reconciliations over the total number of reconciliations for the databaseclaim controller.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 26
-      },
-      "id": 59,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "9.5.10",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(controller_runtime_reconcile_total{controller=\"databaseclaim\", result=\"success\"}[1m])) * 60",
-          "legendFormat": "rate of successful reconciliations over the last minute",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Reconciliation Success Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "description": "Calculates the total rate of reconciliation errors per minute for the databaseclaim controller.",
       "fieldConfig": {
@@ -863,7 +913,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "expr": "sum(rate(controller_runtime_reconcile_errors_total{controller=\"databaseclaim\"}[1m])) * 60",
@@ -876,28 +926,45 @@
       "type": "timeseries"
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 34
-      },
-      "id": 68,
-      "panels": [],
-      "title": "Work Queue Metrics",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
-      "description": "Shows the current depth of the work queue for the databaseclaim controller.",
+      "description": "Calculates the percentage of successful reconciliations over the total number of reconciliations for the databaseclaim controller.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -906,13 +973,10 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          }
+          },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -920,46 +984,42 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 34
       },
-      "id": 63,
+      "id": 59,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "textMode": "auto"
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "9.5.10",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(workqueue_depth)",
-          "instant": false,
-          "legendFormat": "__auto",
+          "expr": "sum(rate(controller_runtime_reconcile_total{controller=\"databaseclaim\", result=\"success\"}[1m])) * 60",
+          "legendFormat": "rate of successful reconciliations over the last minute",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Work Queue Depth",
-      "type": "stat"
+      "title": "Reconciliation Success Rate",
+      "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "description": "Displays the 95th percentile of time items spend in the work queue for the databaseclaim controller.",
       "fieldConfig": {
@@ -1050,7 +1110,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 35
+        "y": 34
       },
       "id": 64,
       "options": {
@@ -1069,7 +1129,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(workqueue_queue_duration_seconds_bucket[1m])) by (le))",
@@ -1082,45 +1142,28 @@
       "type": "timeseries"
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 68,
+      "panels": [],
+      "title": "Work Queue Metrics",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
-      "description": "Displays the 95th percentile of time taken to process items in the work queue for the databaseclaim controller.",
+      "description": "Shows the current depth of the work queue for the databaseclaim controller.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
@@ -1135,41 +1178,9 @@
                 "value": 80
               }
             ]
-          },
-          "unit": "s"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "histogram_quantile(0.95, sum(rate(workqueue_work_duration_seconds_bucket[5m])) by (le))"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "95th percentile of time taken to process items in the work queue"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
           }
-        ]
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -1177,39 +1188,44 @@
         "x": 0,
         "y": 43
       },
-      "id": 65,
+      "id": 63,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "auto"
       },
+      "pluginVersion": "9.5.10",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(workqueue_work_duration_seconds_bucket[1m])) by (le))",
-          "legendFormat": "95th percentile of time taken to process items in the work queue",
+          "exemplar": false,
+          "expr": "sum(workqueue_depth)",
+          "instant": false,
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Work Queue Processing Duration",
-      "type": "timeseries"
+      "title": "Work Queue Depth",
+      "type": "stat"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "description": "Shows the maximum time that any item has been waiting in the work queue for the databaseclaim controller.",
       "fieldConfig": {
@@ -1305,7 +1321,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -1322,7 +1338,194 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
+      },
+      "description": "Displays the 95th percentile of time taken to process items in the work queue for the databaseclaim controller.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "histogram_quantile(0.95, sum(rate(workqueue_work_duration_seconds_bucket[5m])) by (le))"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "95th percentile of time taken to process items in the work queue"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
+      "id": 65,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(workqueue_work_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "95th percentile of time taken to process items in the work queue",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Work Queue Processing Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 51
+      },
+      "id": 41,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.10",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "exemplar": true,
+          "expr": "avg(process_resident_memory_bytes)",
+          "interval": "",
+          "legendFormat": "Avg Memory",
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Memory usage",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
       },
       "description": "Calculates the rate of work queue retries per minute for the databaseclaim controller.",
       "fieldConfig": {
@@ -1414,7 +1617,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "id": 67,
       "options": {
@@ -1433,7 +1636,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "expr": "sum(rate(workqueue_retries_total{name=\"databaseclaim\"}[1m])) * 60",
@@ -1446,22 +1649,9 @@
       "type": "timeseries"
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 59
-      },
-      "id": 45,
-      "panels": [],
-      "title": "Computation Metrics",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fieldConfig": {
         "defaults": {
@@ -1518,8 +1708,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 60
+        "x": 12,
+        "y": 59
       },
       "id": 39,
       "options": {
@@ -1539,7 +1729,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "exemplar": true,
           "expr": "avg(rate(process_cpu_seconds_total[2m]))",
@@ -1552,66 +1742,17 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
+      "collapsed": false,
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 60
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 67
       },
-      "id": 41,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "9.5.10",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "avg(process_resident_memory_bytes)",
-          "interval": "",
-          "legendFormat": "Avg Memory",
-          "refId": "A"
-        }
-      ],
-      "title": "Avg Memory usage",
-      "type": "stat"
+      "id": 45,
+      "panels": [],
+      "title": "Computation Metrics",
+      "type": "row"
     },
     {
       "collapsed": false,
@@ -1629,7 +1770,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fieldConfig": {
         "defaults": {
@@ -1676,7 +1817,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "expr": "sum(databases_created_total)",
           "legendFormat": "Total Databases Created",
@@ -1689,7 +1830,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fieldConfig": {
         "defaults": {
@@ -1736,7 +1877,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "builder",
           "expr": "count(kube_customresource{kind=\"DatabaseClaim\"})",
@@ -1747,7 +1888,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "hide": false,
           "refId": "B"
@@ -1755,7 +1896,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "hide": false,
           "refId": "C"
@@ -1765,6 +1906,10 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
       "fieldConfig": {
         "defaults": {
           "mappings": [],
@@ -1808,6 +1953,10 @@
       "pluginVersion": "9.5.10",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
           "expr": "sum(database_creation_errors_total)",
           "legendFormat": "Creation Errors",
           "refId": "A"
@@ -1845,7 +1994,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fieldConfig": {
         "defaults": {
@@ -1892,14 +2041,15 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
-          "exemplar": true,
+          "exemplar": false,
           "expr": "increase(password_rotated_total[$__range])",
+          "instant": true,
           "interval": "",
           "legendFormat": "",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
@@ -1913,7 +2063,7 @@
       "dashes": false,
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -1953,7 +2103,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -1967,7 +2117,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "expr": "increase(password_rotation_time_seconds_sum[24h]) / increase(password_rotation_time_seconds_count[24h])\n",
@@ -2016,7 +2166,7 @@
       "dashes": false,
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_APPINFRA-PROMETHEUS}"
+        "uid": "000000001"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -2056,7 +2206,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APPINFRA-PROMETHEUS}"
+            "uid": "000000001"
           },
           "exemplar": true,
           "expr": "sum(rate(password_rotation_time_seconds_bucket[5m])) by (reason)",
@@ -2113,6 +2263,6 @@
   "timezone": "",
   "title": "Database Controller Metrics",
   "uid": "b237b85a-5ea2-4bc3-8411-504e07e0e4f3",
-  "version": 39,
+  "version": 178,
   "weekStart": ""
 }
