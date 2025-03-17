@@ -6,11 +6,11 @@ import (
 )
 
 var (
-	UsersCreated = prometheus.NewCounter(
+	UsersCreated = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "users_created_total",
 			Help: "Number of created users ",
-		},
+		}, []string{"username", "dburl"},
 	)
 	UsersDeleted = prometheus.NewCounter(
 		prometheus.CounterOpts{
@@ -22,7 +22,7 @@ var (
 		prometheus.CounterOpts{
 			Name: "users_create_errors_total",
 			Help: "Number of users created with errors",
-		}, []string{"reason"},
+		}, []string{"reason", "username", "dburl", "error"},
 	)
 	UsersDeletedErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -87,35 +87,35 @@ var (
 			Name: "dbcontroller_total_database_claims",
 			Help: "Total number of database claims",
 		},
-		[]string{"namespace"},
+		[]string{"namespace", "app_id", "db_tye", "db_version"},
 	)
 	ExistingSourceClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_existing_source_claims",
 			Help: "Number of database claims using existing source",
 		},
-		[]string{"namespace", "use_existing_source"},
+		[]string{"namespace", "use_existing_source", "app_id"},
 	)
 	ErrorStateClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_error_state_claims",
 			Help: "Number of database claims in error state",
 		},
-		[]string{"namespace"},
+		[]string{"namespace", "app_id", "error"},
 	)
 	MigrationStateClaims = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_migration_state_claims",
 			Help: "Number of database claims in each migration state",
 		},
-		[]string{"namespace", "migration_state"},
+		[]string{"namespace", "migration_state", "app_id"},
 	)
 	ActiveDBState = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dbcontroller_active_db_state",
 			Help: "State of active databases",
 		},
-		[]string{"namespace", "db_state"},
+		[]string{"namespace", "db_state", "app_id"},
 	)
 )
 
