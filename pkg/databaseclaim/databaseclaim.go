@@ -480,6 +480,7 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 		logr.Error(err, "unable to update users, user credentials not persisted to status object")
 		return err
 	}
+
 	if err = r.statusManager.UpdateStatus(ctx, dbClaim); err != nil {
 		return err
 	}
@@ -491,6 +492,13 @@ func (r *DatabaseClaimReconciler) reconcileUseExistingDB(ctx context.Context, re
 			return err
 		}
 		logr.V(1).Info("password reset, created secret", "secret", dbClaim.Spec.SecretName)
+	}
+	logr.V(1).Info("creating default extensions", "database", dbClaim.Spec.DatabaseName)
+	err = dbClient.CreateDefaultExtensions(dbName)
+	if err != nil {
+		msg := fmt.Sprintf("error creating default extensions for %s", dbName)
+		logr.Error(err, msg)
+		return err
 	}
 	err = dbClient.ManageSystemFunctions(dbName, basefun.GetSystemFunctions(r.Config.Viper))
 	if err != nil {
@@ -574,6 +582,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	r.statusManager.UpdateClusterStatus(&dbClaim.Status.NewDB, &reqInfo.HostParams)
 
 	// Updates the database name
+	logr.V(1).Info("creating database and extensions", "database", dbClaim.Spec.DatabaseName)
 	if err := r.createDatabaseAndExtensions(ctx, dbClient, dbClaim, operationalMode); err != nil {
 		logr.Error(err, "unable to create database and extensions")
 		return r.statusManager.SetError(ctx, dbClaim, err)
@@ -1243,7 +1252,8 @@ func (r *DatabaseClaimReconciler) manageUserAndExtensions(ctx context.Context, r
 		}
 	}
 
-	if statusNewDB.UserUpdatedAt == nil || time.Since(statusActiveDB.UserUpdatedAt.Time) >= rotationTime {
+	if statusNewDB.UserUpdatedAt == nil ||
+		(statusActiveDB != nil && statusActiveDB.UserUpdatedAt != nil && time.Since(statusActiveDB.UserUpdatedAt.Time) >= rotationTime) {
 		logger.V(1).Info("rotating_user_password",
 			"currentUser", currentUser,
 			"dbu", dbu,

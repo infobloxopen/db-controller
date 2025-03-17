@@ -25,7 +25,7 @@ const (
 
 var defaultExtensions = []string{"citext", "uuid-ossp",
 	"pgcrypto", "hstore", "pg_stat_statements",
-	"plpgsql", "hll"}
+	"plpgsql"}
 
 var specialExtensionsMap = map[string]func(*client, string, string) error{
 	"pg_partman": (*client).CreatePgPartmanExtension,
@@ -224,13 +224,6 @@ func (pc *client) CreateDefaultExtensions(dbName string) error {
 	pc.log.Info("connected to " + dbName)
 	defer db.Close()
 	for _, s := range getDefaulExtensions() {
-		ok, err := pc.CheckExtension(s)
-		if err != nil {
-			return fmt.Errorf("psql_extension_query %s: %w", s, err)
-		}
-		if !ok {
-			continue
-		}
 
 		if _, err = db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", pq.QuoteIdentifier(s))); err != nil {
 			return fmt.Errorf("could not create extension %s: %s", s, err)
