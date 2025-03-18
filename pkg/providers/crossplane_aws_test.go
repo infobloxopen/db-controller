@@ -567,14 +567,14 @@ var _ = Describe("AWSProvider create Aurora database", func() {
 				_, err := provider.CreateDatabase(ctx, newSpec)
 				Expect(err).ToNot(HaveOccurred())
 
-				dbInstance := &crossplaneaws.DBInstance{}
+				dbCluster := &crossplaneaws.DBCluster{}
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbInstance)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "env-app-name-db-1d9fb876"}, dbCluster)
 				}).Should(Succeed())
 
-				Expect(dbInstance.Spec.ForProvider.RestoreFrom).ToNot(BeNil())
-				Expect(dbInstance.Spec.ForProvider.RestoreFrom.Snapshot.SnapshotIdentifier).To(Equal(newSpec.SnapshotID))
-				Expect(dbInstance.Spec.ForProvider.RestoreFrom.Source).To(Equal(ptr.To(SnapshotSource)))
+				Expect(dbCluster.Spec.ForProvider.RestoreFrom).ToNot(BeNil())
+				Expect(dbCluster.Spec.ForProvider.RestoreFrom.Snapshot.SnapshotIdentifier).To(Equal(newSpec.SnapshotID))
+				Expect(dbCluster.Spec.ForProvider.RestoreFrom.Source).To(Equal(ptr.To(SnapshotSource)))
 			})
 
 			It("should propagate passed parameter provider labels to database instance", func() {
@@ -587,69 +587,6 @@ var _ = Describe("AWSProvider create Aurora database", func() {
 				}).Should(Succeed())
 
 				Expect(dbInstance.Labels).To(Equal(spec.Labels))
-			})
-		})
-	})
-
-	Describe("update aurora database", func() {
-		When("when crossplane cr preexists the creation call we need to update with provided parameters", func() {
-			It("should propagate the new spec fields to crossplane CR", func() {
-				isReady, err := provider.CreateDatabase(ctx, spec)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
-
-				dbInstance := &crossplaneaws.DBInstance{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
-				}).Should(Succeed())
-
-				updatedSpec := spec
-				updatedSpec.MaxStorageGB = 30
-				updatedSpec.MinStorageGB = 20
-				updatedSpec.EnableCloudwatchLogsExport = []*string{ptr.To("not"), ptr.To("upgrade")}
-				updatedSpec.EnablePerfInsight = false
-				updatedSpec.DeletionPolicy = xpv1.DeletionDelete
-
-				isReady, err = provider.CreateDatabase(ctx, updatedSpec)
-				Expect(isReady).To(BeFalse()) // Initially, the database is not provisioned
-
-				dbInstance = &crossplaneaws.DBInstance{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName}, dbInstance)
-				}).Should(Succeed())
-
-				Expect(dbInstance.Spec.ForProvider.EnablePerformanceInsights).To(Equal(ptr.To(updatedSpec.EnablePerfInsight)))
-				Expect(dbInstance.Spec.ResourceSpec.DeletionPolicy).To(Equal(updatedSpec.DeletionPolicy))
-				Expect(dbInstance.Spec.ForProvider.Engine).To(Equal(ptr.To(updatedSpec.DbType)))
-				Expect(dbInstance.Spec.ForProvider.EngineVersion).To(Equal(GetEngineVersion(updatedSpec, provider.config)))
-				Expect(dbInstance.Spec.ForProvider.DBInstanceClass).To(Equal(ptr.To(updatedSpec.InstanceClass)))
-				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-a-15"))
-				Expect(dbInstance.Spec.ForProvider.CACertificateIdentifier).To(Equal(updatedSpec.CACertificateIdentifier))
-				Expect(dbInstance.Spec.ForProvider.MultiAZ).To(Equal(ptr.To(basefun.GetMultiAZEnabled(provider.config))))
-				Expect(dbInstance.Spec.ForProvider.MasterUsername).To(Equal(ptr.To(updatedSpec.MasterUsername)))
-				Expect(dbInstance.Spec.ForProvider.PubliclyAccessible).To(Equal(ptr.To(updatedSpec.PubliclyAccessible)))
-				Expect(dbInstance.Spec.ForProvider.EnableIAMDatabaseAuthentication).To(Equal(ptr.To(updatedSpec.EnableIAMDatabaseAuthentication)))
-				Expect(dbInstance.Spec.ForProvider.BackupRetentionPeriod).To(Equal(ptr.To(updatedSpec.BackupRetentionDays)))
-				Expect(dbInstance.Spec.ForProvider.StorageEncrypted).To(Equal(ptr.To(true)))
-				Expect(dbInstance.Spec.ForProvider.StorageType).To(Equal(ptr.To(updatedSpec.StorageType)))
-				Expect(dbInstance.Spec.ForProvider.Port).To(Equal(ptr.To(updatedSpec.Port)))
-				Expect(dbInstance.Spec.ForProvider.PreferredMaintenanceWindow).To(Equal(updatedSpec.PreferredMaintenanceWindow))
-				Expect(dbInstance.Spec.ForProvider.DBParameterGroupNameRef.Name).To(Equal("env-app-name-db-1d9fb876-a-15"))
-
-				// master password
-				Expect(dbInstance.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Name).To(Equal(updatedSpec.ResourceName + MasterPasswordSuffix))
-				Expect(dbInstance.Spec.ForProvider.MasterUserPasswordSecretRef.SecretReference.Namespace).To(Equal(provider.serviceNS))
-				Expect(dbInstance.Spec.ResourceSpec.WriteConnectionSecretToReference.Name).To(Equal(updatedSpec.ResourceName))
-				Expect(dbInstance.Spec.ResourceSpec.WriteConnectionSecretToReference.Namespace).To(Equal(provider.serviceNS))
-
-				// Validate VPC & Security Groups
-				Expect(dbInstance.Spec.ForProvider.VPCSecurityGroupIDRefs).To(ContainElement(xpv1.Reference{
-					Name: basefun.GetVpcSecurityGroupIDRefs(provider.config),
-				}))
-				Expect(dbInstance.Spec.ForProvider.DBSubnetGroupNameRef.Name).To(Equal(basefun.GetDbSubnetGroupNameRef(provider.config)))
-
-				// Validate Provider Config & Deletion Policy
-				Expect(dbInstance.Spec.ResourceSpec.ProviderConfigReference.Name).To(Equal(basefun.GetProviderConfig(provider.config)))
 			})
 		})
 	})

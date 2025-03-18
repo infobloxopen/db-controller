@@ -511,6 +511,16 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 		auroraBackupRetentionPeriod = nil
 	}
 
+	var restoreFrom *crossplaneaws.RestoreDBClusterBackupConfiguration
+	if params.SnapshotID != nil {
+		restoreFrom = &crossplaneaws.RestoreDBClusterBackupConfiguration{
+			Snapshot: &crossplaneaws.SnapshotRestoreBackupConfiguration{
+				SnapshotIdentifier: params.SnapshotID,
+			},
+			Source: ptr.To(SnapshotSource),
+		}
+	}
+
 	p.configureDBTags(&params)
 
 	return &crossplaneaws.DBCluster{
@@ -541,6 +551,7 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 						Name: getParameterGroupName(params),
 					},
 					EngineVersion: GetEngineVersion(params, p.config),
+					RestoreFrom:   restoreFrom,
 				},
 				Engine: &params.DbType,
 				Tags: ConvertFromProviderTags(params.Tags, func(tag ProviderTag) *crossplaneaws.Tag {
