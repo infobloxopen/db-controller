@@ -3,17 +3,17 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
-	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	"github.com/infobloxopen/db-controller/pkg/providers"
-	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	"strings"
 	"time"
 
+	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
 	_ "github.com/lib/pq"
 	gopassword "github.com/sethvargo/go-password/password"
 	"github.com/spf13/viper"
+	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -190,10 +190,14 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				//ignore delete request, continue to process rds migration
 				return r.executeDbClaimRequest(ctx, &reqInfo, &dbClaim)
 			}
-			if basefun.GetCloud(r.Config.Viper) == "aws" {
-				// our finalizer is present, so lets handle any external dependency
+			if basefun.IsProviderEnable(r.Config.Viper) {
 				spec := NewDatabaseSpecFromRequestInfo(&reqInfo, &dbClaim, r.getMode(ctx, &reqInfo, &dbClaim), r.Config.Viper)
 				if _, err := r.provider.DeleteDatabase(ctx, spec); err != nil {
+					return ctrl.Result{}, err
+				}
+			} else if basefun.GetCloud(r.Config.Viper) == "aws" {
+				// our finalizer is present, so lets handle any external dependency
+				if err := r.deleteExternalResourcesAWS(ctx, &reqInfo, &dbClaim); err != nil {
 					// if fail to delete the external dependency here, return with error
 					// so that it can be retried
 					return ctrl.Result{}, err
@@ -254,23 +258,78 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
 	logr.Info("post migration is in progress")
 
-	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
-
-	deleted, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName})
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
-		_, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName, TagInactive: false})
+	if basefun.IsProviderEnable(r.Config.Viper) {
+		dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
+		deleted, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName})
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		dbClaim.Status.OldDB = v1.StatusForOldDB{}
+
+		if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
+			_, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName, TagInactive: false})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			dbClaim.Status.OldDB = v1.StatusForOldDB{}
+		}
+
+		if !deleted {
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
+
+		if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
+			logr.Error(err, "Error updating DatabaseClaim status")
+			return ctrl.Result{}, err
+		}
+
+		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
-	if !deleted {
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	// TODO: after provider implementation is validated, below code can be deprecated
+	// get name of DBInstance from connectionInfo
+	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
+
+	var dbParamGroupName string
+	// get name of DBParamGroup from connectionInfo
+	if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
+		dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+	} else {
+		dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+	}
+
+	TagsVerified, err := r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName)
+
+	// Even though we get error in updating tags, we log the error
+	// and go ahead with deleting resources
+	if err != nil || TagsVerified {
+
+		if err != nil {
+			logr.Error(err, "Failed updating or verifying operational tags")
+		}
+
+		if err = r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
+			logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
+		}
+		if err = r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
+			logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
+		}
+
+		dbClaim.Status.OldDB = v1.StatusForOldDB{}
+	} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
+		// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
+		logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
+
+		if err = r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
+			logr.Error(err, "Could not delete crossplane  DBInstance/DBCLluster")
+		}
+		if err = r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
+			logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
+		}
+
+		dbClaim.Status.OldDB = v1.StatusForOldDB{}
 	}
 
 	if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
@@ -281,8 +340,7 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 	if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
 		return ctrl.Result{Requeue: true}, nil
 	}
-
-	return ctrl.Result{}, err
+	return ctrl.Result{RequeueAfter: time.Minute}, nil
 }
 
 // Create, migrate or upgrade database
@@ -500,9 +558,12 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 
 	isReady := false
 	var err error
-	if cloud == "aws" {
+	// TODO: Once the providers implementation is ready, we could completely remove this if cloud condition
+	if basefun.IsProviderEnable(r.Config.Viper) {
 		spec := NewDatabaseSpecFromRequestInfo(reqInfo, dbClaim, operationalMode, r.Config.Viper)
 		isReady, err = r.provider.CreateDatabase(ctx, spec)
+	} else if cloud == "aws" {
+		isReady, err = r.manageCloudHostAWS(ctx, reqInfo, dbClaim, operationalMode)
 		if err != nil {
 			logr.Error(err, "manage_cloud_host_AWS")
 			return ctrl.Result{}, err

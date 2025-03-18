@@ -542,7 +542,7 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 					},
 					EngineVersion: GetEngineVersion(params, p.config),
 				},
-				Engine: &params.DBVersion,
+				Engine: &params.DbType,
 				Tags: ConvertFromProviderTags(params.Tags, func(tag ProviderTag) *crossplaneaws.Tag {
 					return &crossplaneaws.Tag{Key: &tag.Key, Value: &tag.Value}
 				}),

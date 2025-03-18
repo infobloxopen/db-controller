@@ -1,4 +1,5 @@
 controllerConfig:
+  newProvider: true
   #AWS us-east-1 GCP us-east1
   region: us-east-1
   vpcSecurityGroupIDRefs: box-3
