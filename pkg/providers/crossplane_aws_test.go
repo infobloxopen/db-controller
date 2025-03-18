@@ -1292,7 +1292,8 @@ func TestAuroraDBCluster(t *testing.T) {
 			name: "Creates Aurora DB Cluster with backup retention days",
 			params: DatabaseSpec{
 				ResourceName:                    "test-db-cluster",
-				DBVersion:                       "aurora-mysql",
+				DBVersion:                       "15",
+				DbType:                          "aurora-postgresql",
 				BackupRetentionDays:             7,
 				SkipFinalSnapshotBeforeDeletion: true,
 				MasterUsername:                  "admin",
@@ -1333,7 +1334,7 @@ func TestAuroraDBCluster(t *testing.T) {
 							},
 							EngineVersion: ptr.To("aurora-postgresql"),
 						},
-						Engine: ptr.To("aurora-mysql"),
+						Engine: ptr.To("aurora-postgresql"),
 						Tags: []*crossplaneaws.Tag{
 							{Key: ptr.To("Environment"), Value: ptr.To("Test")},
 						},
@@ -1363,7 +1364,8 @@ func TestAuroraDBCluster(t *testing.T) {
 			name: "Creates Aurora DB Cluster without backup retention days",
 			params: DatabaseSpec{
 				ResourceName:                    "prod-db-cluster",
-				DBVersion:                       "aurora-postgresql",
+				DBVersion:                       "15",
+				DbType:                          "aurora-postgresql",
 				BackupRetentionDays:             0,
 				SkipFinalSnapshotBeforeDeletion: false,
 				MasterUsername:                  "postgres",
