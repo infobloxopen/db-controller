@@ -211,7 +211,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	primaryDbInstance := &crossplaneaws.DBInstance{}
 	primaryInstanceKey := client.ObjectKey{Name: params.ResourceName}
 	err = ensureResource(ctx, p.Client, primaryInstanceKey, primaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
-		primaryDbInstance = p.postgresDBInstance(params)
+		primaryDbInstance = p.auroraDBInstance(params, false)
 		return primaryDbInstance, nil
 	})
 	if err != nil {
@@ -237,7 +237,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 		secondaryDbInstance := &crossplaneaws.DBInstance{}
 		secondaryInstanceKey := client.ObjectKey{Name: params.ResourceName + "-2"}
 		err = ensureResource(ctx, p.Client, secondaryInstanceKey, secondaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
-			secondaryDbInstance = p.postgresDBInstance(params)
+			secondaryDbInstance = p.auroraDBInstance(params, true)
 			return secondaryDbInstance, nil
 		})
 		if err != nil {
