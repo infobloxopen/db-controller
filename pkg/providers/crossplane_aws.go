@@ -278,7 +278,7 @@ func (p *AWSProvider) postgresDBInstance(params DatabaseSpec) *crossplaneaws.DBI
 		}
 	}
 
-	p.configureDBTags(&params)
+	p.configureCrossplaneTags(&params)
 
 	return &crossplaneaws.DBInstance{
 		ObjectMeta: metav1.ObjectMeta{
@@ -410,6 +410,10 @@ func (p *AWSProvider) postgresDBParameterGroup(params DatabaseSpec) *crossplanea
 func (p *AWSProvider) updateDBInstance(ctx context.Context, params DatabaseSpec, dbInstance *crossplaneaws.DBInstance) error {
 	// Create a patch snapshot from current DBInstance
 	patchDBInstance := client.MergeFrom(dbInstance.DeepCopy())
+	p.configureCrossplaneTags(&params)
+	dbInstance.Spec.ForProvider.Tags = ConvertFromProviderTags(params.Tags, func(tag ProviderTag) *crossplaneaws.Tag {
+		return &crossplaneaws.Tag{Key: &tag.Key, Value: &tag.Value}
+	})
 
 	if params.DbType == AwsPostgres {
 		multiAZ := basefun.GetMultiAZEnabled(p.config)
@@ -462,7 +466,7 @@ func (p *AWSProvider) auroraDBInstance(params DatabaseSpec, isSecondInstance boo
 		dbHostname = dbHostname + "-2"
 	}
 
-	p.configureDBTags(&params)
+	p.configureCrossplaneTags(&params)
 
 	return &crossplaneaws.DBInstance{
 		ObjectMeta: metav1.ObjectMeta{
@@ -521,7 +525,7 @@ func (p *AWSProvider) auroraDBCluster(params DatabaseSpec) *crossplaneaws.DBClus
 		}
 	}
 
-	p.configureDBTags(&params)
+	p.configureCrossplaneTags(&params)
 
 	return &crossplaneaws.DBCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -696,7 +700,7 @@ func (p *AWSProvider) auroraInstanceParamGroup(params DatabaseSpec) *crossplanea
 func (p *AWSProvider) updateAuroraDBCluster(ctx context.Context, params DatabaseSpec, dbCluster *crossplaneaws.DBCluster) error {
 	// Create a patch snapshot from current DBCluster
 	patchDBCluster := client.MergeFrom(dbCluster.DeepCopy())
-	p.configureDBTags(&params)
+	p.configureCrossplaneTags(&params)
 	// Update DBCluster
 	dbCluster.Spec.ForProvider.Tags = ConvertFromProviderTags(params.Tags, func(tag ProviderTag) *crossplaneaws.Tag {
 		return &crossplaneaws.Tag{Key: &tag.Key, Value: &tag.Value}
@@ -726,7 +730,7 @@ func (p *AWSProvider) updateAuroraDBCluster(ctx context.Context, params Database
 	return nil
 }
 
-func (p *AWSProvider) configureDBTags(params *DatabaseSpec) {
+func (p *AWSProvider) configureCrossplaneTags(params *DatabaseSpec) {
 	backupPolicy := params.BackupPolicy
 	if backupPolicy == "" {
 		backupPolicy = basefun.GetDefaultBackupPolicy(p.config)

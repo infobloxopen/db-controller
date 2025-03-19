@@ -917,7 +917,7 @@ func TestConfigureDBTags(t *testing.T) {
 			mockConfig.Set("defaultBackupPolicyValue", test.backupPolicy)
 			provider := &AWSProvider{config: mockConfig}
 
-			provider.configureDBTags(test.inputSpec)
+			provider.configureCrossplaneTags(test.inputSpec)
 
 			if !CompareTags(test.inputSpec.Tags, test.expectedTags) {
 				t.Errorf("[%s] expected tags: %+v, got: %+v",
