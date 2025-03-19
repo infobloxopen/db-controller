@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"strings"
 )
 
@@ -97,18 +98,30 @@ func isReady(cond []xpv1.Condition) (bool, error) {
 // ensureResource ensures that a given Kubernetes resource exists in the cluster.
 // If the resource does not exist, it creates a new instance using the provided createFunc.
 func ensureResource[T client.Object](ctx context.Context, k8sClient client.Client, key client.ObjectKey, resource T, createFunc func() (T, error)) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Ensuring resource existence", "resource", key)
 	if err := k8sClient.Get(ctx, key, resource); err != nil {
 		if errors.IsNotFound(err) {
+			logger.Info("Resource not found, creating a new one", "resource", key)
 			newResource, createErr := createFunc()
 			if createErr != nil {
+				logger.Error(createErr, "Failed to create resource instance", "resource", key)
 				return createErr
 			}
+
 			if err := k8sClient.Create(ctx, newResource); err != nil {
+				logger.Error(err, "Failed to create resource", "resource", key)
 				return fmt.Errorf("failed to create resource: %w", err)
 			}
+
+			logger.Info("Resource successfully created", "resource", key)
 		} else {
+			logger.Error(err, "Failed to get resource", "resource", key)
 			return fmt.Errorf("failed to get resource: %w", err)
 		}
+	} else {
+		logger.Info("Resource already exists", "resource", key)
 	}
+
 	return nil
 }
