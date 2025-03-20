@@ -3,11 +3,13 @@ package providers
 import (
 	"context"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	persistanceinfobloxcomv1alpha1 "github.com/infobloxopen/db-controller/api/persistance.infoblox.com/v1alpha1"
 	"github.com/spf13/viper"
 	crossplanegcp "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -423,4 +425,96 @@ func TestDbNetworkRecord(t *testing.T) {
 	Expect(params.ServiceAttachmentLink).To(Equal(saLink))
 	Expect(params.Region).To(Equal(region))
 	Expect(params.Network).To(Equal(network))
+}
+
+func TestCreateDatabase(t *testing.T) {
+	RegisterTestingT(t)
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = crossplanegcp.AddToScheme(scheme)
+	_ = persistanceinfobloxcomv1alpha1.AddToScheme(scheme)
+
+	mockClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	mockConfig := viper.New()
+	mockConfig.Set("providerConfig", "gcp-provider")
+	mockConfig.Set("region", "us-central1")
+	mockConfig.Set("project", "test-project")
+	mockConfig.Set("serviceNamespace", "default")
+
+	provider := &gcpProvider{
+		k8sClient: mockClient,
+		config:    mockConfig,
+		serviceNS: "default",
+	}
+
+	spec := DatabaseSpec{
+		ResourceName:   "test-db",
+		DBVersion:      "14.9",
+		MasterUsername: "admin",
+
+		DeletionPolicy:      xpv1.DeletionDelete,
+		BackupRetentionDays: 14,
+		Labels: map[string]string{
+			"managed-by": "crossplane",
+			"service":    "user-management",
+		},
+	}
+
+	result, err := provider.CreateDatabase(ctx, spec)
+	Expect(err).To(BeNil())
+	Expect(result).To(BeFalse())
+
+	instance := &crossplanegcp.Instance{}
+	err = mockClient.Get(ctx, types.NamespacedName{Name: "test-db"}, instance)
+	Expect(err).To(BeNil())
+
+	cluster := &crossplanegcp.Cluster{}
+	err = mockClient.Get(ctx, types.NamespacedName{Name: "test-db"}, cluster)
+	Expect(err).To(BeNil())
+
+	// We need the instance ready to create the secret and network record
+	updatedInstance := instance.DeepCopy()
+	updatedInstance.Status.Conditions = []xpv1.Condition{
+		{
+			Type:               xpv1.TypeReady,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+		},
+	}
+	// mock the provider readiness
+	updatedInstance.Status.AtProvider = crossplanegcp.InstanceObservation{
+		PscInstanceConfig: &crossplanegcp.PscInstanceConfigObservation{
+			PscDNSName:            ptr.To("test-psc-dns-name"),
+			ServiceAttachmentLink: ptr.To("test-service-attachment-link"),
+		},
+	}
+
+	Expect(mockClient.Update(ctx, updatedInstance)).To(Succeed())
+
+	// Simulate the secret being created by crossplane
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: spec.ResourceName, Namespace: provider.serviceNS,
+		},
+		Data: map[string][]byte{
+			"attribute.initial_user.0.password": []byte("password"),
+		},
+	}
+	err = mockClient.Create(ctx, secret)
+	Expect(err).To(BeNil())
+
+	result, err = provider.CreateDatabase(ctx, spec)
+	Expect(err).To(BeNil())
+	Expect(result).To(BeTrue())
+
+	networkRecord := &persistanceinfobloxcomv1alpha1.XNetworkRecord{}
+	err = mockClient.Get(ctx, types.NamespacedName{Name: spec.ResourceName + networkRecordNameSuffix, Namespace: provider.serviceNS}, networkRecord)
+	Expect(err).To(BeNil())
+
+	secret = &corev1.Secret{}
+	secretKey := client.ObjectKey{Name: spec.ResourceName, Namespace: provider.serviceNS}
+	err = mockClient.Get(ctx, secretKey, secret)
+	Expect(err).To(BeNil())
 }

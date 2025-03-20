@@ -40,12 +40,12 @@ func newGCPProvider(k8sClient client.Client, config *viper.Viper, serviceNS stri
 func (p *gcpProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bool, error) {
 	clusterKey := client.ObjectKey{Name: spec.ResourceName}
 	cluster := &crossplanegcp.Cluster{}
-	err := ensureResource(ctx, p.k8sClient, clusterKey, cluster, func() *crossplanegcp.Cluster {
-		newCluster := p.dbCluster(spec)
-		if err := ManageMasterPassword(ctx, &newCluster.Spec.ForProvider.InitialUser.PasswordSecretRef, p.k8sClient); err != nil {
+	err := ensureResource(ctx, p.k8sClient, clusterKey, cluster, func() (*crossplanegcp.Cluster, error) {
+		cluster = p.dbCluster(spec)
+		if err := ManageMasterPassword(ctx, &cluster.Spec.ForProvider.InitialUser.PasswordSecretRef, p.k8sClient); err != nil {
 			log.FromContext(ctx).Error(err, "Failed to manage master password", "resource", spec.ResourceName)
 		}
-		return newCluster
+		return cluster, nil
 	})
 	if err != nil {
 		return false, err
@@ -53,9 +53,18 @@ func (p *gcpProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 
 	instanceKey := client.ObjectKey{Name: spec.ResourceName}
 	instance := &crossplanegcp.Instance{}
-	err = ensureResource(ctx, p.k8sClient, instanceKey, instance, func() *crossplanegcp.Instance {
-		return p.dbInstance(spec)
+	err = ensureResource(ctx, p.k8sClient, instanceKey, instance, func() (*crossplanegcp.Instance, error) {
+		return p.dbInstance(spec), nil
 	})
+	if err != nil {
+		return false, err
+	}
+
+	if !cluster.ObjectMeta.DeletionTimestamp.IsZero() {
+		return false, fmt.Errorf("can not create Cloud DB cluster %s it is being deleted", spec.ResourceName)
+	}
+
+	err = p.updateDBClusterGCP(ctx, spec, cluster)
 	if err != nil {
 		return false, err
 	}
@@ -72,23 +81,14 @@ func (p *gcpProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 
 	networkRecordKey := client.ObjectKey{Name: spec.ResourceName + networkRecordNameSuffix}
 	networkRecord := &persistanceinfobloxcomv1alpha1.XNetworkRecord{}
-	err = ensureResource(ctx, p.k8sClient, networkRecordKey, networkRecord, func() *persistanceinfobloxcomv1alpha1.XNetworkRecord {
-		return p.dbNetworkRecord(spec, instance)
+	err = ensureResource(ctx, p.k8sClient, networkRecordKey, networkRecord, func() (*persistanceinfobloxcomv1alpha1.XNetworkRecord, error) {
+		return p.dbNetworkRecord(spec, instance), nil
 	})
 	if err != nil {
 		return false, err
 	}
 
 	err = p.createSecretWithConnInfo(ctx, spec, instance)
-	if err != nil {
-		return false, err
-	}
-
-	if !cluster.ObjectMeta.DeletionTimestamp.IsZero() {
-		return false, fmt.Errorf("can not create Cloud DB cluster %s it is being deleted", spec.ResourceName)
-	}
-
-	err = p.updateDBClusterGCP(ctx, spec, cluster)
 	if err != nil {
 		return false, err
 	}
