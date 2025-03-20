@@ -164,6 +164,7 @@ var _ = Describe("Tagging", Ordered, func() {
 				},
 			}
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
+			mockReconciler.Config.Viper.Set("cloud", "aws")
 			mockReconciler.Setup()
 
 			// providing names of non-existing resources below
@@ -221,6 +222,7 @@ var _ = Describe("Tagging", Ordered, func() {
 				},
 			}
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", false)
+			mockReconciler.Config.Viper.Set("cloud", "aws")
 			mockReconciler.Setup()
 
 			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name)
@@ -278,6 +280,7 @@ var _ = Describe("Tagging", Ordered, func() {
 				},
 			}
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
+			mockReconciler.Config.Viper.Set("cloud", "aws")
 			mockReconciler.Setup()
 
 			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name)
@@ -318,6 +321,7 @@ var _ = Describe("Tagging", Ordered, func() {
 				},
 			}
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
+			mockReconciler.Config.Viper.Set("cloud", "aws")
 			mockReconciler.Setup()
 
 			By("adding tags beforehand to .status.AtProvier.TagList. As in reality, if tags gets successfully added. It will reflect at the said path")
