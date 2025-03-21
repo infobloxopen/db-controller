@@ -47,8 +47,8 @@ type Provider interface {
 	// If the instance does not exist, it provisions a new one.
 	// Returns true if the database is fully ready, along with any encountered error.
 	CreateDatabase(ctx context.Context, spec DatabaseSpec) (bool, error)
-	// DeleteDatabase deprovisions an existing database instance.
-	DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bool, error)
+	// DeleteDatabaseResources deprovisions an existing database instance.
+	DeleteDatabaseResources(ctx context.Context, spec DatabaseSpec) (bool, error)
 	// GetDatabase retrieves the current status of a database instance.
 	GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error)
 }

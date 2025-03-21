@@ -134,7 +134,7 @@ zapLogger:
   timeEncoding: rfc3339nano
 
 controllerConfig:
-  newProvider: true
+  enableProvider: true
   athena-shared:
     masterUsername: root
   authSource: secret

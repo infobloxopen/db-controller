@@ -80,7 +80,7 @@ type DatabaseClaimReconciler struct {
 	Config        *DatabaseClaimConfig
 	kctl          *kctlutils.Client
 	statusManager *StatusManager
-	provider      providers.Provider
+	cloudProvider providers.Provider
 }
 
 // New returns a configured databaseclaim reconciler
@@ -90,7 +90,7 @@ func New(cli client.Client, cfg *DatabaseClaimConfig) *DatabaseClaimReconciler {
 		Config:        cfg,
 		kctl:          kctlutils.New(cli, cfg.Viper.GetString("SERVICE_NAMESPACE")),
 		statusManager: NewStatusManager(cli, cfg.Viper),
-		provider:      providers.NewProvider(cfg.Viper, cli, cfg.Namespace),
+		cloudProvider: providers.NewProvider(cfg.Viper, cli, cfg.Namespace),
 	}
 }
 
@@ -192,7 +192,7 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 			if basefun.IsProviderEnable(r.Config.Viper) {
 				spec := NewDatabaseSpecFromRequestInfo(&reqInfo, &dbClaim, r.getMode(ctx, &reqInfo, &dbClaim), r.Config.Viper)
-				if _, err := r.provider.DeleteDatabase(ctx, spec); err != nil {
+				if _, err := r.cloudProvider.DeleteDatabaseResources(ctx, spec); err != nil {
 					return ctrl.Result{}, err
 				}
 			} else if basefun.GetCloud(r.Config.Viper) == "aws" {
@@ -260,13 +260,13 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 
 	if basefun.IsProviderEnable(r.Config.Viper) {
 		dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
-		deleted, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName})
+		deleted, err := r.cloudProvider.DeleteDatabaseResources(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName})
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
-			_, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName, TagInactive: false})
+			_, err := r.cloudProvider.DeleteDatabaseResources(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName, TagInactive: false})
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -288,7 +288,7 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 		return ctrl.Result{}, err
 	}
 
-	// TODO: after provider implementation is validated, below code can be deprecated
+	// TODO: after cloudProvider implementation is validated, below code can be deprecated
 	// get name of DBInstance from connectionInfo
 	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
 
@@ -561,7 +561,7 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 	// TODO: Once the providers implementation is ready, we could completely remove this if cloud condition
 	if basefun.IsProviderEnable(r.Config.Viper) {
 		spec := NewDatabaseSpecFromRequestInfo(reqInfo, dbClaim, operationalMode, r.Config.Viper)
-		isReady, err = r.provider.CreateDatabase(ctx, spec)
+		isReady, err = r.cloudProvider.CreateDatabase(ctx, spec)
 	} else if cloud == "aws" {
 		isReady, err = r.manageCloudHostAWS(ctx, reqInfo, dbClaim, operationalMode)
 		if err != nil {
@@ -674,7 +674,7 @@ func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, r
 	case "gcp":
 		instance, cluster = &crossplanegcp.Instance{}, &crossplanegcp.Cluster{}
 	default:
-		return false, fmt.Errorf("unsupported cloud provider: %s", cloudProvider)
+		return false, fmt.Errorf("unsupported cloud cloudProvider: %s", cloudProvider)
 	}
 
 	exists := crExists(ctx, r.Client, dbHostIdentifier, cluster) && crExists(ctx, r.Client, dbHostIdentifier, instance)
@@ -691,7 +691,7 @@ func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, r
 	}
 
 	if exists {
-		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration attempt error: crossplane provider CR already exists"))
+		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration attempt error: crossplane cloudProvider CR already exists"))
 	}
 
 	if dbClaim.Status.MigrationState == "" {

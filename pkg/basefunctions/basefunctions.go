@@ -261,5 +261,5 @@ func GetDBIdentifierPrefix(viperConfig *viper.Viper) string {
 }
 
 func IsProviderEnable(viperConfig *viper.Viper) bool {
-	return viperConfig.GetBool("newProvider")
+	return viperConfig.GetBool("enableProvider")
 }

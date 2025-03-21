@@ -81,9 +81,9 @@ func (p *AWSProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	return false, fmt.Errorf("%w: %s must be one of %s", v1.ErrInvalidDBType, spec.DbType, []v1.DatabaseType{v1.Postgres, v1.AuroraPostgres})
 }
 
-// DeleteDatabase attempt to delete all crossplane resources related to the provided spec
+// DeleteDatabaseResources attempt to delete all crossplane resources related to the provided spec
 // optionally
-func (p *AWSProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) (bool, error) {
+func (p *AWSProvider) DeleteDatabaseResources(ctx context.Context, spec DatabaseSpec) (bool, error) {
 	if spec.TagInactive {
 		// it takes some time to propagate the tag to the underlying aws resource
 		if tagged, err := p.addInactiveOperationalTag(ctx, spec); err != nil || !tagged {
@@ -148,7 +148,7 @@ func (p *AWSProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSp
 func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) error {
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
 	paramGroupKey := client.ObjectKey{Name: getParameterGroupName(params)}
-	if err := ensureResource(ctx, p.Client, paramGroupKey, dbParamGroup, func() (*crossplaneaws.DBParameterGroup, error) {
+	if err := verifyOrCreateResource(ctx, p.Client, paramGroupKey, dbParamGroup, func() (*crossplaneaws.DBParameterGroup, error) {
 		return p.postgresDBParameterGroup(params), nil
 	}); err != nil {
 		return err
@@ -156,7 +156,7 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 
 	dbInstance := &crossplaneaws.DBInstance{}
 	instanceKey := client.ObjectKey{Name: params.ResourceName}
-	if err := ensureResource(ctx, p.Client, instanceKey, dbInstance, func() (*crossplaneaws.DBInstance, error) {
+	if err := verifyOrCreateResource(ctx, p.Client, instanceKey, dbInstance, func() (*crossplaneaws.DBInstance, error) {
 		dbInstance = p.postgresDBInstance(params)
 		secretRef := dbInstance.Spec.ForProvider.CustomDBInstanceParameters.MasterUserPasswordSecretRef
 		if err := ManageMasterPassword(ctx, secretRef, p.Client); err != nil {
@@ -181,7 +181,7 @@ func (p *AWSProvider) createPostgres(ctx context.Context, params DatabaseSpec) e
 func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) error {
 	paramGroupKey := client.ObjectKey{Name: getParameterGroupName(params)}
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
-	err := ensureResource(ctx, p.Client, paramGroupKey, dbParamGroup, func() (*crossplaneaws.DBParameterGroup, error) {
+	err := verifyOrCreateResource(ctx, p.Client, paramGroupKey, dbParamGroup, func() (*crossplaneaws.DBParameterGroup, error) {
 		return p.auroraInstanceParamGroup(params), nil
 	})
 	if err != nil {
@@ -189,7 +189,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	}
 
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
-	err = ensureResource(ctx, p.Client, paramGroupKey, dbClusterParamGroup, func() (*crossplaneaws.DBClusterParameterGroup, error) {
+	err = verifyOrCreateResource(ctx, p.Client, paramGroupKey, dbClusterParamGroup, func() (*crossplaneaws.DBClusterParameterGroup, error) {
 		return p.auroraClusterParamGroup(params), nil
 	})
 	if err != nil {
@@ -198,7 +198,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 
 	dbCluster := &crossplaneaws.DBCluster{}
 	clusterKey := client.ObjectKey{Name: params.ResourceName}
-	err = ensureResource(ctx, p.Client, clusterKey, dbCluster, func() (*crossplaneaws.DBCluster, error) {
+	err = verifyOrCreateResource(ctx, p.Client, clusterKey, dbCluster, func() (*crossplaneaws.DBCluster, error) {
 		dbCluster = p.auroraDBCluster(params)
 		newSecret := dbCluster.Spec.ForProvider.CustomDBClusterParameters.MasterUserPasswordSecretRef
 		if err := ManageMasterPassword(ctx, newSecret, p.Client); err != nil {
@@ -210,7 +210,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	// Handle primary database instance
 	primaryDbInstance := &crossplaneaws.DBInstance{}
 	primaryInstanceKey := client.ObjectKey{Name: params.ResourceName}
-	err = ensureResource(ctx, p.Client, primaryInstanceKey, primaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
+	err = verifyOrCreateResource(ctx, p.Client, primaryInstanceKey, primaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
 		primaryDbInstance = p.auroraDBInstance(params, false)
 		return primaryDbInstance, nil
 	})
@@ -236,7 +236,7 @@ func (p *AWSProvider) createAuroraDB(ctx context.Context, params DatabaseSpec) e
 	if basefun.GetMultiAZEnabled(p.config) {
 		secondaryDbInstance := &crossplaneaws.DBInstance{}
 		secondaryInstanceKey := client.ObjectKey{Name: params.ResourceName + "-2"}
-		err = ensureResource(ctx, p.Client, secondaryInstanceKey, secondaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
+		err = verifyOrCreateResource(ctx, p.Client, secondaryInstanceKey, secondaryDbInstance, func() (*crossplaneaws.DBInstance, error) {
 			secondaryDbInstance = p.auroraDBInstance(params, true)
 			return secondaryDbInstance, nil
 		})

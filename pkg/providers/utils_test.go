@@ -84,7 +84,7 @@ func TestEnsureResource(t *testing.T) {
 			}, nil
 		}
 
-		err := ensureResource(ctx, cl, key, &corev1.ConfigMap{}, createFunc)
+		err := verifyOrCreateResource(ctx, cl, key, &corev1.ConfigMap{}, createFunc)
 		Expect(err).To(BeNil())
 		createdResource := &corev1.ConfigMap{}
 		err = cl.Get(ctx, key, createdResource)
@@ -124,7 +124,7 @@ func TestEnsureResource(t *testing.T) {
 				},
 			}, nil
 		}
-		err := ensureResource(ctx, cl, key, &corev1.ConfigMap{}, createFunc)
+		err := verifyOrCreateResource(ctx, cl, key, &corev1.ConfigMap{}, createFunc)
 		Expect(err).To(BeNil())
 		existingAfter := &corev1.ConfigMap{}
 		err = cl.Get(ctx, key, existingAfter)
@@ -159,7 +159,7 @@ func TestEnsureResource(t *testing.T) {
 			}, nil
 		}
 
-		err := ensureResource(ctx, cl, key, &corev1.ConfigMap{}, createFunc)
+		err := verifyOrCreateResource(ctx, cl, key, &corev1.ConfigMap{}, createFunc)
 		Expect(err).ToNot(BeNil())
 		Expect(err.Error()).To(ContainSubstring("failed to create resource"))
 	})

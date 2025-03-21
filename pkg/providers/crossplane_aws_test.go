@@ -345,7 +345,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 				_, err := provider.CreateDatabase(ctx, spec)
 				Expect(err).ToNot(HaveOccurred())
 
-				deleted, err := provider.DeleteDatabase(ctx, spec)
+				deleted, err := provider.DeleteDatabaseResources(ctx, spec)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(deleted).To(BeTrue())
 
@@ -369,7 +369,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 
 				deleteSpec := spec
 				deleteSpec.TagInactive = true
-				deleted, err := provider.DeleteDatabase(ctx, deleteSpec)
+				deleted, err := provider.DeleteDatabaseResources(ctx, deleteSpec)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(deleted).To(BeFalse())
 
@@ -394,7 +394,7 @@ var _ = Describe("AWSProvider create Postgres database", func() {
 				err = k8sClient.Patch(ctx, dbInstance, patchDBInstance)
 				Expect(err).ToNot(HaveOccurred())
 
-				deleted, err = provider.DeleteDatabase(ctx, deleteSpec)
+				deleted, err = provider.DeleteDatabaseResources(ctx, deleteSpec)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(deleted).To(BeTrue())
 			})
@@ -598,7 +598,7 @@ var _ = Describe("AWSProvider create Aurora database", func() {
 				_, err := provider.CreateDatabase(ctx, spec)
 				Expect(err).ToNot(HaveOccurred())
 
-				deleted, err := provider.DeleteDatabase(ctx, spec)
+				deleted, err := provider.DeleteDatabaseResources(ctx, spec)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(deleted).To(BeTrue())
 
@@ -622,7 +622,7 @@ var _ = Describe("AWSProvider create Aurora database", func() {
 
 				deleteSpec := spec
 				deleteSpec.TagInactive = true
-				deleted, err := provider.DeleteDatabase(ctx, deleteSpec)
+				deleted, err := provider.DeleteDatabaseResources(ctx, deleteSpec)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(deleted).To(BeFalse())
 
@@ -667,7 +667,7 @@ var _ = Describe("AWSProvider create Aurora database", func() {
 				err = k8sClient.Patch(ctx, cluster, patchDBcluster)
 				Expect(err).ToNot(HaveOccurred())
 
-				deleted, err = provider.DeleteDatabase(ctx, deleteSpec)
+				deleted, err = provider.DeleteDatabaseResources(ctx, deleteSpec)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(deleted).To(BeTrue())
 			})
