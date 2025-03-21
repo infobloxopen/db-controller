@@ -3,8 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
-	v1 "github.com/infobloxopen/db-controller/api/v1"
-	"github.com/infobloxopen/db-controller/pkg/hostparams"
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/spf13/viper"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -12,24 +11,34 @@ import (
 
 // DatabaseSpec defines the required parameters to provision a database using any provider.
 type DatabaseSpec struct {
-	ResourceName               string
-	HostParams                 hostparams.HostParams
-	DbType                     v1.DatabaseType
-	SharedDBHost               bool
-	MasterConnInfo             v1.DatabaseClaimConnectionInfo
-	TempSecret                 string
-	EnableReplicationRole      bool
-	EnableSuperUser            bool
-	EnablePerfInsight          bool
-	EnableCloudwatchLogsExport []*string
-	BackupRetentionDays        int64
-	CACertificateIdentifier    *string
+	ResourceName string
+	DatabaseName string
+	DbType       string
+	Port         int64
+	MinStorageGB int
+	MaxStorageGB int64
+	DBVersion    string
 
+	MasterUsername                  string
+	InstanceClass                   string
+	StorageType                     string
+	SkipFinalSnapshotBeforeDeletion bool
+	PubliclyAccessible              bool
+	EnableIAMDatabaseAuthentication bool
+	DeletionPolicy                  xpv1.DeletionPolicy
+	IsDefaultVersion                bool
+	EnablePerfInsight               bool
+	EnableCloudwatchLogsExport      []*string
+	BackupRetentionDays             int64
+	CACertificateIdentifier         *string
+
+	Tags                       []ProviderTag
 	Labels                     map[string]string
 	PreferredMaintenanceWindow *string
 	BackupPolicy               string
 
-	SnapshotID *string
+	SnapshotID  *string
+	TagInactive bool
 }
 
 // Provider is an interface that abstracts provider-specific logic.
@@ -38,8 +47,8 @@ type Provider interface {
 	// If the instance does not exist, it provisions a new one.
 	// Returns true if the database is fully ready, along with any encountered error.
 	CreateDatabase(ctx context.Context, spec DatabaseSpec) (bool, error)
-	// DeleteDatabase deprovisions an existing database instance.
-	DeleteDatabase(ctx context.Context, spec DatabaseSpec) error
+	// DeleteDatabaseResources deprovisions an existing database instance.
+	DeleteDatabaseResources(ctx context.Context, spec DatabaseSpec) (bool, error)
 	// GetDatabase retrieves the current status of a database instance.
 	GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error)
 }
@@ -51,9 +60,9 @@ func NewProvider(config *viper.Viper, k8sClient client.Client, serviceNS string)
 	case "aws":
 		return newAWSProvider(k8sClient, config, serviceNS)
 	case "gcp":
-		return newGCPProvider(k8sClient, config, serviceNS)
+		return newGCPProvider(k8sClient, config)
 	case "cloudnative-pg":
-		return newCloudNativePGProvider(k8sClient, config, serviceNS)
+		return nil
 	default:
 		panic(fmt.Sprintf("Unsupported provider %s", cloud))
 	}

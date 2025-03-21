@@ -259,3 +259,7 @@ func GetDynamicHostWaitTime(viperConfig *viper.Viper) time.Duration {
 func GetDBIdentifierPrefix(viperConfig *viper.Viper) string {
 	return viperConfig.GetString("env")
 }
+
+func IsProviderEnable(viperConfig *viper.Viper) bool {
+	return viperConfig.GetBool("enableProvider")
+}

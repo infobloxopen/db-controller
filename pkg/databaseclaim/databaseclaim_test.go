@@ -132,8 +132,8 @@ func Test_providerCRAlreadyExists(t *testing.T) {
 		_, err := r.providerCRAlreadyExists(ctx, reqInfo, dbClaim)
 		if err == nil {
 			t.Errorf("expected an error but got nil")
-		} else if err.Error() != "unsupported cloud provider: anything" {
-			t.Errorf("expected error 'unsupported cloud provider: anything', got '%s'", err.Error())
+		} else if err.Error() != "unsupported cloud cloudProvider: anything" {
+			t.Errorf("expected error 'unsupported cloud cloudProvider: anything', got '%s'", err.Error())
 		}
 	})
 }

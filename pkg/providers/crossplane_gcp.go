@@ -9,7 +9,7 @@ import (
 type GCPProvider struct {
 }
 
-func newGCPProvider(k8sClient client.Client, config *viper.Viper, serviceNS string) Provider {
+func newGCPProvider(k8sClient client.Client, config *viper.Viper) Provider {
 	return &GCPProvider{}
 }
 
@@ -17,8 +17,8 @@ func (p *GCPProvider) CreateDatabase(ctx context.Context, spec DatabaseSpec) (bo
 	return false, nil
 }
 
-func (p *GCPProvider) DeleteDatabase(ctx context.Context, spec DatabaseSpec) error {
-	return nil
+func (p *GCPProvider) DeleteDatabaseResources(ctx context.Context, spec DatabaseSpec) (bool, error) {
+	return false, nil
 }
 
 func (p *GCPProvider) GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error) {

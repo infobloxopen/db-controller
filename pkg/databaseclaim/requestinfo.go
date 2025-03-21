@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	"github.com/infobloxopen/db-controller/pkg/providers"
 
 	v1 "github.com/infobloxopen/db-controller/api/v1"
 	basefun "github.com/infobloxopen/db-controller/pkg/basefunctions"
@@ -93,4 +94,48 @@ func NewRequestInfo(ctx context.Context, cfg *viper.Viper, dbClaim *v1.DatabaseC
 	}
 
 	return ri, nil
+}
+
+func NewDatabaseSpecFromRequestInfo(ri *requestInfo, claim *v1.DatabaseClaim, mode ModeEnum, cfg *viper.Viper) providers.DatabaseSpec {
+	var snapshotID *string
+	if mode == M_UseNewDB && claim.Spec.RestoreFrom != "" {
+		snapshotID = &claim.Spec.RestoreFrom
+	}
+
+	var prefix string
+	suffix := "-" + ri.HostParams.Hash()
+
+	if basefun.GetDBIdentifierPrefix(cfg) != "" {
+		prefix = basefun.GetDBIdentifierPrefix(cfg) + "-"
+	}
+
+	return providers.DatabaseSpec{
+		ResourceName:                    prefix + claim.Name + suffix,
+		DatabaseName:                    ri.MasterConnInfo.DatabaseName,
+		DbType:                          ri.HostParams.Type,
+		Port:                            ri.HostParams.Port,
+		MinStorageGB:                    ri.HostParams.MinStorageGB,
+		MaxStorageGB:                    ri.HostParams.MaxStorageGB,
+		DBVersion:                       ri.HostParams.DBVersion,
+		MasterUsername:                  ri.HostParams.MasterUsername,
+		InstanceClass:                   ri.HostParams.InstanceClass,
+		StorageType:                     ri.HostParams.StorageType,
+		SkipFinalSnapshotBeforeDeletion: ri.HostParams.SkipFinalSnapshotBeforeDeletion,
+		PubliclyAccessible:              ri.HostParams.PubliclyAccessible,
+		EnableIAMDatabaseAuthentication: ri.HostParams.EnableIAMDatabaseAuthentication,
+		DeletionPolicy:                  ri.HostParams.DeletionPolicy,
+		IsDefaultVersion:                ri.HostParams.IsDefaultVersion,
+
+		EnablePerfInsight:          ri.EnablePerfInsight,
+		EnableCloudwatchLogsExport: ri.EnableCloudwatchLogsExport,
+		BackupRetentionDays:        ri.BackupRetentionDays,
+		CACertificateIdentifier:    &ri.CACertificateIdentifier,
+		Tags: providers.ConvertToProviderTags(claim.Spec.Tags, func(tag v1.Tag) (string, string) {
+			return tag.Key, tag.Value
+		}),
+		Labels:                     claim.Labels,
+		PreferredMaintenanceWindow: claim.Spec.PreferredMaintenanceWindow,
+		BackupPolicy:               claim.Spec.BackupPolicy, // this is added as a TAG
+		SnapshotID:                 snapshotID,
+	}
 }
