@@ -780,14 +780,12 @@ func (pc *client) UpdatePassword(username string, userPassword string) error {
 		return err
 	}
 
-	pc.log.Info("update user password", "user:", username, "password", userPassword)
+	pc.log.Info("update user password", "user:", username)
 	_, err := pc.DB.Exec(fmt.Sprintf("ALTER ROLE %s with encrypted password %s", pq.QuoteIdentifier(username), pq.QuoteLiteral(userPassword)))
 	if err != nil {
-		if !strings.Contains(err.Error(), "already exists") {
-			pc.log.Error(err, "could not alter user "+username)
-			metrics.PasswordRotatedErrors.WithLabelValues("alter error").Inc()
-			return err
-		}
+		pc.log.Error(err, "could not alter user", "user", username)
+		metrics.PasswordRotatedErrors.WithLabelValues("alter error").Inc()
+		return err
 	}
 	metrics.PasswordRotated.Inc()
 	duration := time.Since(start)
