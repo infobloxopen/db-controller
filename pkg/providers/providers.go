@@ -2,11 +2,16 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/spf13/viper"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	ProviderAWS         = "aws"
+	ProviderGCP         = "gcp"
+	ProviderCloudNative = "cloudnative-pg"
 )
 
 // DatabaseSpec defines the required parameters to provision a database using any provider.
@@ -53,17 +58,39 @@ type Provider interface {
 	GetDatabase(ctx context.Context, name string) (*DatabaseSpec, error)
 }
 
-// NewProvider returns a concrete provider implementation based on the given provider name.
-func NewProvider(config *viper.Viper, k8sClient client.Client, serviceNS string) Provider {
-	cloud := config.GetString("cloud")
-	switch cloud {
-	case "aws":
-		return newAWSProvider(k8sClient, config, serviceNS)
-	case "gcp":
-		return newGCPProvider(k8sClient, config)
-	case "cloudnative-pg":
-		return nil
-	default:
-		panic(fmt.Sprintf("Unsupported provider %s", cloud))
+type Providers map[string]Provider
+
+func RegisterProviders(config *viper.Viper, k8sClient client.Client, serviceNS string) Providers {
+	providers := make(Providers)
+
+	// Always add the CloudNativePG provider if it is enabled
+	if config.GetBool("enableCloudnativePG") {
+		providers[ProviderCloudNative] = newCloudNativePGProvider(k8sClient, config, serviceNS)
 	}
+
+	// Add selected cloud provider
+	if cloud := config.GetString("cloud"); cloud == ProviderAWS {
+		providers[ProviderAWS] = newAWSProvider(k8sClient, config, serviceNS)
+	} else if cloud == ProviderGCP {
+		providers[ProviderGCP] = newGCPProvider(k8sClient, config)
+	}
+
+	if len(providers) == 0 {
+		panic("Invalid number of providers configured. Must have at least one.")
+	}
+
+	return providers
+}
+
+func (p Providers) GetPrimaryProvider(dbType string) Provider {
+	if dbType == "cloudnative-postgres" {
+		return p[ProviderCloudNative]
+	}
+	if provider, exists := p[ProviderAWS]; exists {
+		return provider
+	}
+	if provider, exists := p[ProviderGCP]; exists {
+		return provider
+	}
+	return nil
 }

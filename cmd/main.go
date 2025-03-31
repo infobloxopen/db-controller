@@ -47,6 +47,7 @@ import (
 
 	webhookpersistancev1 "github.com/infobloxopen/db-controller/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	crossplanerdsv1alpha1 "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	crossplanegcpv1beta2 "github.com/upbound/provider-gcp/apis/alloydb/v1beta2"
 )
@@ -60,6 +61,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(persistancev1.AddToScheme(scheme))
+	utilruntime.Must(cnpgv1.AddToScheme(scheme))
 	utilruntime.Must(persistanceinfobloxcomv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 

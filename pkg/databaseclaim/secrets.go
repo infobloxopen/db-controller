@@ -22,22 +22,14 @@ import (
 
 func (r *DatabaseClaimReconciler) createOrUpdateSecret(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo, cloud string) error {
 	gs := &corev1.Secret{}
-	dbType := dbClaim.Spec.Type
 	secretName := dbClaim.Spec.SecretName
-	var dsn, dsnURI, replicaDsnURI string = "", "", ""
+	var replicaDsnURI string
 
-	switch dbType {
-	case v1.Postgres:
-		fallthrough
-	case v1.AuroraPostgres:
-		dsn = dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
-		dsnURI = dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
+	dsn := dbclient.PostgresConnectionString(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
+	dsnURI := dbclient.PostgresURI(connInfo.Host, connInfo.Port, connInfo.Username, connInfo.Password, connInfo.DatabaseName, connInfo.SSLMode)
 
-		if cloud == "aws" {
-			replicaDsnURI = strings.Replace(dsnURI, ".cluster-", ".cluster-ro-", -1)
-		}
-	default:
-		return fmt.Errorf("unknown DB type")
+	if cloud == "aws" {
+		replicaDsnURI = strings.Replace(dsnURI, ".cluster-", ".cluster-ro-", -1)
 	}
 
 	err := r.Client.Get(ctx, client.ObjectKey{

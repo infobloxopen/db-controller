@@ -64,6 +64,18 @@ rules:
       - patch
       - delete
   - apiGroups:
+      - "postgresql.cnpg.io"
+    resources:
+      - clusters
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
       - "alloydb.gcp.upbound.io"
     resources:
       - instances
