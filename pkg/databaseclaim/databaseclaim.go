@@ -674,7 +674,7 @@ func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, r
 	case "gcp":
 		instance, cluster = &crossplanegcp.Instance{}, &crossplanegcp.Cluster{}
 	default:
-		return false, fmt.Errorf("unsupported cloud cloudProvider: %s", cloudProvider)
+		return false, nil
 	}
 
 	exists := crExists(ctx, r.Client, dbHostIdentifier, cluster) && crExists(ctx, r.Client, dbHostIdentifier, instance)

@@ -66,7 +66,7 @@ func (c *Client) GetMasterCredsDeprecated(ctx context.Context, secretName, datab
 	connInfo.Password = string(rs.Data["password"])
 	connInfo.SSLMode = sslMode
 
-	log.FromContext(ctx).Info("GetMasterCredsDeprecated", "secret", secretName, "info", connInfo)
+	log.FromContext(ctx).Info("GetMasterCredsDeprecated", "secret", secretName)
 
 	if connInfo.Host == "" ||
 		connInfo.Port == "" ||

@@ -62,7 +62,7 @@ func NewProvider(config *viper.Viper, k8sClient client.Client, serviceNS string)
 	case "gcp":
 		return newGCPProvider(k8sClient, config)
 	case "cloudnative-pg":
-		return nil
+		return newCloudNativePGProvider(k8sClient, config, serviceNS)
 	default:
 		panic(fmt.Sprintf("Unsupported provider %s", cloud))
 	}
