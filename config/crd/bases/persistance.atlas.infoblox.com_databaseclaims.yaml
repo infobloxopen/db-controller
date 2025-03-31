@@ -221,8 +221,15 @@ spec:
                 type: array
               type:
                 default: postgres
-                description: Specifies the type of database to provision. Only postgres
-                  is supported.
+                description: |-
+                  Specifies the type of database to provision.
+                    - postgres: Uses **RDS** when provisioned with the AWS provider. Supported by both AWS and GCP providers.
+                    - `aurora-postgresql`: Only supported by the AWS provider (**Aurora**).
+                    - `cloudnative-postgres`: Only supported by the CloudNative provider.
+                enum:
+                  - postgres
+                  - aurora-postgresql
+                  - cloudnative-postgres
                 type: string
               useExistingSource:
                 default: false
