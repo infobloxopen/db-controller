@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+	"github.com/infobloxopen/db-controller/pkg/providers"
 	"strings"
 	"time"
 
@@ -79,6 +80,7 @@ type DatabaseClaimReconciler struct {
 	Config        *DatabaseClaimConfig
 	kctl          *kctlutils.Client
 	statusManager *StatusManager
+	provider      providers.Provider
 }
 
 // New returns a configured databaseclaim reconciler
@@ -88,6 +90,7 @@ func New(cli client.Client, cfg *DatabaseClaimConfig) *DatabaseClaimReconciler {
 		Config:        cfg,
 		kctl:          kctlutils.New(cli, cfg.Viper.GetString("SERVICE_NAMESPACE")),
 		statusManager: NewStatusManager(cli, cfg.Viper),
+		provider:      providers.NewProvider(cfg.Viper, cli, cfg.Namespace),
 	}
 }
 
@@ -187,7 +190,12 @@ func (r *DatabaseClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				//ignore delete request, continue to process rds migration
 				return r.executeDbClaimRequest(ctx, &reqInfo, &dbClaim)
 			}
-			if basefun.GetCloud(r.Config.Viper) == "aws" {
+			if basefun.IsProviderEnable(r.Config.Viper) {
+				spec := NewDatabaseSpecFromRequestInfo(&reqInfo, &dbClaim, r.getMode(ctx, &reqInfo, &dbClaim), r.Config.Viper)
+				if _, err := r.provider.DeleteDatabase(ctx, spec); err != nil {
+					return ctrl.Result{}, err
+				}
+			} else if basefun.GetCloud(r.Config.Viper) == "aws" {
 				// our finalizer is present, so lets handle any external dependency
 				if err := r.deleteExternalResourcesAWS(ctx, &reqInfo, &dbClaim); err != nil {
 					// if fail to delete the external dependency here, return with error
@@ -247,11 +255,40 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 }
 
 func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
-
 	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-
 	logr.Info("post migration is in progress")
 
+	if basefun.IsProviderEnable(r.Config.Viper) {
+		dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
+		deleted, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
+			_, err := r.provider.DeleteDatabase(ctx, providers.DatabaseSpec{ResourceName: dbInstanceName, TagInactive: false})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			dbClaim.Status.OldDB = v1.StatusForOldDB{}
+		}
+
+		if !deleted {
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
+
+		if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
+			logr.Error(err, "Error updating DatabaseClaim status")
+			return ctrl.Result{}, err
+		}
+
+		if !dbClaim.ObjectMeta.DeletionTimestamp.IsZero() {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// TODO: after provider implementation is validated, below code can be deprecated
 	// get name of DBInstance from connectionInfo
 	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
 
@@ -521,7 +558,11 @@ func (r *DatabaseClaimReconciler) reconcileNewDB(ctx context.Context, reqInfo *r
 
 	isReady := false
 	var err error
-	if cloud == "aws" {
+	// TODO: Once the providers implementation is ready, we could completely remove this if cloud condition
+	if basefun.IsProviderEnable(r.Config.Viper) {
+		spec := NewDatabaseSpecFromRequestInfo(reqInfo, dbClaim, operationalMode, r.Config.Viper)
+		isReady, err = r.provider.CreateDatabase(ctx, spec)
+	} else if cloud == "aws" {
 		isReady, err = r.manageCloudHostAWS(ctx, reqInfo, dbClaim, operationalMode)
 		if err != nil {
 			logr.Error(err, "manage_cloud_host_AWS")
