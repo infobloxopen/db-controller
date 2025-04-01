@@ -22,6 +22,9 @@ spec:
   template:
     metadata:
       labels:
+        persistance.atlas.infoblox.com/dbproxy: "enabled"
+        persistance.atlas.infoblox.com/claim: {{ .Name }}
+        persistance.atlas.infoblox.com/class: "fbottega"
         app: {{ .Name }}
         release: {{ .Release }}
 {{- if .Values.podLabels }}
@@ -73,10 +76,7 @@ spec:
           {{- end}}
           env:
           - name: DATA_SOURCE_NAME
-            valueFrom:
-              secretKeyRef:
-                name: "{{ .DatasourceSecretName }}"
-                key: {{ .DatasourceFileName }}
+            value: postgress://localhost:5432/{{ .DatabaseName }}
           - name: DATA_SOURCE_USER
             value: {{ .DatasourceUser }}
           image: "{{ .ImageRepo }}:{{ .ImageTag }}"

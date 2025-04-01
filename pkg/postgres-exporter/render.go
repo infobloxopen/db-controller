@@ -26,6 +26,7 @@ type Config struct {
 	// Override Values
 	Release      string
 	TemplatePath string
+	DatabaseName string
 
 	// DBClaimOwnerRef ensures deployment is cleaned up when db claim is deleted
 	DBClaimOwnerRef      string
