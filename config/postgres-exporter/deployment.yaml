@@ -24,7 +24,7 @@ spec:
       labels:
         persistance.atlas.infoblox.com/dbproxy: "enabled"
         persistance.atlas.infoblox.com/claim: {{ .Name }}
-        persistance.atlas.infoblox.com/class: "fbottega"
+        persistance.atlas.infoblox.com/class: "default"
         app: {{ .Name }}
         release: {{ .Release }}
 {{- if .Values.podLabels }}
