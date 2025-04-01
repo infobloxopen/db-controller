@@ -244,6 +244,7 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 	cfg.DatasourceSecretName = dbClaim.Spec.SecretName
 	cfg.DatasourceFileName = v1.DSNURIKey
 	cfg.DatabaseName = dbClaim.Spec.DatabaseName
+	cfg.Class = r.Config.Class
 	return exporter.Apply(ctx, r.Client, cfg)
 }
 

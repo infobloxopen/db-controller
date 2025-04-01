@@ -27,6 +27,7 @@ type Config struct {
 	Release      string
 	TemplatePath string
 	DatabaseName string
+	Class        string
 
 	// DBClaimOwnerRef ensures deployment is cleaned up when db claim is deleted
 	DBClaimOwnerRef      string
@@ -89,7 +90,7 @@ var DefaultConfig = Config{
 
 	Release:            "dbclaim-exporter",
 	ImageRepo:          "quay.io/prometheuscommunity/postgres-exporter",
-	ImageTag:           "v0.15.0",
+	ImageTag:           "v0.17.1",
 	DatasourceFileName: DefaultDBFileName,
 
 	Resources: map[string]map[string]string{

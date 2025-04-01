@@ -24,7 +24,7 @@ spec:
       labels:
         persistance.atlas.infoblox.com/dbproxy: "enabled"
         persistance.atlas.infoblox.com/claim: {{ .Name }}
-        persistance.atlas.infoblox.com/class: "default"
+        persistance.atlas.infoblox.com/class: {{ .Class }}
         app: {{ .Name }}
         release: {{ .Release }}
 {{- if .Values.podLabels }}
@@ -75,8 +75,8 @@ spec:
           - "--log.format={{ .Values.config.logFormat }}"
           {{- end}}
           env:
-          - name: DATA_SOURCE_NAME
-            value: postgress://localhost:5432/{{ .DatabaseName }}
+          - name: DATA_SOURCE_URI
+            value: localhost:5432/{{ .DatabaseName }}?sslmode=disable
           - name: DATA_SOURCE_USER
             value: {{ .DatasourceUser }}
           image: "{{ .ImageRepo }}:{{ .ImageTag }}"
