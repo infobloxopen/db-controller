@@ -3,7 +3,6 @@ package exporter
 import (
 	"bytes"
 	"context"
-	"flag"
 	"io/ioutil"
 	"os"
 	"path"
@@ -15,50 +14,41 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// The following gingo struct and associted init() is required to run go test with ginkgo related flags
-// Since this test is not using ginkgo, this is a hack to get around the issue of go test complaining about
-// unknown flags.
-var ginkgo struct {
-	dry_run      string
-	label_filter string
-}
+var testDataDir string
 
 func init() {
-	flag.StringVar(&ginkgo.dry_run, "ginkgo.dry-run", "", "Ignore this flag")
-	flag.StringVar(&ginkgo.label_filter, "ginkgo.label-filter", "", "Ignore this flag")
+	// Set up the test directory based on the current file's location
+	_, filename, _, _ := runtime.Caller(0)
+	testDataDir = path.Dir(filename)
+	err := os.Chdir(testDataDir)
+	if err != nil {
+		panic(err)
+	}
 }
 
-func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig
+func TestRenderDefaultConfigAnnotations(t *testing.T) {
+	template := `annotations:
+  {{- toYaml .Values.annotations | nindent 2 }}`
 
-	s, err := render(context.TODO(), &cfg, `
-annotations:
-  {{- toYaml .Values.annotations | nindent 2 }}
-resources:
-  {{- toYaml .Resources | nindent 2 }}
-`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	e := `annotations:
+	expected := `annotations:
   prometheus.io/path: /metrics
   prometheus.io/port: "9187"
-  prometheus.io/scrape: "true"
-resources:
-  limits:
-    cpu: 100m
-    memory: 128Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi`
+  prometheus.io/scrape: "true"`
 
-	if !strings.EqualFold(s, e) {
-		t.Logf("got:   %q\nwanted: %q", s, e)
+	rendered, err := render(context.Background(), &DefaultConfig, template)
+	if err != nil {
+		t.Fatalf("Failed to render template: %v", err)
+	}
+
+	rendered = strings.TrimSpace(rendered)
+	expected = strings.TrimSpace(expected)
+
+	if rendered != expected {
+		t.Errorf("Rendered annotations don't match expected output.\nGot:\n%s\n\nWant:\n%s", rendered, expected)
 	}
 }
 
-func testReadValues(t *testing.T, data []byte) Values {
+func loadTestValues(t *testing.T, data []byte) Values {
 	t.Helper()
 	vals, err := ReadValues(data)
 	if err != nil {
@@ -67,40 +57,22 @@ func testReadValues(t *testing.T, data []byte) Values {
 	return vals
 }
 
-func TestMarshal(t *testing.T) {
-	t.Skip("skip marshal")
+func TestRenderTemplateWithConfig(t *testing.T) {
 	tests := []struct {
-		path string
+		name            string
+		templatePath    string
+		config          *Config
+		expectedOutPath string
+		wantErr         bool
 	}{
 		{
-			path: "deployment.yaml",
-		},
-	}
-
-	for _, tt := range tests {
-		var dep appsv1.Deployment
-		f := openFile(t, path.Join(dir, tt.path))
-		if err := unmarshal([]byte(f), &dep); err != nil {
-			t.Fatal(err)
-		}
-		_ = dep
-	}
-}
-
-func Test_render(t *testing.T) {
-
-	tests := []struct {
-		path  string
-		cfg   *Config
-		eErr  error
-		ePath string
-	}{
-		{
-			path:  "deployment.yaml",
-			ePath: "tests/testA.yaml",
-			cfg: &Config{
+			name:            "deployment template with config A",
+			templatePath:    "deployment.yaml",
+			expectedOutPath: "tests/testA.yaml",
+			config: &Config{
 				Name:                 "testA",
 				Namespace:            "nsA",
+				Class:                "testA",
 				Release:              "ReleaseA",
 				DBClaimOwnerRef:      "888888b8-d7c5-432d-8807-033f89aba33c",
 				ConfigCheckSum:       "e1134fb",
@@ -118,7 +90,7 @@ func Test_render(t *testing.T) {
 						"memory": "128Mi",
 					},
 				},
-				Values: testReadValues(t, []byte(`
+				Values: loadTestValues(t, []byte(`
 podLabels:
   "keyA": valueA
 annotations:
@@ -127,11 +99,11 @@ annotations:
 `)),
 			},
 		},
-
 		{
-			path:  "config.yaml",
-			ePath: "tests/testB.yaml",
-			cfg: &Config{
+			name:            "config template with config B",
+			templatePath:    "config.yaml",
+			expectedOutPath: "tests/testB.yaml",
+			config: &Config{
 				Name:                 "testB",
 				Namespace:            "nsA",
 				Release:              "ReleaseA",
@@ -141,7 +113,7 @@ annotations:
 				DatasourceUser:       "data",
 				DatasourceSecretName: "secret/data",
 				DatasourceFileName:   DefaultDBFileName,
-				Values: testReadValues(t, []byte(`
+				Values: loadTestValues(t, []byte(`
 podLabels:
   keyA: valueA
 annotations:
@@ -151,42 +123,48 @@ annotations:
 	}
 
 	for _, tt := range tests {
-		f := openFile(t, path.Join(dir, tt.path))
-		s, err := render(context.TODO(), tt.cfg, f)
-		if err != tt.eErr {
-			t.Fatalf("got: %s wanted: %s", err, tt.eErr)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			templateContent := readTestFile(t, path.Join(testDataDir, tt.templatePath))
+			got, err := render(context.TODO(), tt.config, templateContent)
 
-		e := openFile(t, path.Join(dir, tt.ePath))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("render() error = %v, wantErr %v", err, tt.wantErr)
+			}
 
-		if s != e {
-			os.WriteFile(tt.cfg.Name, []byte(s), 0600)
-			t.Errorf("got:\n%q\nwanted:\n%q", s, e)
-		}
+			expected := readTestFile(t, path.Join(testDataDir, tt.expectedOutPath))
 
-		var dep appsv1.Deployment
-		if err := unmarshal([]byte(s), &dep); err != nil {
-			t.Log(err)
-			t.Log(s)
-		}
+			if got != expected {
+				t.Errorf("rendered output mismatch:\ngot: %s\nwant: %s", got, expected)
+			}
+
+			// Validate that the rendered template is valid YAML
+			var dep appsv1.Deployment
+			if err := unmarshal([]byte(got), &dep); err != nil {
+				t.Logf("Failed to unmarshal rendered template: %v", err)
+				t.Logf("Rendered template: %s", got)
+			}
+		})
 	}
 }
 
-func TestRender(t *testing.T) {
-
+func TestRenderFullResources(t *testing.T) {
 	tests := []struct {
-		cfg               *Config
-		eErr              error
-		applyErr          error
-		eDepPath, eCMPath string
+		name           string
+		config         *Config
+		wantErrRender  bool
+		wantErrApply   bool
+		wantDepPath    string
+		wantConfigPath string
 	}{
 		{
-			eDepPath: "tests/RenderA-dep.yaml",
-			eCMPath:  "tests/RenderA-cm.yaml",
-			cfg: &Config{
+			name:           "render deployment and config map A",
+			wantDepPath:    "tests/RenderA-dep.yaml",
+			wantConfigPath: "tests/RenderA-cm.yaml",
+			config: &Config{
 				Name:                 "RenderA",
 				Namespace:            "nsA",
 				Release:              "ReleaseA",
+				Class:                "RenderA",
 				DBClaimOwnerRef:      "owner-abcd",
 				ConfigCheckSum:       "e1134fb",
 				ServiceAccountName:   "robot",
@@ -205,7 +183,7 @@ func TestRender(t *testing.T) {
 				},
 				DepYamlPath:    "deployment.yaml",
 				ConfigYamlPath: "config.yaml",
-				Values: testReadValues(t, []byte(`
+				Values: loadTestValues(t, []byte(`
 podLabels:
   keyA: valueA
 annotations:
@@ -217,53 +195,42 @@ annotations:
 	}
 
 	for _, tt := range tests {
-		d, cm, err := Render(context.TODO(), tt.cfg)
-		if err != tt.eErr {
-			t.Errorf("got: %s wanted: %s", err, tt.eErr)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			deploymentYAML, configMapYAML, err := Render(context.TODO(), tt.config)
+			if (err != nil) != tt.wantErrRender {
+				t.Errorf("Render() error = %v, wantErr %v", err, tt.wantErrRender)
+				return
+			}
 
-		e := openFile(t, path.Join(dir, tt.eDepPath))
-		if !strings.EqualFold(d, e) {
-			t.Errorf("got:\n%s\nwanted:\n%s", d, e)
-			os.WriteFile(tt.cfg.Name+"-dep.yaml", []byte(d), 0600)
-			continue
-		}
+			// Check deployment YAML
+			expectedDep := readTestFile(t, path.Join(testDataDir, tt.wantDepPath))
+			if !strings.EqualFold(deploymentYAML, expectedDep) {
+				t.Errorf("Deployment YAML mismatch")
+			}
 
-		e = openFile(t, path.Join(dir, tt.eCMPath))
-		if !strings.EqualFold(cm, e) {
-			t.Errorf("got:\n%q\nwanted:\n%q", cm, e)
-			t.Log(len(cm), len(e))
-			os.WriteFile(tt.cfg.Name+"-cm.yaml", []byte(cm), 0600)
-			continue
-		}
+			// Check config map YAML
+			expectedCM := readTestFile(t, path.Join(testDataDir, tt.wantConfigPath))
+			if !strings.EqualFold(configMapYAML, expectedCM) {
+				t.Errorf("ConfigMap YAML mismatch")
+			}
 
-		var (
-			dep    appsv1.Deployment
-			cfgMap corev1.ConfigMap
-		)
-		err = apply(context.TODO(), tt.cfg, &dep, &cfgMap)
-		if err != tt.applyErr {
-			t.Errorf("got: %s wanted: %s", err, tt.applyErr)
-			continue
-		}
+			// Test applying the rendered templates
+			var deployment appsv1.Deployment
+			var configMap corev1.ConfigMap
+			err = apply(context.TODO(), tt.config, &deployment, &configMap)
+			if (err != nil) != tt.wantErrApply {
+				t.Errorf("apply() error = %v, wantErr %v", err, tt.wantErrApply)
+			}
+		})
 	}
 }
 
-func openFile(t *testing.T, path string) string {
-	bs, err := ioutil.ReadFile(path)
+// readTestFile reads a file and returns its content as a trimmed string
+func readTestFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Fatalf("Failed to read test file %s: %v", path, err)
 	}
-	return string(bytes.TrimSpace(bs))
-}
-
-var dir string
-
-func init() {
-	_, filename, _, _ := runtime.Caller(0)
-	dir = path.Dir(filename)
-	err := os.Chdir(dir)
-	if err != nil {
-		panic(err)
-	}
+	return string(bytes.TrimSpace(data))
 }
