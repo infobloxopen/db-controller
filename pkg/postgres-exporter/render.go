@@ -90,7 +90,7 @@ var DefaultConfig = Config{
 
 	Release:            "dbclaim-exporter",
 	ImageRepo:          "quay.io/prometheuscommunity/postgres-exporter",
-	ImageTag:           "v0.17.1",
+	ImageTag:           "v0.10.1",
 	DatasourceFileName: DefaultDBFileName,
 
 	Resources: map[string]map[string]string{
