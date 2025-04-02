@@ -22,6 +22,9 @@ spec:
   template:
     metadata:
       labels:
+        persistance.atlas.infoblox.com/dbproxy: "enabled"
+        persistance.atlas.infoblox.com/claim: testA
+        persistance.atlas.infoblox.com/class: testA
         app: testA
         release: ReleaseA
         keyA: valueA
@@ -36,11 +39,8 @@ spec:
           args:
           - "--extend.query-path=/etc/config.yaml"
           env:
-          - name: DATA_SOURCE_NAME
-            valueFrom:
-              secretKeyRef:
-                name: "secret/data"
-                key: uri_dsn.txt
+          - name: DATA_SOURCE_URI
+            value: localhost:5432/?sslmode=disable
           - name: DATA_SOURCE_USER
             value: data
           image: ":"
