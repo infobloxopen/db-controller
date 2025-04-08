@@ -646,15 +646,6 @@ func (r *DatabaseClaimReconciler) providerCRAlreadyExists(ctx context.Context, r
 func (r *DatabaseClaimReconciler) reconcileMigrateToNewDB(ctx context.Context, reqInfo *requestInfo, dbClaim *v1.DatabaseClaim, operationalMode ModeEnum) (ctrl.Result, error) {
 	logr := log.FromContext(ctx)
 
-	exists, err := r.providerCRAlreadyExists(ctx, reqInfo, dbClaim)
-	if err != nil {
-		return r.statusManager.SetError(ctx, dbClaim, err)
-	}
-
-	if exists {
-		return r.statusManager.SetError(ctx, dbClaim, fmt.Errorf("migration attempt error: crossplane provider CR already exists"))
-	}
-
 	if dbClaim.Status.MigrationState == "" {
 		dbClaim.Status.MigrationState = pgctl.S_Initial.String()
 		if err := r.statusManager.UpdateStatus(ctx, dbClaim); err != nil {
