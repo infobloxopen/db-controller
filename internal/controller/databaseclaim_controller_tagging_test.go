@@ -167,7 +167,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			mockReconciler.Setup()
 
 			// providing names of non-existing resources below
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logr.Discard(), "dbb", "dbparamm")
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logr.Discard(), "dbb", "dbparamm", false)
 			Expect(err).Should(HaveOccurred()) // This should create error
 			Expect(check).To(BeFalse())
 
@@ -223,7 +223,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", false)
 			mockReconciler.Setup()
 
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name, false)
 			Expect(err).To(BeNil())
 			Expect(check).To(BeFalse())
 
@@ -280,7 +280,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
 			mockReconciler.Setup()
 
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name, false)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeFalse())
 
@@ -344,7 +344,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			updateStatus(name)
 			updateStatus(name2)
 
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(ctx, logger, name, name)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(ctx, logger, name, name, false)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeTrue())
 

@@ -249,56 +249,43 @@ func (r *DatabaseClaimReconciler) createMetricsDeployment(ctx context.Context, d
 }
 
 func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, dbClaim *v1.DatabaseClaim) (ctrl.Result, error) {
+	logger := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
+	logger.Info("Post migration is in progress")
 
-	logr := log.FromContext(ctx).WithValues("databaseclaim", dbClaim.Namespace+"/"+dbClaim.Name)
-
-	logr.Info("post migration is in progress")
-
-	// get name of DBInstance from connectionInfo
 	dbInstanceName := strings.Split(dbClaim.Status.OldDB.ConnectionInfo.Host, ".")[0]
+	isAurora := dbClaim.Status.OldDB.Type == v1.AuroraPostgres
+	dbVersionPrefix := strings.Split(dbClaim.Status.OldDB.DBVersion, ".")[0]
 
 	var dbParamGroupName string
-	// get name of DBParamGroup from connectionInfo
-	if dbClaim.Status.OldDB.Type == v1.AuroraPostgres {
-		dbParamGroupName = dbInstanceName + "-a-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+	if isAurora {
+		dbParamGroupName = dbInstanceName + "-a-" + dbVersionPrefix
 	} else {
-		dbParamGroupName = dbInstanceName + "-" + (strings.Split(dbClaim.Status.OldDB.DBVersion, "."))[0]
+		dbParamGroupName = dbInstanceName + "-" + dbVersionPrefix
 	}
 
-	TagsVerified, err := r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName)
+	tagsVerified, taggingErr := r.manageOperationalTagging(ctx, logger, dbInstanceName, dbParamGroupName, isAurora)
+	shouldDelete := taggingErr != nil || tagsVerified ||
+		time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10
 
-	// Even though we get error in updating tags, we log the error
-	// and go ahead with deleting resources
-	if err != nil || TagsVerified {
+	if taggingErr != nil {
+		logger.Error(taggingErr, "Failed updating or verifying operational tags")
+	}
 
-		if err != nil {
-			logr.Error(err, "Failed updating or verifying operational tags")
+	if shouldDelete {
+		if taggingErr != nil && !tagsVerified {
+			logger.Info("Defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
 		}
-
-		if err = r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
-			logr.Error(err, "Could not delete crossplane DBInstance/DBCLluster")
+		if err := r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
+			logger.Error(err, "Could not delete crossplane DBInstance/DBCluster")
 		}
-		if err = r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
-			logr.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
+		if err := r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
+			logger.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
 		}
-
-		dbClaim.Status.OldDB = v1.StatusForOldDB{}
-	} else if time.Since(dbClaim.Status.OldDB.PostMigrationActionStartedAt.Time).Minutes() > 10 {
-		// Lets keep the state of old as it is for defined time to wait and verify tags before actually deleting resources
-		logr.Info("defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
-
-		if err = r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
-			logr.Error(err, "Could not delete crossplane  DBInstance/DBCLluster")
-		}
-		if err = r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
-			logr.Error(err, "Could not delete crossplane  DBParamGroup/DBClusterParamGroup")
-		}
-
 		dbClaim.Status.OldDB = v1.StatusForOldDB{}
 	}
 
 	if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
-		logr.Error(err, "Error updating DatabaseClaim status")
+		logger.Error(err, "Error updating DatabaseClaim status")
 		return ctrl.Result{}, err
 	}
 
@@ -957,48 +944,42 @@ func MakeDeepCopyToOldDB(to *v1.StatusForOldDB, from *v1.Status) {
 //
 //	true: operational tag is updated and verfied.
 //	false: operational tag is updated but could not be verified yet.
-func (r *DatabaseClaimReconciler) ManageOperationalTagging(ctx context.Context, logr logr.Logger, dbInstanceName, dbParamGroupName string) (bool, error) {
-	return r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName)
+func (r *DatabaseClaimReconciler) ManageOperationalTagging(ctx context.Context, logr logr.Logger, dbInstanceName, dbParamGroupName string, isAurora bool) (bool, error) {
+	return r.manageOperationalTagging(ctx, logr, dbInstanceName, dbParamGroupName, isAurora)
 }
 
-func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, logr logr.Logger, dbInstanceName, dbParamGroupName string) (bool, error) {
-
-	err := r.operationalTaggingForDbClusterParamGroup(ctx, logr, dbParamGroupName)
-	if err != nil {
-		return false, err
-	}
-	err = r.operationalTaggingForDbParamGroup(ctx, logr, dbParamGroupName)
-	if err != nil {
-		return false, err
-	}
-	err = r.operationalTaggingForDbCluster(ctx, logr, dbInstanceName)
-	if err != nil {
-		return false, err
-	}
-
-	// unlike other resources above, verifying tags updation and handling errors if any just for "DBInstance" resource
-	isVerfied, err := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName)
-
-	if basefun.GetMultiAZEnabled(r.Config.Viper) {
-		isVerfiedforMultiAZ, errMultiAZ := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName+"-2")
-		if err != nil {
-			return false, err
-		} else if errMultiAZ != nil {
-			return false, errMultiAZ
-		} else if !isVerfied || !isVerfiedforMultiAZ {
-			return false, nil
-		} else {
-			return true, nil
+func (r *DatabaseClaimReconciler) manageOperationalTagging(ctx context.Context, logr logr.Logger,
+	dbInstanceName, dbParamGroupName string, isAurora bool) (bool, error) {
+	// For Aurora PostgreSQL, manage tagging for both cluster and instance resources
+	if isAurora {
+		if err := r.operationalTaggingForDbClusterParamGroup(ctx, logr, dbParamGroupName); err != nil {
+			return false, fmt.Errorf("failed to tag cluster parameter group: %w", err)
 		}
 
-	} else {
-		if err != nil {
-			return false, err
-		} else {
-			return isVerfied, nil
+		if err := r.operationalTaggingForDbCluster(ctx, logr, dbInstanceName); err != nil {
+			return false, fmt.Errorf("failed to tag cluster: %w", err)
 		}
 	}
 
+	if err := r.operationalTaggingForDbParamGroup(ctx, logr, dbParamGroupName); err != nil {
+		return false, fmt.Errorf("failed to tag parameter group: %w", err)
+	}
+
+	isVerified, err := r.operationalTaggingForDbInstance(ctx, logr, dbInstanceName)
+	if err != nil {
+		return false, fmt.Errorf("failed to tag primary instance: %w", err)
+	}
+
+	if basefun.GetMultiAZEnabled(r.Config.Viper) && isAurora {
+		secondaryInstanceName := dbInstanceName + "-2"
+		isVerifiedSecondary, errSecondary := r.operationalTaggingForDbInstance(ctx, logr, secondaryInstanceName)
+		if errSecondary != nil {
+			return false, fmt.Errorf("failed to tag secondary instance: %w", errSecondary)
+		}
+		return isVerified && isVerifiedSecondary, nil
+	}
+
+	return isVerified, nil
 }
 
 func (r *DatabaseClaimReconciler) getClientForExistingDB(ctx context.Context, dbClaim *v1.DatabaseClaim, connInfo *v1.DatabaseClaimConnectionInfo) (dbclient.Clienter, error) {
