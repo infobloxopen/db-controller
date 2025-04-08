@@ -84,7 +84,10 @@ func (r *DatabaseClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		// Ignore status updates in objects being watched
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(predicate.Or(
+			predicate.GenerationChangedPredicate{},
+			predicate.LabelChangedPredicate{},
+		)).
 		For(&persistancev1.DatabaseClaim{}).
 		Complete(r)
 }
