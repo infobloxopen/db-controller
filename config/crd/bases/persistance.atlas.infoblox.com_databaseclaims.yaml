@@ -70,6 +70,11 @@ spec:
                 description: Specifies an indentifier for the application using the
                   database.
                 type: string
+              autoMinorVersionUpgrade:
+                default: true
+                description: AutoMinorVersionUpgrade enables automatic minor version
+                  upgrades.
+                type: boolean
               backupPolicy:
                 description: BackupPolicy specifies the duration at which db backups
                   are taken
