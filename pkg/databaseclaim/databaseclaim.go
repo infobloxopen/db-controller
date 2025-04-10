@@ -287,7 +287,10 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 	}
 
 	if err := r.statusManager.ClearError(ctx, dbClaim); err != nil {
-		logger.Error(err, "Error updating DatabaseClaim status")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.statusManager.UpdateStatus(ctx, dbClaim); err != nil {
 		return ctrl.Result{}, err
 	}
 
