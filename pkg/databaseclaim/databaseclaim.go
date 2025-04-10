@@ -275,12 +275,14 @@ func (r *DatabaseClaimReconciler) postMigrationInProgress(ctx context.Context, d
 		if taggingErr != nil && !tagsVerified {
 			logger.Info("Defined wait time is over to verify operational tags on AWS resources. Moving ahead to delete associated crossplane resources anyway")
 		}
-		if err := r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
-			logger.Error(err, "Could not delete crossplane DBInstance/DBCluster")
-		}
 		if err := r.deleteParameterGroupAWS(ctx, dbParamGroupName); err != nil {
-			logger.Error(err, "Could not delete crossplane DBParamGroup/DBClusterParamGroup")
+			logger.Error(err, "Could not delete crossplane DBParamGroup")
 		}
+		if err := r.deleteCloudDatabaseAWS(dbInstanceName, ctx); err != nil {
+			logger.Error(err, "Could not delete crossplane DBInstance")
+		}
+
+		logger.Info("Deleted Crossplane DB custom resources", "dbParamGroupName", dbParamGroupName, "dbInstanceName", dbInstanceName)
 		dbClaim.Status.OldDB = v1.StatusForOldDB{}
 	}
 

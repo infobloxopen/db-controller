@@ -730,12 +730,10 @@ func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context
 		dbHostName := r.getDynamicHostName(reqInfo.HostParams.Hash(), dbClaim)
 		pgName := r.getParameterGroupName(&reqInfo.HostParams, dbClaim, reqInfo.DbType)
 
-		// Delete
 		if err := r.deleteCloudDatabaseAWS(dbHostName, ctx); err != nil {
 			return err
 		}
 		return r.deleteParameterGroupAWS(ctx, pgName)
-
 	}
 	// else reclaimPolicy == "retain" nothing to do!
 
@@ -743,112 +741,89 @@ func (r *DatabaseClaimReconciler) deleteExternalResourcesAWS(ctx context.Context
 }
 
 func (r *DatabaseClaimReconciler) deleteCloudDatabaseAWS(dbHostName string, ctx context.Context) error {
-
 	logr := log.FromContext(ctx)
-	dbInstance := &crossplaneaws.DBInstance{}
-	dbCluster := &crossplaneaws.DBCluster{}
 
+	// Delete the secondary DB instance
 	if basefun.GetMultiAZEnabled(r.Config.Viper) {
-		err := r.Client.Get(ctx, client.ObjectKey{
-			Name: dbHostName + "-2",
-		}, dbInstance)
-		if err != nil {
-			if !errors.IsNotFound(err) {
+		multiAZName := dbHostName + "-2"
+		dbInstance := &crossplaneaws.DBInstance{}
+		err := r.Client.Get(ctx, client.ObjectKey{Name: multiAZName}, dbInstance)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+
+		if err == nil && dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+			if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+				logr.Info("unable to delete crossplane DBInstance resource", "DBInstance", multiAZName)
 				return err
-			} // else not found - no action required
-		} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
-			if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-				logr.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName+"-2")
-				return err
-			} else {
-				logr.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName+"-2")
 			}
+			logr.Info("deleted crossplane DBInstance resource", "DBInstance", multiAZName)
 		}
 	}
 
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostName,
-	}, dbInstance)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		} // else not found - no action required
-	} else if dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
-		if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-			logr.Info("unable delete crossplane DBInstance resource", "DBInstance", dbHostName)
-			return err
-		} else {
-			logr.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName)
-		}
+	// Delete the primary DB instance
+	dbInstance := &crossplaneaws.DBInstance{}
+	err := r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbInstance)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
 	}
 
-	err = r.Client.Get(ctx, client.ObjectKey{
-		Name: dbHostName,
-	}, dbCluster)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil //nothing to delete
-		} else {
+	if err == nil && dbInstance.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbInstance, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			logr.Info("unable to delete crossplane DBInstance resource", "DBInstance", dbHostName)
 			return err
 		}
+		logr.Info("deleted crossplane DBInstance resource", "DBInstance", dbHostName)
 	}
 
-	if dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
-		if err := r.Delete(ctx, dbCluster, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-			logr.Info("unable delete crossplane DBCluster resource", "DBCluster", dbHostName)
+	// Delete db cluster if it exists
+	dbCluster := &crossplaneaws.DBCluster{}
+	err = r.Client.Get(ctx, client.ObjectKey{Name: dbHostName}, dbCluster)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if err == nil && dbCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbCluster, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			logr.Info("unable to delete crossplane DBCluster resource", "DBCluster", dbHostName)
 			return err
-		} else {
-			logr.Info("deleted crossplane DBCluster resource", "DBCluster", dbHostName)
 		}
+		logr.Info("deleted crossplane DBCluster resource", "DBCluster", dbHostName)
 	}
 
 	return nil
 }
 
 func (r *DatabaseClaimReconciler) deleteParameterGroupAWS(ctx context.Context, pgName string) error {
-
 	logr := log.FromContext(ctx)
 
+	// Delete DB Parameter Group
 	dbParamGroup := &crossplaneaws.DBParameterGroup{}
+	err := r.Client.Get(ctx, client.ObjectKey{Name: pgName}, dbParamGroup)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	if err == nil && dbParamGroup.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbParamGroup, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			logr.Info("unable to delete crossplane dbParamGroup resource", "dbParamGroup", pgName)
+			return err
+		}
+		logr.Info("deleted crossplane dbParamGroup resource", "dbParamGroup", pgName)
+	}
+
+	// Delete DB Cluster Parameter Group
 	dbClusterParamGroup := &crossplaneaws.DBClusterParameterGroup{}
-
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: pgName,
-	}, dbParamGroup)
-
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
-		} // else not found - no action required
-	} else if dbParamGroup.ObjectMeta.DeletionTimestamp.IsZero() {
-		if err := r.Delete(ctx, dbParamGroup, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-			logr.Info("unable delete crossplane dbParamGroup resource", "dbParamGroup", dbParamGroup)
-			return err
-		} else {
-			logr.Info("deleted crossplane dbParamGroup resource", "dbParamGroup", dbParamGroup)
-		}
+	err = r.Client.Get(ctx, client.ObjectKey{Name: pgName}, dbClusterParamGroup)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
 	}
 
-	err = r.Client.Get(ctx, client.ObjectKey{
-		Name: pgName,
-	}, dbClusterParamGroup)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil //nothing to delete
-		} else {
+	if err == nil && dbClusterParamGroup.ObjectMeta.DeletionTimestamp.IsZero() {
+		if err := r.Delete(ctx, dbClusterParamGroup, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+			logr.Info("unable to delete crossplane DBClusterParameterGroup resource", "dbClusterParamGroup", pgName)
 			return err
 		}
-	}
-
-	if dbClusterParamGroup.ObjectMeta.DeletionTimestamp.IsZero() {
-		if err := r.Delete(ctx, dbClusterParamGroup, client.PropagationPolicy(metav1.DeletePropagationBackground)); (err) != nil {
-			logr.Info("unable delete crossplane DBCluster resource", "dbClusterParamGroup", dbClusterParamGroup)
-			return err
-		} else {
-			logr.Info("deleted crossplane DBCluster resource", "dbClusterParamGroup", dbClusterParamGroup)
-		}
+		logr.Info("deleted crossplane DBClusterParameterGroup resource", "dbClusterParamGroup", pgName)
 	}
 
 	return nil
