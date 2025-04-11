@@ -147,7 +147,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 					EnableCloudwatchLogsExports:     reqInfo.EnableCloudwatchLogsExport,
 					IOPS:                            nil,
 					PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
-					AutoMinorVersionUpgrade:         dbClaim.Spec.autoMinorVersionUpgrade,
+					AutoMinorVersionUpgrade:         dbClaim.Spec.AutoMinorVersionUpgrade,
 				},
 				ResourceSpec: xpv1.ResourceSpec{
 					WriteConnectionSecretToReference: &dbSecretCluster,
@@ -294,7 +294,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
 						PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
-						AutoMinorVersionUpgrade:         dbClaim.Spec.autoMinorVersionUpgrade,
+						AutoMinorVersionUpgrade:         dbClaim.Spec.AutoMinorVersionUpgrade,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretInstance,
@@ -435,7 +435,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 						EnablePerformanceInsights:   &reqInfo.EnablePerfInsight,
 						EnableCloudwatchLogsExports: nil,
 						PreferredMaintenanceWindow:  dbClaim.Spec.PreferredMaintenanceWindow,
-						AutoMinorVersionUpgrade:     dbClaim.Spec.autoMinorVersionUpgrade,
+						AutoMinorVersionUpgrade:     dbClaim.Spec.AutoMinorVersionUpgrade,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
