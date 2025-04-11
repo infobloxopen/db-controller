@@ -167,7 +167,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			mockReconciler.Setup()
 
 			// providing names of non-existing resources below
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logr.Discard(), "dbb", "dbparamm")
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logr.Discard(), "dbb", "dbparamm", false)
 			Expect(err).Should(HaveOccurred()) // This should create error
 			Expect(check).To(BeFalse())
 
@@ -212,7 +212,7 @@ var _ = Describe("Tagging", Ordered, func() {
 	})
 
 	Context("Now, try Adding tags to resources, with multiAZ  disabled", func() {
-		It("Should add tags to all valid resources. Should skip instance-2 as multiAZ is disabled", func() {
+		It("Should add tags to all valid resources. Should skip instance-2 as multiAZ is disabled, should tag cluster as it is aurora type", func() {
 
 			mockReconciler := &DatabaseClaimReconciler{
 				Client: k8sClient,
@@ -223,7 +223,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", false)
 			mockReconciler.Setup()
 
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name, true)
 			Expect(err).To(BeNil())
 			Expect(check).To(BeFalse())
 
@@ -269,7 +269,7 @@ var _ = Describe("Tagging", Ordered, func() {
 	})
 
 	Context("Adding tags to resources, while multiAZ is enabled", func() {
-		It("Should add tags to all valid resources if exists. Should NOT skip instance-2 as multiAZ is enabled", func() {
+		It("Should add tags to all valid resources if exists. Should NOT skip instance-2 as multiAZ is enabled and is an aurora type instance", func() {
 
 			mockReconciler := &DatabaseClaimReconciler{
 				Client: k8sClient,
@@ -280,7 +280,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			mockReconciler.Config.Viper.Set("dbMultiAZEnabled", true)
 			mockReconciler.Setup()
 
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(context.Background(), logger, name, name, true)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeFalse())
 
@@ -344,7 +344,7 @@ var _ = Describe("Tagging", Ordered, func() {
 			updateStatus(name)
 			updateStatus(name2)
 
-			check, err := mockReconciler.Reconciler().ManageOperationalTagging(ctx, logger, name, name)
+			check, err := mockReconciler.Reconciler().ManageOperationalTagging(ctx, logger, name, name, false)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(check).To(BeTrue())
 
