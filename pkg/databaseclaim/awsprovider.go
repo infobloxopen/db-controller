@@ -3,6 +3,7 @@ package databaseclaim
 import (
 	"context"
 	"fmt"
+
 	crossplaneaws "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/go-logr/logr"
@@ -146,6 +147,7 @@ func (r *DatabaseClaimReconciler) manageDBClusterAWS(ctx context.Context, dbHost
 					EnableCloudwatchLogsExports:     reqInfo.EnableCloudwatchLogsExport,
 					IOPS:                            nil,
 					PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
+					AutoMinorVersionUpgrade:         dbClaim.Spec.AutoMinorVersionUpgrade,
 				},
 				ResourceSpec: xpv1.ResourceSpec{
 					WriteConnectionSecretToReference: &dbSecretCluster,
@@ -292,6 +294,7 @@ func (r *DatabaseClaimReconciler) managePostgresDBInstanceAWS(ctx context.Contex
 						StorageType:                     &params.StorageType,
 						Port:                            &params.Port,
 						PreferredMaintenanceWindow:      dbClaim.Spec.PreferredMaintenanceWindow,
+						AutoMinorVersionUpgrade:         dbClaim.Spec.AutoMinorVersionUpgrade,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						WriteConnectionSecretToReference: &dbSecretInstance,
@@ -432,6 +435,7 @@ func (r *DatabaseClaimReconciler) manageAuroraDBInstance(ctx context.Context, re
 						EnablePerformanceInsights:   &reqInfo.EnablePerfInsight,
 						EnableCloudwatchLogsExports: nil,
 						PreferredMaintenanceWindow:  dbClaim.Spec.PreferredMaintenanceWindow,
+						AutoMinorVersionUpgrade:     dbClaim.Spec.AutoMinorVersionUpgrade,
 					},
 					ResourceSpec: xpv1.ResourceSpec{
 						ProviderConfigReference: &providerConfigReference,
@@ -839,6 +843,7 @@ func (r *DatabaseClaimReconciler) updateDBInstance(ctx context.Context, reqInfo 
 	// Update DBInstance
 	dbClaim.Spec.Tags = r.configureBackupPolicy(dbClaim.Spec.BackupPolicy, dbClaim.Spec.Tags)
 	dbInstance.Spec.ForProvider.Tags = ReplaceOrAddTag(DBClaimTags(dbClaim.Spec.Tags).DBTags(), OperationalStatusTagKey, OperationalStatusActiveValue)
+	dbInstance.Spec.ForProvider.AutoMinorVersionUpgrade = dbClaim.Spec.AutoMinorVersionUpgrade
 	params := &reqInfo.HostParams
 	if dbClaim.Spec.Type == v1.Postgres {
 		multiAZ := basefun.GetMultiAZEnabled(r.Config.Viper)

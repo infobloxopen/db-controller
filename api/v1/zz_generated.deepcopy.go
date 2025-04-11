@@ -137,6 +137,11 @@ func (in *DatabaseClaimSpec) DeepCopyInto(out *DatabaseClaimSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.AutoMinorVersionUpgrade != nil {
+		in, out := &in.AutoMinorVersionUpgrade, &out.AutoMinorVersionUpgrade
+		*out = new(bool)
+		**out = **in
+	}
 	if in.EnableReplicationRole != nil {
 		in, out := &in.EnableReplicationRole, &out.EnableReplicationRole
 		*out = new(bool)

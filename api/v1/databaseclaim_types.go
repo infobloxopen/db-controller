@@ -152,6 +152,11 @@ type DatabaseClaimSpec struct {
 	// +kubebuilder:default:=dsn.txt
 	DSNName string `json:"dsnName"`
 
+	// AutoMinorVersionUpgrade enables automatic minor version upgrades.
+	// +optional
+	// +kubebuilder:default=true
+	AutoMinorVersionUpgrade *bool `json:"autoMinorVersionUpgrade,omitempty"`
+
 	// The optional Shape values are arbitrary and help drive instance selection
 	// +optional
 	Shape string `json:"shape"`
